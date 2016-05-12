@@ -1,35 +1,64 @@
--- | 'foldModule' is a utility function used to implement the clean, split, and merge operations.
-{-# LANGUAGE BangPatterns, CPP, FlexibleContexts, FlexibleInstances, ScopedTypeVariables, StandaloneDeriving #-}
-{-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE StandaloneDeriving #-}
+{-# LANGUAGE TemplateHaskell #-}
 module Fold
-    ( (|$>)
-    , foldModuleM
-    , foldHeaderM
-    , foldExportsM
-    , foldImportsM
-    , foldDeclsM
-    , echoM
-    , echo2M
-    , ignoreM
-    , ignore2M
+    ( foldModule
+    , foldHeader
+    , foldExports
+    , foldImports
+    , foldDecls
+    , echo
+    , echo2
+    , ignore
+    , ignore2
     ) where
 
+import Control.Lens ((%=), (.=), makeLenses, use, view)
 import Control.Monad (when)
-import Control.Monad.State (get, put, runState, runStateT, State, StateT)
-import Control.Monad.Trans (lift)
+import Control.Monad.State (get, runState, State)
 import Data.Char (isSpace)
 import Data.List (tails)
 import Data.Monoid ((<>))
 import Data.Sequence (Seq, (|>))
+--import Debug.Trace (trace)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl, ExportSpec, ExportSpec(..), ExportSpecList(ExportSpecList), ImportDecl, Module(..), ModuleHead(..), ModuleName, ModulePragma, WarningText)
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
+import qualified Language.Haskell.Exts.Syntax as S (ModuleName)
+-- import Language.Haskell.Modules.ModuVerse (ModuleInfo(ModuleInfo))
+import qualified Text.PrettyPrint as Pretty (text)
+import Text.PrettyPrint.HughesPJClass (Pretty(pPrint){-, prettyShow-})
+import Prelude hiding (tail)
 import SrcLoc (endLoc, HasSpanInfo(..), increaseSrcLoc, srcLoc, srcPairText)
 import Types (ModuleInfo(ModuleInfo, _module, _moduleComments, _moduleText))
 
--- | Monadic version of Data.Sequence.|>
-(|$>) :: Applicative m => m (Seq a) -> m a -> m (Seq a)
-(|$>) s x = (|>) <$> s <*> x
+{-
+data SrcSpanInfo = SrcSpanInfo
+    { srcInfoSpan    :: SrcSpan
+    , srcInfoPoints  :: [SrcSpan]    -- Marks the location of specific entities inside the span
+    }
+  deriving (Eq,Ord,Typeable,Data)
+
+data SrcSpan = SrcSpan
+    { srcSpanFilename    :: String
+    , srcSpanStartLine   :: Int
+    , srcSpanStartColumn :: Int
+    , srcSpanEndLine     :: Int
+    , srcSpanEndColumn   :: Int
+    }
+  deriving (Eq,Ord,Typeable,Data)
+
+instance Pretty SrcLoc where
+    pPrint SrcLoc{..} = Pretty.text ("(l" ++ show srcLine ++ ",c" ++ show srcColumn ++ ")")
+
+instance Pretty SrcSpanInfo where
+    pPrint (SrcSpanInfo {srcInfoSpan = SrcSpan {..}}) =
+        Pretty.text ("[(l" ++ show srcSpanStartLine ++ ",c" ++ show srcSpanStartColumn ++ ")->" ++
+                      "(l" ++ show srcSpanEndLine ++ ",c" ++ show srcSpanEndColumn ++ ")]")
+-}
 
 --type Module = A.Module SrcSpanInfo
 --type ModuleHead = A.ModuleHead SrcSpanInfo
@@ -66,88 +95,122 @@ instance Spans (A.WarningText SrcSpanInfo) where spans x = [fixSpan $ spanInfo x
 fixSpan :: SrcSpanInfo -> SrcSpanInfo
 fixSpan sp =
     if srcSpanEndColumn (srcInfoSpan sp) == 0
-    then sp {srcInfoSpan = (srcInfoSpan sp) {srcSpanEndColumn = 1}}
+    then t1 $ sp {srcInfoSpan = (srcInfoSpan sp) {srcSpanEndColumn = 1}}
     else sp
+    where
+      t1 sp' = {-trace ("fixSpan " ++ show (srcInfoSpan sp) ++ " -> " ++ show (srcInfoSpan sp'))-} sp'
 
 data St
-    = St { loc_ :: SrcLoc
-         , text_ :: String
-         , comms_ :: [Comment]
-         , sps_ :: [SrcSpanInfo] }
+    = St { _loc :: SrcLoc
+         , _text :: String
+         , _comms :: [Comment]
+         , _sps :: [SrcSpanInfo] }
       deriving (Show)
 
+$(makeLenses ''St)
+
 setSpanEnd :: SrcLoc -> SrcSpan -> SrcSpan
-setSpanEnd loc sp = sp {srcSpanEndLine = srcLine loc, srcSpanEndColumn = srcColumn loc}
+setSpanEnd loc' sp = sp {srcSpanEndLine = srcLine loc', srcSpanEndColumn = srcColumn loc'}
 -- setSpanStart :: SrcLoc -> SrcSpan -> SrcSpan
 -- setSpanStart loc sp = sp {srcSpanStartLine = srcLine loc, srcSpanStartColumn = srcColumn loc}
 
 -- | The spans returned by haskell-src-exts may put comments and
 -- whitespace in the suffix string of a declaration, we want them in
--- the prefix string of the following declaration where possible.
+-- the prefix string of the following declaration where possible.  (I
+-- think the behavior that made this necessary may have been fixed in
+-- haskell-src-exts.)
 adjustSpans :: String -> [Comment] -> [SrcSpanInfo] -> [SrcSpanInfo]
 adjustSpans _ _ [] = []
 adjustSpans _ _ [x] = [x]
-adjustSpans text comments sps@(x : _) =
-    fst $ runState f (St (SrcLoc (srcFilename (srcLoc x)) 1 1) text comments sps)
+adjustSpans text0 comments sps0@(x : _) =
+    fst $ runState f (St (SrcLoc (srcFilename (srcLoc x)) 1 1) text0 comments sps0)
     where
-      f = do st <- get
-             let b = loc_ st
-             case sps_ st of
+      f = do b <- use loc
+             sss <- use sps
+             case sss of
                (ss1 : ssis) ->
                    do skip
-                      st' <- get
-                      let e = loc_ st'
-                      case e >= endLoc ss1 of
+                      e <- use loc
+                      let e' = endLoc ss1
+                      case e >= e' of
                         True ->
                             -- We reached the end of ss1, so the segment from b to e is
                             -- trailing comments and space, some of which may belong in
                             -- the following span.
-                            do put (st' {sps_ = ssis})
+                            do -- t <- use text
+                               -- let (p, s) = srcPairText e' e t
+                               -- trace ("p=" ++ show p ++ ", s=" ++ show s) (pure ())
+                               sps .= ssis
                                sps' <- f
                                let ss1' = ss1 {srcInfoSpan = setSpanEnd b (srcInfoSpan ss1)}
+                               when (ss1' /= ss1) ({-trace ("span adjusted: " ++ prettyShow ss1 ++ " -> " ++ prettyShow ss1')-} (return ()))
                                return (ss1' : sps')
                         False ->
                            -- If we weren't able to skip to the end of
                            -- the span, we encountered real text.
                            -- Move past one char and try again.
-                           do case text_ st' of
-                                "" -> return (sps_ st') -- error $ "Ran out of text\n st=" ++ show st ++ "\n st'=" ++ show st'
-                                (c : t') -> do put (st' {text_ = t', loc_ = increaseSrcLoc [c] e})
+                           do t <- use text
+                              case t of
+                                "" -> use sps -- error $ "Ran out of text\n st=" ++ show st ++ "\n st'=" ++ show st'
+                                (c : t') -> do text .= t'
+                                               loc .= increaseSrcLoc [c] e
                                                f
-               sss -> return sss
+               [] -> return []
 
       -- loc is the current position in the input file, text
       -- is the text starting at that location.
       skip :: State St ()
-      skip = do loc1 <- loc_ <$> get
+      skip = do loc1 <- _loc <$> get
                 skipWhite
                 skipComment
-                loc2 <- loc_ <$> get
+                loc2 <- _loc <$> get
                 -- Repeat until failure
                 when (loc1 /= loc2) skip
 
       skipWhite :: State St ()
-      skipWhite = do st <- get
-                     case span isSpace (text_ st) of
+      skipWhite = do t <- use text
+                     case span isSpace t of
                        ("", _) -> return ()
-                       (space, t') ->
-                           let loc' = increaseSrcLoc space (loc_ st) in
-                           put (st {loc_ = loc', text_ = t'})
+                       (space, t') -> do
+                         loc %= increaseSrcLoc space
+                         text .= t'
 
       skipComment :: State St ()
-      skipComment = do st <- get
-                       case comms_ st of
+      skipComment = do cs' <- use comms
+                       l <- use loc
+                       t <- use text
+                       case cs' of
                          (Comment _ csp _ : cs)
-                             | srcLoc csp <= loc_ st ->
+                             | srcLoc csp <= l ->
                                  -- We reached the comment, skip past it and discard
-                                 case srcPairText (loc_ st) (endLoc csp) (text_ st) of
+                                 case srcPairText l (endLoc csp) t of
                                    ("", _) -> return ()
-                                   (comm, t') ->
-                                       let loc' = increaseSrcLoc comm (loc_ st) in
-                                       put (st {loc_ = loc',
-                                                text_ = t',
-                                                comms_ = cs})
+                                   (comm, t') -> do
+                                     loc %= increaseSrcLoc comm
+                                     text .= t'
+                                     comms .= cs
                          _ -> return () -- No comments, or we didn't reach it
+
+{-
+deriving instance Ord Comment
+
+data ModuleInfo
+    = ModuleInfo
+      { module_ :: A.Module SrcSpanInfo
+      , modtext_ :: String
+      , comments_ :: [Comment]
+      , key_ :: ModKey
+      , name_ :: S.ModuleName }
+    deriving (Eq, Ord, Show)
+-}
+
+data St2 r
+    = St2 { _tail :: String
+          , _srcloc :: SrcLoc
+          , _srcspans :: [SrcSpanInfo]
+          , _result :: r }
+
+$(makeLenses ''St2)
 
 -- | Given the result of parseModuleWithComments and the original
 -- module text, this does a fold over the parsed module contents,
@@ -157,87 +220,99 @@ adjustSpans text comments sps@(x : _) =
 -- everything passed to the "pre" argument of the functions will be
 -- comments and space - for example, the "module" keyword will be
 -- passed in the pre argument to the ModuleName function.
-foldModuleM :: forall m r. (Monad m, Functor m, Show r) =>
-              (String -> r -> m r) -- ^ Receives the space before the first pragma.
-           -> (ModulePragma -> String -> String -> String -> r -> m r) -- ^ Called once for each pragma.  In this and the similar arguments below, the three string arguments contain
+foldModule :: forall r. (Show r) =>
+              (String -> r -> r) -- ^ Receives the space before the first pragma.
+           -> (ModulePragma -> String -> String -> String -> r -> r) -- ^ Called once for each pragma.  In this and the similar arguments below, the three string arguments contain
                                                                      -- the comments and space preceding the construct, the text of the construct and the space following it.
-           -> (ModuleName -> String -> String -> String -> r -> m r) -- ^ Called with the module name.
-           -> (WarningText -> String -> String -> String -> r -> m r) -- ^ Called with the warning text between module name and export list
-           -> (String -> r -> m r) -- ^ Called with the export list open paren
-           -> (ExportSpec -> String -> String -> String -> r -> m r) -- ^ Called with each export specifier
-           -> (String -> r -> m r) -- ^ Called with the export list close paren and "where" keyword
-           -> (ImportDecl -> String -> String -> String -> r -> m r) -- ^ Called with each import declarator
-           -> (Decl -> String -> String -> String -> r -> m r) -- ^ Called with each top level declaration
-           -> (String -> r -> m r) -- ^ Called with comments following the last declaration
+           -> (ModuleName -> String -> String -> String -> r -> r) -- ^ Called with the module name.
+           -> (WarningText -> String -> String -> String -> r -> r) -- ^ Called with the warning text between module name and export list
+           -> (String -> r -> r) -- ^ Called with the export list open paren
+           -> (ExportSpec -> String -> String -> String -> r -> r) -- ^ Called with each export specifier
+           -> (String -> r -> r) -- ^ Called with the export list close paren and "where" keyword
+           -> (ImportDecl -> String -> String -> String -> r -> r) -- ^ Called with each import declarator
+           -> (Decl -> String -> String -> String -> r -> r) -- ^ Called with each top level declaration
+           -> (String -> r -> r) -- ^ Called with comments following the last declaration
            -> ModuleInfo -- ^ Parsed module
            -> r -- ^ Fold initialization value
-           -> m r -- ^ Result
-foldModuleM _ _ _ _ _ _ _ _ _ _ (ModuleInfo {_module = A.XmlPage _ _ _ _ _ _ _}) _ = error "XmlPage: unsupported"
-foldModuleM _ _ _ _ _ _ _ _ _ _ (ModuleInfo {_module = A.XmlHybrid _ _ _ _ _ _ _ _ _}) _ = error "XmlHybrid: unsupported"
-foldModuleM topf pragmaf namef warnf pref exportf postf importf declf sepf (ModuleInfo {_module = m@(A.Module (SrcSpanInfo (SrcSpan path _ _ _ _) _) mh ps is ds), _moduleText = text, _moduleComments = comments}) r0 =
-    (\ (_, (_, _, _, r)) -> r) <$> runStateT doModule (text, (SrcLoc path 1 1), spans m, r0)
+           -> r -- ^ Result
+foldModule _ _ _ _ _ _ _ _ _ _ (ModuleInfo {_module = A.XmlPage _ _ _ _ _ _ _}) _ = error "XmlPage: unsupported"
+foldModule _ _ _ _ _ _ _ _ _ _ (ModuleInfo {_module = A.XmlHybrid _ _ _ _ _ _ _ _ _}) _ = error "XmlHybrid: unsupported"
+foldModule topf pragmaf namef warnf pref exportf postf importf declf sepf (ModuleInfo { _module = m@(A.Module (SrcSpanInfo (SrcSpan path _ _ _ _) _) mh ps is ds)
+                                                                                      , _moduleText = moduletext
+                                                                                      , _moduleComments = comments }) r0 =
+    (\ (_, st) -> view result st) $ runState doModule (St2 moduletext (SrcLoc path 1 1) ({-t2-} (spans m)) r0)
     where
-      doModule :: Monad m => StateT (String, SrcLoc, [SrcSpanInfo], r) m ()
+      -- t2 spans = trace ("module spans: " ++ prettyShow spans) spans
+      doModule :: State (St2 r) ()
       doModule =
           do doSep topf
              doList pragmaf ps
              maybe (pure ()) doHeader mh
-             (tl, l, sps, r) <- get
-             put (tl, l, adjustSpans text comments sps, r)
+             srcspans %= adjustSpans moduletext comments
              doList importf is
              doList declf ds
              doTail sepf
-      doHeader :: Monad m => A.ModuleHead SrcSpanInfo -> StateT (String, SrcLoc, [SrcSpanInfo], r) m ()
+      doHeader :: A.ModuleHead SrcSpanInfo -> State (St2 r) ()
       doHeader (A.ModuleHead sp n mw me) =
           do doItem namef n
-             maybe (pure ()) (doItem warnf) mw
+             maybe (return ()) (doItem warnf) mw
              doSep pref
-             maybe (pure ()) (\ (A.ExportSpecList _ es) -> doList exportf es) me
+             maybe (return ()) (\ (A.ExportSpecList _ es) -> doList exportf es) me
              doClose postf sp
-      doClose :: Monad m => (String -> r -> m r) -> SrcSpanInfo -> StateT (String, SrcLoc, [SrcSpanInfo], r) m ()
+      doClose :: (String -> r -> r) -> SrcSpanInfo -> State (St2 r) ()
       doClose f sp =
-          do (tl, l, sps, r) <- get
+          do tl <- use tail
+             l <- use srcloc
              case l < endLoc sp of
                True -> do
                  let (p, s) = srcPairText l (endLoc sp) tl
-                 r' <- lift $ f p r
-                 put (s, endLoc sp, sps, r')
-               False -> pure ()
-      doTail :: Monad m => (String -> r -> m r) -> StateT (String, SrcLoc, [SrcSpanInfo], r) m ()
+                 tail .= s
+                 srcloc .= endLoc sp
+                 result %= f p
+               False -> return ()
+      doTail :: (String -> r -> r) -> State (St2 r) ()
       doTail f =
-          do (tl, l, sps, r) <- get
-             r' <- lift $ f tl r
-             put (tl, l, sps, r')
-      doSep :: Monad m => (String -> r -> m r) -> StateT (String, SrcLoc, [SrcSpanInfo], r) m ()
+          do tl <- use tail
+             result %= f tl
+      doSep :: (String -> r -> r) -> State (St2 r) ()
       doSep f =
-          do p <- get
-             case p of
-               (tl, l, sps@(sp : _), r) ->
+          do tl <- use tail
+             l <- use srcloc
+             spans' <- use srcspans
+             case spans' of
+               (sp : _) ->
                    do let l' = srcLoc sp
                       case l <= l' of
                         True -> do
                           let (b, a) = srcPairText l l' tl
-                          r' <- lift $ f b r
-                          put (a, l', sps, r')
-                        False -> pure ()
-               _ -> error $ "foldModule - out of spans: " ++ show p
-      doList :: (HasSpanInfo a, Show a) => (a -> String -> String -> String -> r -> m r) -> [a] -> StateT (String, SrcLoc, [SrcSpanInfo], r) m ()
-      doList _ [] = pure ()
+                          tail .= a
+                          srcloc .= l'
+                          result %= f b
+                        False -> return ()
+               _ -> error $ "foldModule - out of spans"
+      doList :: (HasSpanInfo a, Show a) => (a -> String -> String -> String -> r -> r) -> [a] -> State (St2 r) ()
+      doList _ [] = return ()
       doList f (x : xs) = doItem f x >> doList f xs
 
-      doItem :: (HasSpanInfo a, Show a) => (a -> String -> String -> String -> r -> m r) -> a -> StateT (String, SrcLoc, [SrcSpanInfo], r) m ()
+      doItem :: (HasSpanInfo a, Show a) => (a -> String -> String -> String -> r -> r) -> a -> State (St2 r) ()
       doItem f x =
-          do (tl, l, (sp : sps'), r) <- get
-             let -- Another haskell-src-exts bug?  If a module ends
-                 -- with no newline, endLoc will be at the beginning
-                 -- of the following (nonexistant) line.
-                 (pre, tl') = srcPairText l (srcLoc sp) tl
-                 l' = endLoc sp
-                 (s, tl'') = srcPairText (srcLoc sp) l' tl'
-                 l'' = adjust1 tl'' l'
-                 (post, tl''') = srcPairText l' l'' tl''
-             r' <- lift $ f x pre s post r
-             put (tl''', l'', sps', r')
+          do tl <- use tail
+             l <- use srcloc
+             spans' <- use srcspans
+             case spans' of
+               (sp : sps') -> do
+                 let -- Another haskell-src-exts bug?  If a module ends
+                     -- with no newline, endLoc will be at the beginning
+                     -- of the following (nonexistant) line.
+                     (pre, tl') = srcPairText l (srcLoc sp) tl
+                     l' = endLoc sp
+                     (s, tl'') = srcPairText (srcLoc sp) l' tl'
+                     l'' = adjust1 tl'' l'
+                     (post, tl''') = srcPairText l' l'' tl''
+                 tail .= tl'''
+                 srcloc .= l''
+                 srcspans .= sps'
+                 result %= f x pre s post
 
       -- Move to just past the last newline in the leading whitespace
       -- adjust "\n  \n  hello\n" (SrcLoc "<unknown>.hs" 5 5) ->
@@ -265,51 +340,51 @@ foldModuleM topf pragmaf namef warnf pref exportf postf importf declf sepf (Modu
             l' = increaseSrcLoc w' l
 
 -- | Do just the header portion of 'foldModule'.
-foldHeaderM :: forall m r. (Monad m, Show r) =>
-              (String -> r -> m r)
-           -> (ModulePragma -> String -> String -> String -> r -> m r)
-           -> (ModuleName -> String -> String -> String -> r -> m r)
-           -> (WarningText -> String -> String -> String -> r -> m r)
-           -> ModuleInfo -> r -> m r
-foldHeaderM topf pragmaf namef warnf m r0 =
-    foldModuleM topf pragmaf namef warnf ignore2M ignoreM ignore2M ignoreM ignoreM ignore2M m r0
+foldHeader :: forall r. (Show r) =>
+              (String -> r -> r)
+           -> (ModulePragma -> String -> String -> String -> r -> r)
+           -> (ModuleName -> String -> String -> String -> r -> r)
+           -> (WarningText -> String -> String -> String -> r -> r)
+           -> ModuleInfo -> r -> r
+foldHeader topf pragmaf namef warnf m r0 =
+    foldModule topf pragmaf namef warnf ignore2 ignore ignore2 ignore ignore ignore2 m r0
 
 -- | Do just the exports portion of 'foldModule'.
-foldExportsM :: forall m r. (Monad m, Show r) =>
-               (String -> r -> m r)
-            -> (ExportSpec -> String -> String -> String -> r -> m r)
-            -> (String -> r -> m r)
-            -> ModuleInfo -> r -> m r
-foldExportsM pref exportf postf m r0 =
-    foldModuleM ignore2M ignoreM ignoreM ignoreM pref exportf postf ignoreM ignoreM ignore2M m r0
+foldExports :: forall r. (Show r) =>
+               (String -> r -> r)
+            -> (ExportSpec -> String -> String -> String -> r -> r)
+            -> (String -> r -> r)
+            -> ModuleInfo -> r -> r
+foldExports pref exportf postf m r0 =
+    foldModule ignore2 ignore ignore ignore pref exportf postf ignore ignore ignore2 m r0
 
 -- | Do just the imports portion of 'foldModule'.
-foldImportsM :: forall m r. (Monad m, Show r) =>
-               (ImportDecl -> String -> String -> String -> r -> m r)
-            -> ModuleInfo -> r -> m r
-foldImportsM importf m r0 =
-    foldModuleM ignore2M ignoreM ignoreM ignoreM ignore2M ignoreM ignore2M importf ignoreM ignore2M m r0
+foldImports :: forall r. (Show r) =>
+               (ImportDecl -> String -> String -> String -> r -> r)
+            -> ModuleInfo -> r -> r
+foldImports importf m r0 =
+    foldModule ignore2 ignore ignore ignore ignore2 ignore ignore2 importf ignore ignore2 m r0
 
 -- | Do just the declarations portion of 'foldModule'.
-foldDeclsM :: forall m r. (Monad m, Show r) =>
-             (Decl -> String -> String -> String -> r -> m r)
-          -> (String -> r -> m r)
-          -> ModuleInfo -> r -> m r
-foldDeclsM declf sepf m r0 =
-    foldModuleM ignore2M ignoreM ignoreM ignoreM ignore2M ignoreM ignore2M ignoreM declf sepf m r0
+foldDecls :: forall r. (Show r) =>
+             (Decl -> String -> String -> String -> r -> r)
+          -> (String -> r -> r)
+          -> ModuleInfo -> r -> r
+foldDecls declf sepf m r0 =
+    foldModule ignore2 ignore ignore ignore ignore2 ignore ignore2 ignore declf sepf m r0
 
 -- | This can be passed to foldModule to include the original text in the result
-echoM :: (Monoid s, Monad m) => t -> s -> s -> s -> Seq s -> m (Seq s)
-echoM _ pref s suff r = pure $ r |> pref <> s <> suff
+echo :: Monoid m => t -> m -> m -> m -> Seq m -> Seq m
+echo _ pref s suff r = r |> pref <> s <> suff
 
 -- | Similar to 'echo', but used for the two argument separator functions
-echo2M :: (Monoid s, Monad m) => s -> Seq s -> m (Seq s)
-echo2M s r = pure $ r |> s
+echo2 :: Monoid m => m -> Seq m -> Seq m
+echo2 s r = r |> s
 
 -- | This can be passed to foldModule to omit the original text from the result.
-ignoreM :: forall t s m r. Monad m => t -> s -> s -> s -> r -> m r
-ignoreM _ _ _ _ r = pure r
+ignore :: t -> m -> m -> m -> r -> r
+ignore _ _ _ _ r = r
 
 -- | Similar to 'ignore', but used for the two argument separator functions
-ignore2M :: forall s m r. Monad m => s -> r -> m r
-ignore2M _ r = pure r
+ignore2 :: m -> r -> r
+ignore2 _ r = r
