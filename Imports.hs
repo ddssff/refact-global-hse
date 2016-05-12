@@ -33,7 +33,7 @@ import Types (DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> [ModuleInfo] -> m ()
 cleanImports scratch info =
-    dump >> mapM_ (\x -> do newText <- checkImports scratch x
+    dump >> mapM_ (\x -> do newText <- doModule scratch x
                             let path = _moduleTop (_moduleKey x) </> _modulePath (_moduleKey x)
                             liftIO $ case newText of
                                        Nothing -> putStrLn (path ++ ": unable to clean imports")
@@ -64,8 +64,8 @@ cleanImports scratch info =
 -- source file.  We also need to modify the imports of any names
 -- that are types that appear in standalone instance derivations so
 -- their members are imported too.
-checkImports :: MonadIO m => FilePath -> ModuleInfo -> m (Maybe String)
-checkImports scratch info@(ModuleInfo {_module = A.Module _ mh _ oldImports _}) =
+doModule :: MonadIO m => FilePath -> ModuleInfo -> m (Maybe String)
+doModule scratch info@(ModuleInfo {_module = A.Module _ mh _ oldImports _}) =
     do let name = maybe "Main" (\ (A.ModuleHead _ (A.ModuleName _ s) _ _) -> s) mh
        let importsPath = scratch </> name ++ ".imports"
 
@@ -81,7 +81,7 @@ checkImports scratch info@(ModuleInfo {_module = A.Module _ mh _ oldImports _}) 
       extraImports = filter isHiddenImport oldImports
       isHiddenImport (A.ImportDecl {A.importSpecs = Just (A.ImportSpecList _ True _)}) = True
       isHiddenImport _ = False
-checkImports _ _ = error "Unsupported module type"
+doModule _ _ = error "Unsupported module type"
 
 -- | If all the parsing went well and the new imports differ from the
 -- old, update the source file with the new imports.

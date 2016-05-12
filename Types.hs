@@ -1,6 +1,14 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
-module Types where
+module Types
+    ( ModuleKey(..)
+    , ModuleInfo(..)
+    , hseExtensions
+    , hsFlags
+    , hsSourceDirs
+    , loadModule
+    , DerivDeclTypes(derivDeclTypes)
+    ) where
 
 import qualified CPP (BoolOptions(locations), CpphsOptions(boolopts), defaultCpphsOptions, parseFileWithCommentsAndCPP)
 import Control.Exception (Exception)
@@ -32,8 +40,6 @@ data ModuleInfo =
                , _moduleComments :: [Comment]
                , _moduleText :: String
                }
--- | Specifies where to move each declaration of each module.
-type MoveSpec = ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
 
   -- | From hsx2hs, but removing Arrows because it makes test case
 -- fold3c and others fail.  Maybe we should parse the headers and then
@@ -85,7 +91,7 @@ cpphsOptions =
       }
     }
 
-
+-- | Compute the module key from a filepath and the parsed module.
 moduleKey :: FilePath -> A.Module SrcSpanInfo -> IO ModuleKey
 moduleKey _ (A.XmlPage {}) = error "XmlPage"
 moduleKey _ (A.XmlHybrid {}) = error "XmlHybrid"
