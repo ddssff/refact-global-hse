@@ -11,16 +11,19 @@ import Imports (cleanImports)
 import System.Directory (getCurrentDirectory, removeDirectoryRecursive, setCurrentDirectory)
 import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import qualified System.IO.Temp as Temp (createTempDirectory)
-import Types (loadModule)
+import Types (loadModule, ModuleInfo)
 -- import Fold
 
 main :: IO ()
-main = withCurrentDirectory "/home/dsf/git/atp-haskell/src" $
-       withTempDirectory True "." "scratch" $ \scratch -> do
-         paths <- find always (extension ==? ".hs" &&? fileType ==? RegularFile) "."
-         modules <- mapM (\path -> loadModule path >>= either (\(e :: SomeException) -> error ("Failed to load " ++ path ++ ": " ++ show e)) pure) paths
-         cleanImports scratch modules
-         putStrLn "done."
+main = testOn "/home/dsf/git/atp-haskell/src" $ cleanImports
+
+testOn :: FilePath -> (FilePath -> [ModuleInfo] -> IO ()) -> IO ()
+testOn dir action =
+    withCurrentDirectory dir $
+    withTempDirectory True "." "scratch" $ \scratch -> do
+      paths <- find always (extension ==? ".hs" &&? fileType ==? RegularFile) "."
+      modules <- mapM (\path -> loadModule path >>= either (\(e :: SomeException) -> error ("Failed to load " ++ path ++ ": " ++ show e)) pure) paths
+      action scratch modules
 
 withCurrentDirectory :: (MonadIO m, MonadBaseControl IO m) => FilePath -> m a -> m a
 withCurrentDirectory path action =
