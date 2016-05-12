@@ -24,13 +24,8 @@ import Data.Sequence (Seq, (|>))
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl, ExportSpec, ExportSpec(..), ExportSpecList(ExportSpecList), ImportDecl, Module(..), ModuleHead(..), ModuleName, ModulePragma, WarningText)
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
---import qualified Language.Haskell.Exts.Syntax as S (ModuleName)
--- import Language.Haskell.Modules.ModuVerse (ModuleInfo(ModuleInfo))
---import Language.Haskell.Modules.SourceDirs (PathKey)
--- import Language.Haskell.Modules.SrcLoc (endLoc, HasSpanInfo(..), increaseSrcLoc, srcLoc, srcPairText)
-
-import SrcLoc
-import Types
+import SrcLoc (endLoc, HasSpanInfo(..), increaseSrcLoc, srcLoc, srcPairText)
+import Types (ModuleInfo(ModuleInfo, _module, _moduleComments, _moduleText))
 
 -- | Monadic version of Data.Sequence.|>
 (|$>) :: Applicative m => m (Seq a) -> m a -> m (Seq a)

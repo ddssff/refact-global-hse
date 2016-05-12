@@ -2,36 +2,22 @@
 
 module Types where
 
+import qualified CPP (BoolOptions(locations), CpphsOptions(boolopts), defaultCpphsOptions, parseFileWithCommentsAndCPP)
 import Control.Exception (Exception)
-import Control.Exception.Lifted as IO (bracket, catch, throw, try)
-import Control.Monad (MonadPlus, msum, when)
-import Control.Monad.Trans (MonadIO, liftIO)
-import Control.Monad.Trans.Control (MonadBaseControl)
-import Data.Foldable (fold)
-import Data.Generics (Data, listify, Typeable)
-import Data.List (groupBy, intercalate, nub)
-import Data.Maybe (fromMaybe)
-import Data.Monoid ((<>))
-import Data.Sequence ((|>))
-import Data.Set as Set (empty, fromList, Set, singleton, toList, union, unions)
-import qualified Data.Set as Set (map)
---import GHC.IO.Exception ({-ExitCode(ExitFailure, ExitSuccess),-} IOErrorType(InappropriateType, NoSuchThing), IOException(IOError, ioe_description, ioe_type))
-import qualified Language.Haskell.Exts.Annotated as A
-import qualified CPP
+import Control.Exception.Lifted as IO (try)
+import Control.Monad (when)
+import Control.Monad.Trans (MonadIO(liftIO))
+import Data.List (groupBy, intercalate)
+import Data.Set as Set (empty, Set, singleton, union, unions)
+import qualified Language.Haskell.Exts.Annotated as A (Decl(DerivDecl), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), QName(Qual, UnQual), Type(..))
+import Language.Haskell.Exts.Annotated.Simplify as S (sModuleName, sName)
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
-import Language.Haskell.Exts.Parser as Exts (defaultParseMode, fromParseResult, ParseMode(extensions, parseFilename, fixities) {-, ParseResult-})
-import Language.Haskell.Exts.Annotated.Simplify as S (sImportDecl, sImportSpec, sModuleName, sName)
+import Language.Haskell.Exts.Parser as Exts (defaultParseMode, fromParseResult, ParseMode(extensions, parseFilename, fixities))
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Syntax as S (ModuleName(..), Name(..))
-import SrcLoc (validateParseResults)
-import System.Directory (canonicalizePath, getCurrentDirectory, removeDirectoryRecursive, setCurrentDirectory)
-import System.Exit (ExitCode(ExitSuccess, ExitFailure))
-import System.FilePath ((</>), addExtension, dropExtension, joinPath, splitExtension, splitFileName, splitDirectories)
-import System.FilePath.Find ((==?), (&&?), always, extension, fileType, FileType(RegularFile), find)
-import System.IO.Error (isDoesNotExistError, isUserError)
-import qualified System.IO.Temp as Temp (createTempDirectory)
-import System.Process (readProcessWithExitCode, showCommandForUser)
+import System.Directory (canonicalizePath)
+import System.FilePath (addExtension, dropExtension, joinPath, splitDirectories, splitExtension, splitFileName)
 import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
 
 -- A module is uniquely identitifed by its path and name
@@ -79,7 +65,7 @@ loadModule path =
       loadModule' = do
         moduleText <- liftIO $ readFile path
         (parsed, comments, processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions mode path
-        liftIO $ writeFile (path ++ ".cpp") processed
+        -- liftIO $ writeFile (path ++ ".cpp") processed
         -- putStr processed
         -- validateParseResults parsed comments processed -- moduleText
         key <- moduleKey path parsed

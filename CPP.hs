@@ -9,13 +9,12 @@ module CPP
   , BoolOptions(..)
   ) where
 
-import qualified Language.Preprocessor.Cpphs as Orig
+import Data.List (isSuffixOf)
+import Language.Haskell.Exts.Annotated (Comment, impliesExts, KnownExtension(CPP), Module, ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
+import Language.Preprocessor.Cpphs (BoolOptions(BoolOptions, ansi, hashline, lang, literate, locations, macros, pragma, stripC89, stripEol, warnings), CpphsOptions(..), runCpphs)
 import Language.Preprocessor.Cpphs hiding (defaultCpphsOptions)
-import Language.Preprocessor.Unlit
-import Language.Haskell.Exts (ParseMode(..))
-import Language.Haskell.Exts.Annotated
-import Control.Applicative
-import Data.List
+import qualified Language.Preprocessor.Cpphs as Orig (defaultCpphsOptions)
+import Language.Preprocessor.Unlit (unlit)
 
 parseFileWithCommentsAndCPP ::  CpphsOptions -> ParseMode -> FilePath
                       -> IO (ParseResult (Module SrcSpanInfo, [Comment], String))

@@ -20,10 +20,8 @@ import Data.List (groupBy, nub, partition, sort)
 import Data.Monoid ((<>))
 import Data.Set (Set, toList)
 import Data.Tree (Tree(Node), unfoldTree)
-import Language.Haskell.Exts.Comments (Comment(..))
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl(..), ExportSpec(..), ExportSpecList(..), ImportDecl(ImportDecl), Module(..), ModuleHead(..), ModuleName(..), ModulePragma(..), WarningText(..))
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
-import Prelude hiding (rem)
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)
 
 -- | A version of lines that preserves the presence or absence of a
@@ -162,9 +160,9 @@ endLoc :: HasSpanInfo x => x -> SrcLoc
 endLoc x = let (SrcSpan f _ _ b e) = srcSpan x in SrcLoc f b e
 
 textEndLoc :: FilePath -> String -> SrcLoc
-textEndLoc path text =
+textEndLoc path x =
     SrcLoc {srcFilename = path, srcLine = length ls, srcColumn = length (last ls) + 1}
-    where ls = lines' text
+    where ls = lines' x
 
 -- | Update a SrcLoc to move it from l past the string argument.
 increaseSrcLoc :: String -> SrcLoc -> SrcLoc
@@ -271,15 +269,18 @@ test5 = TestCase (assertEqual "roots1"
                                               sp 12 15]))
 -}
 
-validateParseResults :: A.Module SrcSpanInfo -> [Comment] -> String -> IO ()
-validateParseResults modul comments text =
+-- | Make sure every SrcSpan in the parsed module refers to existing
+-- text.  They could still be in the wrong places, so this doesn't
+-- guarantee the parse is valid, but its a pretty good bet.
+validateParseResults :: A.Module SrcSpanInfo -> String -> IO ()
+validateParseResults modul t =
     mapM_ validateSpan (nub (sort (gFind modul :: [SrcSpan])))
     where
       validateSpan :: SrcSpan -> IO ()
-      validateSpan span =
-          let s = srcLoc span
-              e = endLoc span in
-          putStrLn ("span " ++ prettyShow s ++ "->" ++ prettyShow e ++ "=" ++ show (spanText s e text))
+      validateSpan x =
+          let s = srcLoc x
+              e = endLoc x in
+          putStrLn ("span " ++ prettyShow s ++ "->" ++ prettyShow e ++ "=" ++ show (spanText s e t))
 
 instance Pretty SrcLoc where
     pPrint l = text ("(l" <> show (srcLine l) ++ ",c" ++ show (srcColumn l) ++ ")")

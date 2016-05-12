@@ -6,11 +6,7 @@
 module Imports (cleanImports) where
 
 import Control.Exception (SomeException)
--- import Control.Exception as E (bracket, catch, throw, try)
-import Control.Exception.Lifted as IO (bracket, catch, throw)
-import Control.Monad (when)
-import Control.Monad.Trans (MonadIO, liftIO)
-import Control.Monad.Trans.Control (MonadBaseControl)
+import Control.Monad.Trans (liftIO, MonadIO)
 import Data.Char (toLower)
 import Data.Foldable (fold)
 import Data.Function (on)
@@ -20,29 +16,19 @@ import Data.Monoid ((<>))
 import Data.Sequence ((|>))
 import Data.Set as Set (fromList, member, Set, toList, unions)
 import qualified Data.Set as Set (map)
---import GHC.IO.Exception ({-ExitCode(ExitFailure, ExitSuccess),-} IOErrorType(InappropriateType, NoSuchThing), IOException(IOError, ioe_description, ioe_type))
-import qualified Language.Haskell.Exts.Annotated as A
-import qualified Language.Haskell.Exts.Annotated.CPP as A
+import Fold (foldDeclsM, foldExportsM, foldHeaderM, foldImportsM)
+import qualified Language.Haskell.Exts.Annotated as A (ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), SrcLoc(SrcLoc))
 import Language.Haskell.Exts.Annotated.Simplify as S (sImportDecl, sImportSpec, sModuleName, sName)
-import Language.Haskell.Exts.Comments (Comment(..))
-import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
-import Language.Haskell.Exts.Parser as Exts (defaultParseMode, fromParseResult, ParseMode(extensions, parseFilename, fixities) {-, ParseResult-})
+import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Pretty (defaultMode, PPHsMode(layout), PPLayout(PPInLine), prettyPrintWithMode)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(importLoc, importModule, importSpecs), ModuleName(..), Name(..))
-import System.Directory (canonicalizePath, getCurrentDirectory, removeDirectoryRecursive, setCurrentDirectory)
+import SrcLoc (srcLoc)
+import Symbols (symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
-import System.FilePath ((</>), addExtension, dropExtension, joinPath, splitExtension, splitFileName, splitDirectories)
---import System.FilePath.Find ((==?), (&&?), always, extension, fileType, FileType(RegularFile), find)
-import System.IO.Error (isDoesNotExistError, isUserError)
-import qualified System.IO.Temp as Temp (createTempDirectory)
+import System.FilePath ((</>))
 import System.Process (readProcessWithExitCode, showCommandForUser)
-import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
-
-import Fold -- (foldImportsM, foldHeaderM, foldExportsM, foldDeclsM)
-import Types
-import SrcLoc
-import Symbols
+import Types (DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule, ModuleInfo(ModuleInfo, _module, _moduleKey, _moduleText), ModuleKey(_modulePath, _moduleTop))
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> [ModuleInfo] -> m ()
@@ -51,12 +37,12 @@ cleanImports scratch info =
                             let path = _moduleTop (_moduleKey x) </> _modulePath (_moduleKey x)
                             liftIO $ case newText of
                                        Nothing -> putStrLn (path ++ ": unable to clean imports")
-                                       Just newText | _moduleText x /= newText ->
+                                       Just s | _moduleText x /= s ->
                                                         do putStrLn (path ++ " imports changed")
-                                                           let (path', ext) = splitExtension path
-                                                               path'' = path' ++ "-new" ++ ext
-                                                           writeFile path'' newText
-                                       Just newText -> pure ()) info
+                                                           -- let (path', ext) = splitExtension path in
+                                                           -- writeFile {-path' ++ "-new" ++ ext-} s
+                                                           writeFile path s
+                                       Just _ -> pure ()) info
     where
       keys = Set.fromList (map _moduleKey info)
       dump = do
@@ -89,7 +75,7 @@ checkImports scratch info@(ModuleInfo {_module = A.Module _ mh _ oldImports _}) 
        -- markForDelete importsPath
        liftIO (loadModule importsPath) >>=
               either (\(e :: SomeException) -> error $ "Could not load generated imports: " ++ show e)
-                     (\importsInfo@(ModuleInfo {_module = newImports}) ->
+                     (\(ModuleInfo {_module = newImports}) ->
                           updateSource True info newImports extraImports)
     where
       extraImports = filter isHiddenImport oldImports
@@ -100,7 +86,7 @@ checkImports _ _ = error "Unsupported module type"
 -- | If all the parsing went well and the new imports differ from the
 -- old, update the source file with the new imports.
 updateSource :: MonadIO m => Bool -> ModuleInfo -> A.Module SrcSpanInfo -> [A.ImportDecl SrcSpanInfo] -> m (Maybe String)
-updateSource removeEmptyImports info@(ModuleInfo {_module = A.Module _ _ _ oldImports _, _moduleKey = key}) (A.Module _ _ _ newImports _) extraImports =
+updateSource removeEmptyImports info@(ModuleInfo {_module = A.Module _ _ _ oldImports _, _moduleKey = _key}) (A.Module _ _ _ newImports _) extraImports =
     replaceImports (fixNewImports removeEmptyImports info oldImports (newImports ++ extraImports)) info
 updateSource _ _ _ _ = error "updateSource"
 
