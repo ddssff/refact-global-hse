@@ -11,11 +11,12 @@ import Imports (cleanImports)
 import System.Directory (getCurrentDirectory, removeDirectoryRecursive, setCurrentDirectory)
 import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import qualified System.IO.Temp as Temp (createTempDirectory)
-import Types (loadModule, ModuleInfo)
--- import Fold
+import Types (loadModule, ModuleInfo(..), ModuleKey(..))
+import Decls (moveDecls)
 
 main :: IO ()
-main = testOn "/home/dsf/git/atp-haskell/src" $ cleanImports
+-- main = testOn "/home/dsf/git/atp-haskell/src" $ cleanImports
+main = testOn "/home/dsf/git/atp-haskell/src" $ \scratch modules -> mapM_ (\(m, s) -> if _moduleText m /= s then writeFile (_modulePath (_moduleKey m) ++ ".new") s else pure ()) (moveDecls (\k d -> k) modules)
 
 testOn :: FilePath -> (FilePath -> [ModuleInfo] -> IO ()) -> IO ()
 testOn dir action =

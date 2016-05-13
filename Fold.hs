@@ -24,7 +24,7 @@ import Data.List (tails)
 import Data.Monoid ((<>))
 import Data.Sequence (Seq, (|>))
 --import Debug.Trace (trace)
-import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl, ExportSpec, ExportSpec(..), ExportSpecList(ExportSpecList), ImportDecl, Module(..), ModuleHead(..), ModuleName, ModulePragma, WarningText)
+import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated, Decl, ExportSpec, ExportSpec(..), ExportSpecList(ExportSpecList), ImportDecl, Module(..), ModuleHead(..), ModuleName, ModulePragma, WarningText)
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ModuleName)
@@ -32,7 +32,7 @@ import qualified Language.Haskell.Exts.Syntax as S (ModuleName)
 import qualified Text.PrettyPrint as Pretty (text)
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint){-, prettyShow-})
 import Prelude hiding (tail)
-import SrcLoc (endLoc, HasSpanInfo(..), increaseSrcLoc, srcLoc, srcPairText)
+import SrcLoc (endLoc, increaseSrcLoc, spanInfo, srcLoc, srcPairText)
 import Types (ModuleInfo(ModuleInfo, _module, _moduleComments, _moduleText))
 
 {-
@@ -109,6 +109,18 @@ data St
 
 $(makeLenses ''St)
 
+srcLoc' :: SrcSpanInfo -> SrcLoc
+srcLoc' = srcLoc'' . srcInfoSpan
+
+endLoc' :: SrcSpanInfo -> SrcLoc
+endLoc' = endLoc'' . srcInfoSpan
+
+srcLoc'' :: SrcSpan -> SrcLoc
+srcLoc'' (SrcSpan f b e _ _) = SrcLoc f b e
+
+endLoc'' :: SrcSpan -> SrcLoc
+endLoc'' (SrcSpan f _ _ b e) = SrcLoc f b e
+
 setSpanEnd :: SrcLoc -> SrcSpan -> SrcSpan
 setSpanEnd loc' sp = sp {srcSpanEndLine = srcLine loc', srcSpanEndColumn = srcColumn loc'}
 -- setSpanStart :: SrcLoc -> SrcSpan -> SrcSpan
@@ -123,7 +135,7 @@ adjustSpans :: String -> [Comment] -> [SrcSpanInfo] -> [SrcSpanInfo]
 adjustSpans _ _ [] = []
 adjustSpans _ _ [x] = [x]
 adjustSpans text0 comments sps0@(x : _) =
-    fst $ runState f (St (SrcLoc (srcFilename (srcLoc x)) 1 1) text0 comments sps0)
+    fst $ runState f (St (SrcLoc (srcFilename (srcLoc' x)) 1 1) text0 comments sps0)
     where
       f = do b <- use loc
              sss <- use sps
@@ -131,7 +143,7 @@ adjustSpans text0 comments sps0@(x : _) =
                (ss1 : ssis) ->
                    do skip
                       e <- use loc
-                      let e' = endLoc ss1
+                      let e' = endLoc' ss1
                       case e >= e' of
                         True ->
                             -- We reached the end of ss1, so the segment from b to e is
@@ -181,9 +193,9 @@ adjustSpans text0 comments sps0@(x : _) =
                        t <- use text
                        case cs' of
                          (Comment _ csp _ : cs)
-                             | srcLoc csp <= l ->
+                             | srcLoc'' csp <= l ->
                                  -- We reached the comment, skip past it and discard
-                                 case srcPairText l (endLoc csp) t of
+                                 case srcPairText l (endLoc'' csp) t of
                                    ("", _) -> return ()
                                    (comm, t') -> do
                                      loc %= increaseSrcLoc comm
@@ -263,11 +275,11 @@ foldModule topf pragmaf namef warnf pref exportf postf importf declf sepf (Modul
       doClose f sp =
           do tl <- use tail
              l <- use srcloc
-             case l < endLoc sp of
+             case l < endLoc' sp of
                True -> do
-                 let (p, s) = srcPairText l (endLoc sp) tl
+                 let (p, s) = srcPairText l (endLoc' sp) tl
                  tail .= s
-                 srcloc .= endLoc sp
+                 srcloc .= endLoc' sp
                  result %= f p
                False -> return ()
       doTail :: (String -> r -> r) -> State (St2 r) ()
@@ -281,7 +293,7 @@ foldModule topf pragmaf namef warnf pref exportf postf importf declf sepf (Modul
              spans' <- use srcspans
              case spans' of
                (sp : _) ->
-                   do let l' = srcLoc sp
+                   do let l' = srcLoc' sp
                       case l <= l' of
                         True -> do
                           let (b, a) = srcPairText l l' tl
@@ -290,11 +302,11 @@ foldModule topf pragmaf namef warnf pref exportf postf importf declf sepf (Modul
                           result %= f b
                         False -> return ()
                _ -> error $ "foldModule - out of spans"
-      doList :: (HasSpanInfo a, Show a) => (a -> String -> String -> String -> r -> r) -> [a] -> State (St2 r) ()
+      doList :: (A.Annotated a, Show (a SrcSpanInfo)) => (a SrcSpanInfo -> String -> String -> String -> r -> r) -> [a SrcSpanInfo] -> State (St2 r) ()
       doList _ [] = return ()
       doList f (x : xs) = doItem f x >> doList f xs
 
-      doItem :: (HasSpanInfo a, Show a) => (a -> String -> String -> String -> r -> r) -> a -> State (St2 r) ()
+      doItem :: (A.Annotated a, Show (a SrcSpanInfo)) => (a SrcSpanInfo -> String -> String -> String -> r -> r) -> a SrcSpanInfo -> State (St2 r) ()
       doItem f x =
           do tl <- use tail
              l <- use srcloc
@@ -304,9 +316,9 @@ foldModule topf pragmaf namef warnf pref exportf postf importf declf sepf (Modul
                  let -- Another haskell-src-exts bug?  If a module ends
                      -- with no newline, endLoc will be at the beginning
                      -- of the following (nonexistant) line.
-                     (pre, tl') = srcPairText l (srcLoc sp) tl
-                     l' = endLoc sp
-                     (s, tl'') = srcPairText (srcLoc sp) l' tl'
+                     (pre, tl') = srcPairText l (srcLoc' sp) tl
+                     l' = endLoc' sp
+                     (s, tl'') = srcPairText (srcLoc' sp) l' tl'
                      l'' = adjust1 tl'' l'
                      (post, tl''') = srcPairText l' l'' tl''
                  tail .= tl'''
