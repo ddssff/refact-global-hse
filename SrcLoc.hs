@@ -5,6 +5,8 @@ module SrcLoc
     , srcSpan
     , srcLoc
     , endLoc
+    , srcLoc'
+    , endLoc'
     , textEndLoc
     , increaseSrcLoc
     , textSpan
@@ -57,6 +59,12 @@ srcLoc x = let (SrcSpan f b e _ _) = srcSpan x in SrcLoc f b e
 endLoc :: A.Annotated ast => ast SrcSpanInfo -> SrcLoc
 endLoc x = let (SrcSpan f _ _ b e) = srcSpan x in SrcLoc f b e
 
+srcLoc' :: SrcSpanInfo -> SrcLoc
+srcLoc' x = let (SrcSpan f b e _ _) = srcInfoSpan x in SrcLoc f b e
+
+endLoc' :: SrcSpanInfo -> SrcLoc
+endLoc' x = let (SrcSpan f _ _ b e) = srcInfoSpan x in SrcLoc f b e
+
 textEndLoc :: FilePath -> String -> SrcLoc
 textEndLoc path x =
     SrcLoc {srcFilename = path, srcLine = length ls, srcColumn = length (last ls) + 1}
@@ -72,7 +80,12 @@ increaseSrcLoc (_ : s) (SrcLoc f y x) = increaseSrcLoc s (SrcLoc f y (x + 1))
 textSpan :: FilePath -> String -> SrcSpanInfo
 textSpan path s =
     let end = textEndLoc path s in
-    SrcSpanInfo (SrcSpan {srcSpanFilename = path, srcSpanStartLine = 1, srcSpanStartColumn = 1, srcSpanEndLine = srcLine end, srcSpanEndColumn = srcColumn end}) []
+    SrcSpanInfo {srcInfoSpan = SrcSpan { srcSpanFilename = path
+                                       , srcSpanStartLine = 1
+                                       , srcSpanStartColumn = 1
+                                       , srcSpanEndLine = srcLine end
+                                       , srcSpanEndColumn = srcColumn end },
+                 srcInfoPoints = []}
 
 -- | Return the text before and after a location
 splitText :: SrcLoc -> String -> (String, String)

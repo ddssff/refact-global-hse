@@ -24,6 +24,7 @@ import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
 import Language.Haskell.Exts.Parser as Exts (defaultParseMode, fromParseResult, ParseMode(extensions, parseFilename, fixities))
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Syntax as S (ModuleName(..), Name(..))
+import SrcLoc (textSpan)
 import System.Directory (canonicalizePath)
 import System.FilePath (addExtension, dropExtension, joinPath, splitDirectories, splitExtension, splitFileName)
 import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
@@ -39,6 +40,7 @@ data ModuleInfo =
                , _module :: A.Module SrcSpanInfo
                , _moduleComments :: [Comment]
                , _moduleText :: String
+               , _moduleSpan :: SrcSpanInfo
                }
 
   -- | From hsx2hs, but removing Arrows because it makes test case
@@ -76,7 +78,11 @@ loadModule path =
         -- validateParseResults parsed comments processed -- moduleText
         key <- moduleKey path parsed
         putStrLn ("loaded " ++ prettyShow key)
-        pure $ ModuleInfo key parsed comments moduleText {-processed-}
+        pure $ ModuleInfo { _moduleKey = key
+                          , _module = parsed
+                          , _moduleComments = comments
+                          , _moduleText = moduleText
+                          , _moduleSpan = textSpan path moduleText }
       mode = Exts.defaultParseMode {Exts.extensions = hseExtensions, Exts.parseFilename = path, Exts.fixities = Nothing }
 
 -- | Turn of the locations flag.  This means simple #if macros will not
