@@ -1,12 +1,9 @@
 {-# LANGUAGE BangPatterns, CPP, FlexibleInstances, ScopedTypeVariables, UndecidableInstances #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 module SrcLoc
-    ( spanInfo
-    , srcSpan
+    ( srcSpan
     , srcLoc
     , endLoc
-    , srcLoc'
-    , endLoc'
     , textEndLoc
     , increaseSrcLoc
     , textSpan
@@ -47,23 +44,22 @@ lines' s =
       eol (x : xs) = x : eol xs
       eol [] = []
 
-spanInfo :: A.Annotated ast => ast SrcSpanInfo -> SrcSpanInfo
-spanInfo = A.ann
+class SpanInfo a where
+    srcSpan :: a -> SrcSpan
 
-srcSpan :: A.Annotated ast => ast SrcSpanInfo -> SrcSpan
-srcSpan = srcInfoSpan . spanInfo
+instance SpanInfo SrcSpan where
+    srcSpan = id
 
-srcLoc :: A.Annotated ast => ast SrcSpanInfo -> SrcLoc
+instance SpanInfo SrcSpanInfo where
+    srcSpan = srcSpan . srcInfoSpan
+
+instance A.Annotated ast => SpanInfo (ast SrcSpanInfo) where
+    srcSpan = srcSpan . A.ann
+
+srcLoc :: SpanInfo a => a -> SrcLoc
 srcLoc x = let (SrcSpan f b e _ _) = srcSpan x in SrcLoc f b e
-
-endLoc :: A.Annotated ast => ast SrcSpanInfo -> SrcLoc
+endLoc :: SpanInfo a => a -> SrcLoc
 endLoc x = let (SrcSpan f _ _ b e) = srcSpan x in SrcLoc f b e
-
-srcLoc' :: SrcSpanInfo -> SrcLoc
-srcLoc' x = let (SrcSpan f b e _ _) = srcInfoSpan x in SrcLoc f b e
-
-endLoc' :: SrcSpanInfo -> SrcLoc
-endLoc' x = let (SrcSpan f _ _ b e) = srcInfoSpan x in SrcLoc f b e
 
 textEndLoc :: FilePath -> String -> SrcLoc
 textEndLoc path x =
