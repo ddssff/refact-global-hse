@@ -10,9 +10,14 @@ module SrcLoc
     , spanText
     , srcPairText
     , makeTree
+#if 0
     , validateParseResults
+#endif
+    , fixSpan
+    , gFind
     ) where
 
+import Debug.Trace
 import Control.Monad (MonadPlus, msum)
 import Control.Monad.State (get, put, runState, State)
 import Data.Generics (Data, listify, Typeable)
@@ -20,8 +25,8 @@ import Data.List (groupBy, partition, sort)
 import Data.Monoid ((<>))
 import Data.Set (Set, toList)
 import Data.Tree (Tree, unfoldTree)
-import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann), Module(..))
-import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
+import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann){-, Module(..)-})
+import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..), mkSrcSpan)
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), text)
 
 -- | A version of lines that preserves the presence or absence of a
@@ -56,6 +61,10 @@ instance SpanInfo SrcSpanInfo where
 instance A.Annotated ast => SpanInfo (ast SrcSpanInfo) where
     srcSpan = srcSpan . A.ann
 
+instance SpanInfo (SrcLoc, SrcLoc) where
+    srcSpan (b, e) = mkSrcSpan (SrcLoc (srcFilename b) (srcLine b) (srcColumn b))
+                               (SrcLoc (srcFilename e) (srcLine e) (srcColumn e))
+
 srcLoc :: SpanInfo a => a -> SrcLoc
 srcLoc x = let (SrcSpan f b e _ _) = srcSpan x in SrcLoc f b e
 endLoc :: SpanInfo a => a -> SrcLoc
@@ -76,11 +85,7 @@ increaseSrcLoc (_ : s) (SrcLoc f y x) = increaseSrcLoc s (SrcLoc f y (x + 1))
 textSpan :: FilePath -> String -> SrcSpanInfo
 textSpan path s =
     let end = textEndLoc path s in
-    SrcSpanInfo {srcInfoSpan = SrcSpan { srcSpanFilename = path
-                                       , srcSpanStartLine = 1
-                                       , srcSpanStartColumn = 1
-                                       , srcSpanEndLine = srcLine end
-                                       , srcSpanEndColumn = srcColumn end },
+    SrcSpanInfo {srcInfoSpan = mkSrcSpan (SrcLoc path 1 1) (SrcLoc path (srcLine end) (srcColumn end - 1)),
                  srcInfoPoints = []}
 
 -- | Return the text before and after a location
@@ -95,8 +100,11 @@ splitSpan b e s =
     let (s'', suff) = srcPairText b e s' in
     (pref, s'', suff)
 
-spanText :: A.Annotated ast => ast SrcSpanInfo -> String -> String
-spanText sp t = (\(_, x, _) -> x) (splitSpan (srcLoc sp) (endLoc sp) t) -- t
+spanText :: SpanInfo a => a -> String -> String
+spanText sp t = (\(_, x, _) -> x) (splitSpan (srcLoc sp) (endLoc sp) t)
+
+-- spanText :: A.Annotated ast => ast SrcSpanInfo -> String -> String
+-- spanText sp t = (\(_, x, _) -> x) (splitSpan (srcLoc sp) (endLoc sp) t) -- t
 
 
 -- | Given a beginning and end location, and a string which starts at
@@ -181,11 +189,9 @@ test5 = TestCase (assertEqual "roots1"
 -- | Make sure every SrcSpan in the parsed module refers to existing
 -- text.  They could still be in the wrong places, so this doesn't
 -- guarantee the parse is valid, but its a pretty good bet.
+#if 0
 validateParseResults :: A.Module SrcSpanInfo -> String -> IO ()
 validateParseResults modul t =
-#if 1
-    undefined
-#else
     mapM_ validateSpan (nub (sort (gFind modul :: [SrcSpan])))
     where
       -- validateSpan :: SrcSpan -> IO ()
@@ -200,3 +206,13 @@ instance Pretty SrcLoc where
 
 gFind :: (MonadPlus m, Data a, Typeable b) => a -> m b
 gFind = msum . map return . listify (const True)
+
+-- This happens, a span with end column 0, even though column
+-- numbering begins at 1.  Is it a bug in haskell-src-exts?
+fixSpan :: SrcSpanInfo -> SrcSpanInfo
+fixSpan sp =
+    if srcSpanEndColumn (srcInfoSpan sp) == 0
+    then t1 $ sp {srcInfoSpan = (srcInfoSpan sp) {srcSpanEndColumn = 1}}
+    else sp
+    where
+      t1 sp' = trace ("fixSpan " ++ show (srcInfoSpan sp) ++ " -> " ++ show (srcInfoSpan sp')) sp'

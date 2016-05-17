@@ -16,7 +16,7 @@ module Fold
     , ignore2
     ) where
 
-import Control.Lens ((%=), (.=), makeLenses, use, view)
+import Control.Lens ((%=), (.=), (.~), makeLenses, use, view)
 import Control.Monad (when)
 import Control.Monad.State (get, runState, State)
 import Data.Char (isSpace)
@@ -24,15 +24,15 @@ import Data.List (tails)
 import Data.Monoid ((<>))
 import Data.Sequence (Seq, (|>))
 --import Debug.Trace (trace)
-import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated, Decl, ExportSpec, ExportSpec(..), ExportSpecList(ExportSpecList), ImportDecl, Module(..), ModuleHead(..), ModuleName, ModulePragma, WarningText)
+import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann), Decl, ExportSpec, ExportSpec(..), ExportSpecList(ExportSpecList), ImportDecl, Module(..), ModuleHead(..), ModuleName, ModulePragma, WarningText)
 import Language.Haskell.Exts.Comments (Comment(..))
-import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
+import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..), srcSpanEndColumn)
 import qualified Language.Haskell.Exts.Syntax as S (ModuleName)
 -- import Language.Haskell.Modules.ModuVerse (ModuleInfo(ModuleInfo))
 import qualified Text.PrettyPrint as Pretty (text)
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint){-, prettyShow-})
 import Prelude hiding (tail)
-import SrcLoc (endLoc, increaseSrcLoc, spanInfo, srcLoc, srcPairText)
+import SrcLoc (endLoc, increaseSrcLoc, srcLoc, srcPairText, srcSpan)
 import Types (ModuleInfo(ModuleInfo, _module, _moduleComments, _moduleText))
 
 {-
@@ -83,22 +83,12 @@ instance Spans (A.ModuleHead SrcSpanInfo) where
 instance Spans (A.ExportSpecList SrcSpanInfo) where
     spans (A.ExportSpecList _ es) = concatMap spans es
 
-instance Spans (A.ExportSpec SrcSpanInfo) where spans x = [fixSpan $ spanInfo x]
-instance Spans (A.ModulePragma SrcSpanInfo) where spans x = [fixSpan $ spanInfo x]
-instance Spans (A.ImportDecl SrcSpanInfo) where spans x = [fixSpan $ spanInfo x]
-instance Spans (A.Decl SrcSpanInfo) where spans x = [fixSpan $ spanInfo x]
-instance Spans (A.ModuleName SrcSpanInfo) where spans x = [fixSpan $ spanInfo x]
-instance Spans (A.WarningText SrcSpanInfo) where spans x = [fixSpan $ spanInfo x]
-
--- This happens, a span with end column 0, even though column
--- numbering begins at 1.  Is it a bug in haskell-src-exts?
-fixSpan :: SrcSpanInfo -> SrcSpanInfo
-fixSpan sp =
-    if srcSpanEndColumn (srcInfoSpan sp) == 0
-    then t1 $ sp {srcInfoSpan = (srcInfoSpan sp) {srcSpanEndColumn = 1}}
-    else sp
-    where
-      t1 sp' = {-trace ("fixSpan " ++ show (srcInfoSpan sp) ++ " -> " ++ show (srcInfoSpan sp'))-} sp'
+instance Spans (A.ExportSpec SrcSpanInfo) where spans x = [A.ann x]
+instance Spans (A.ModulePragma SrcSpanInfo) where spans x = [A.ann x]
+instance Spans (A.ImportDecl SrcSpanInfo) where spans x = [A.ann x]
+instance Spans (A.Decl SrcSpanInfo) where spans x = [A.ann x]
+instance Spans (A.ModuleName SrcSpanInfo) where spans x = [A.ann x]
+instance Spans (A.WarningText SrcSpanInfo) where spans x = [A.ann x]
 
 data St
     = St { _loc :: SrcLoc

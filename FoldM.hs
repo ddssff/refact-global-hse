@@ -24,7 +24,7 @@ import Data.Sequence (Seq, (|>))
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(..), Decl, ExportSpec, ExportSpec(..), ExportSpecList(ExportSpecList), ImportDecl, Module(..), ModuleHead(..), ModuleName, ModulePragma, WarningText)
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
-import SrcLoc (increaseSrcLoc, spanInfo, srcPairText)
+import SrcLoc (increaseSrcLoc, srcPairText)
 import Types (ModuleInfo(ModuleInfo, _module, _moduleComments, _moduleText))
 
 -- | Monadic version of Data.Sequence.|>
@@ -54,20 +54,12 @@ instance Spans (A.ModuleHead SrcSpanInfo) where
 instance Spans (A.ExportSpecList SrcSpanInfo) where
     spans (A.ExportSpecList _ es) = concatMap spans es
 
-instance Spans (A.ExportSpec SrcSpanInfo) where spans x = [fixSpan $ spanInfo x]
-instance Spans (A.ModulePragma SrcSpanInfo) where spans x = [fixSpan $ spanInfo x]
-instance Spans (A.ImportDecl SrcSpanInfo) where spans x = [fixSpan $ spanInfo x]
-instance Spans (A.Decl SrcSpanInfo) where spans x = [fixSpan $ spanInfo x]
-instance Spans (A.ModuleName SrcSpanInfo) where spans x = [fixSpan $ spanInfo x]
-instance Spans (A.WarningText SrcSpanInfo) where spans x = [fixSpan $ spanInfo x]
-
--- This happens, a span with end column 0, even though column
--- numbering begins at 1.  Is it a bug in haskell-src-exts?
-fixSpan :: SrcSpanInfo -> SrcSpanInfo
-fixSpan sp =
-    if srcSpanEndColumn (srcInfoSpan sp) == 0
-    then sp {srcInfoSpan = (srcInfoSpan sp) {srcSpanEndColumn = 1}}
-    else sp
+instance Spans (A.ExportSpec SrcSpanInfo) where spans x = [A.ann x]
+instance Spans (A.ModulePragma SrcSpanInfo) where spans x = [A.ann x]
+instance Spans (A.ImportDecl SrcSpanInfo) where spans x = [A.ann x]
+instance Spans (A.Decl SrcSpanInfo) where spans x = [A.ann x]
+instance Spans (A.ModuleName SrcSpanInfo) where spans x = [A.ann x]
+instance Spans (A.WarningText SrcSpanInfo) where spans x = [A.ann x]
 
 data St
     = St { loc_ :: SrcLoc

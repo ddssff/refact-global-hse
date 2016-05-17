@@ -15,6 +15,7 @@ import Control.Exception (Exception)
 import Control.Exception.Lifted as IO (try)
 import Control.Monad (when)
 import Control.Monad.Trans (MonadIO(liftIO))
+import Data.Generics (everywhere, mkT)
 import Data.List (groupBy, intercalate)
 import Data.Set as Set (empty, Set, singleton, union, unions)
 import qualified Language.Haskell.Exts.Annotated as A (Decl(DerivDecl), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), QName(Qual, UnQual), Type(..))
@@ -24,7 +25,7 @@ import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
 import Language.Haskell.Exts.Parser as Exts (defaultParseMode, fromParseResult, ParseMode(extensions, parseFilename, fixities))
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Syntax as S (ModuleName(..), Name(..))
-import SrcLoc (textSpan)
+import SrcLoc (fixSpan, textSpan)
 import System.Directory (canonicalizePath)
 import System.FilePath (addExtension, dropExtension, joinPath, splitDirectories, splitExtension, splitFileName)
 import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
@@ -72,7 +73,8 @@ loadModule path =
       loadModule' :: IO ModuleInfo
       loadModule' = do
         moduleText <- liftIO $ readFile path
-        (parsed, comments, processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions mode path
+        (parsed', comments, processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions mode path
+        let parsed = everywhere (mkT fixSpan) parsed'
         -- liftIO $ writeFile (path ++ ".cpp") processed
         -- putStr processed
         -- validateParseResults parsed comments processed -- moduleText
