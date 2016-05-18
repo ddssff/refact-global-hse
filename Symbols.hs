@@ -9,8 +9,10 @@ module Symbols
     , imports
     ) where
 
+import Data.List (foldl')
+import Data.Maybe (fromMaybe)
 import Language.Haskell.Exts.Annotated.Simplify (sName)
-import qualified Language.Haskell.Exts.Annotated.Syntax as A (ClassDecl(..), ConDecl(..), Decl(..), DeclHead(..), ExportSpec(..), FieldDecl(..), GadtDecl(..), ImportSpec(..), InstHead(..), InstRule(..), Match(..), Name, Pat(..), PatField(..), QName(..), QualConDecl(..), RPat(..))
+import qualified Language.Haskell.Exts.Annotated.Syntax as A (ClassDecl(..), CName(..), ConDecl(..), Decl(..), DeclHead(..), ExportSpec(..), FieldDecl(..), GadtDecl(..), ImportSpec(..), InstHead(..), InstRule(..), Match(..), Name, Pat(..), PatField(..), QName(..), QualConDecl(..), RPat(..))
 import qualified Language.Haskell.Exts.Syntax as S (CName(..), ExportSpec(..), ImportSpec(..), Name(..), QName(..))
 
 -- | Do a fold over the names that are declared in a declaration (not
@@ -21,24 +23,28 @@ import qualified Language.Haskell.Exts.Syntax as S (CName(..), ExportSpec(..), I
 class FoldDeclared a where
     foldDeclared :: forall r. (S.Name -> r -> r) -> r -> a -> r
 
+instance FoldDeclared (A.CName a) where
+    foldDeclared f r (A.VarName _ x) = f (sName x) r
+    foldDeclared f r (A.ConName _ x) = f (sName x) r
+
 instance FoldDeclared (A.Decl a) where
     foldDeclared f r (A.TypeDecl _ x _t) = foldDeclared f r x  -- type x = ...
     foldDeclared f r (A.TypeFamDecl _ x _k) = foldDeclared f r x -- data family x = ...
     foldDeclared f r (A.ClosedTypeFamDecl _ x _k _ts) = foldDeclared f r x -- data family x = ...
-    foldDeclared f r (A.DataDecl _ _ _ x _ _) = foldDeclared f r x -- data/newtype _ x = ...
+    foldDeclared f r0 (A.DataDecl _ _ _ x cs _) = foldl' (foldDeclared f) (foldDeclared f r0 x) cs -- data/newtype _ x = ...
     foldDeclared f r (A.GDataDecl _ _ _ x _ _ _) = foldDeclared f r x
     foldDeclared f r (A.DataFamDecl _ _ x _) = foldDeclared f r x
     foldDeclared _ r (A.TypeInsDecl _ _ _) = r -- type instance _ = ...
     foldDeclared _ r (A.DataInsDecl _ _ _ _ _) = r -- data instance _ = ...
     foldDeclared _ r (A.GDataInsDecl _ _ _ _ _ _) = r -- data or newtype instance, GADT style
-    foldDeclared f r (A.ClassDecl _ _ x _ _) = foldDeclared f r x  -- class context => x | fundeps where decls
+    foldDeclared f r (A.ClassDecl _ _ x _ mxs) = foldl' (foldDeclared f) (foldDeclared f r x) (fromMaybe [] mxs)  -- class context => x | fundeps where decls
     foldDeclared _ r (A.InstDecl _ _ _ _) = r -- type class instance
     foldDeclared f r (A.DerivDecl _ _ x) = foldDeclared f r x
     foldDeclared _ r (A.InfixDecl _ _ _ _) = r -- fixity
     foldDeclared _ r (A.DefaultDecl _ _) = r -- default (type1, type2 ...)
     foldDeclared _ r (A.SpliceDecl _ _) = r  -- template haskell splice declaration
-    foldDeclared f r (A.TypeSig _ xs _) = foldl (foldDeclared f) r xs
-    foldDeclared f r (A.FunBind _ xs) = foldl (foldDeclared f) r xs
+    foldDeclared f r (A.TypeSig _ xs _) = foldl' (foldDeclared f) r xs
+    foldDeclared f r (A.FunBind _ xs) = foldl' (foldDeclared f) r xs
     foldDeclared f r (A.PatBind _ x _ _) = foldDeclared f r x
     foldDeclared _f _r (A.ForImp _ _ _ _ _ _) = error "Unimplemented FoldDeclared instance: ForImp"
     foldDeclared _ _r (A.ForExp _ _ _ _ _) = error "Unimplemented FoldDeclared instance: ForExp"
@@ -89,17 +95,17 @@ instance FoldDeclared (A.Pat a) where
     foldDeclared _ r (A.PLit _ _ _) = r -- literal constant
     foldDeclared f r (A.PNPlusK _ x _) = foldDeclared f r x     -- n+k pattern
     foldDeclared f r (A.PInfixApp _ p1 _qn p2) = let r' = foldDeclared f r p1 in foldDeclared f r' p2   -- pattern with an infix data constructor
-    foldDeclared f r (A.PApp _ _ ps) = foldl (foldDeclared f) r ps      -- data constructor and argument patterns
-    foldDeclared f r (A.PTuple _ _ ps) = foldl (foldDeclared f) r ps    -- tuple pattern
-    foldDeclared f r (A.PList _ ps) = foldl (foldDeclared f) r ps       -- list pattern
+    foldDeclared f r (A.PApp _ _ ps) = foldl' (foldDeclared f) r ps      -- data constructor and argument patterns
+    foldDeclared f r (A.PTuple _ _ ps) = foldl' (foldDeclared f) r ps    -- tuple pattern
+    foldDeclared f r (A.PList _ ps) = foldl' (foldDeclared f) r ps       -- list pattern
     foldDeclared f r (A.PParen _ x) = foldDeclared f r x        -- parenthesized pattern
-    foldDeclared f r (A.PRec _ _qn fs) = foldl (foldDeclared f) r fs    -- labelled pattern, record style
+    foldDeclared f r (A.PRec _ _qn fs) = foldl' (foldDeclared f) r fs    -- labelled pattern, record style
     foldDeclared f r (A.PAsPat _ x y) = let r' = foldDeclared f r x in foldDeclared f r' y      -- @-pattern
     foldDeclared _ r (A.PWildCard _) = r        -- wildcard pattern: _
     foldDeclared f r (A.PIrrPat _ x) = foldDeclared f r x       -- irrefutable pattern: ~pat
     foldDeclared f r (A.PatTypeSig _ x _) = foldDeclared f r x  -- pattern with type signature
     foldDeclared f r (A.PViewPat _ _ x) = foldDeclared f r x    -- view patterns of the form (exp -> pat)
-    foldDeclared f r (A.PRPat _ rps) = foldl (foldDeclared f) r rps     -- regular list pattern
+    foldDeclared f r (A.PRPat _ rps) = foldl' (foldDeclared f) r rps     -- regular list pattern
     foldDeclared _f _r (A.PXTag _ _xn _pxs _mp _ps) = error "Unimplemented FoldDeclared instance: PXTag"        -- XML element pattern
     foldDeclared _f _r (A.PXETag _ _xn _pxs _mp) = error "Unimplemented FoldDeclared instance: PXETag"  -- XML singleton element pattern
     foldDeclared _f _r (A.PXPcdata _ _s) = error "Unimplemented FoldDeclared instance: XPcdata" -- XML PCDATA pattern
@@ -114,7 +120,7 @@ instance FoldDeclared (A.PatField a) where
 instance FoldDeclared (A.RPat a) where
     foldDeclared f r (A.RPOp _ x _) = foldDeclared f r x        -- operator pattern, e.g. pat*
     foldDeclared f r (A.RPEither _ x y) = let r' = foldDeclared f r x in foldDeclared f r' y    -- choice pattern, e.g. (1 | 2)
-    foldDeclared f r (A.RPSeq _ xs) = foldl (foldDeclared f) r xs       -- sequence pattern, e.g. (| 1, 2, 3 |)
+    foldDeclared f r (A.RPSeq _ xs) = foldl' (foldDeclared f) r xs       -- sequence pattern, e.g. (| 1, 2, 3 |)
     foldDeclared f r (A.RPGuard _ x _) = foldDeclared f r x     -- guarded pattern, e.g. (| p | p < 3 |)
     foldDeclared f r (A.RPCAs _ n x) = let r' = foldDeclared f r n in foldDeclared f r' x       -- non-linear variable binding, e.g. (foo@:(1 | 2))*
     foldDeclared f r (A.RPAs _ n x) = let r' = foldDeclared f r n in foldDeclared f r' x        -- linear variable binding, e.g. foo@(1 | 2)
@@ -129,7 +135,7 @@ instance FoldDeclared (A.ImportSpec l) where
     foldDeclared f r (A.IVar _ name) = foldDeclared f r name
     foldDeclared f r (A.IAbs _ _ name) = foldDeclared f r name
     foldDeclared f r (A.IThingAll _ name) = foldDeclared f r name
-    foldDeclared f r (A.IThingWith _ name _) = foldDeclared f r name
+    foldDeclared f r (A.IThingWith _ tname wnames) = foldl' (foldDeclared f) (foldDeclared f r tname) wnames
 
 -- This is really an implementation of foldMentioned
 instance FoldDeclared (A.ExportSpec l) where
@@ -166,15 +172,15 @@ imports x = case (symbolsDeclaredBy x, members x) of
               (ns, []) -> Prelude.map S.IVar ns
               y -> error $ "imports: multiple top level names and member names: " ++ show y
 
--- | Fold over the declared members - e.g. the method names of a class
--- declaration, the constructors of a data declaration.
+-- | Fold over the declared members - e.g. the name and method names of a class
+-- declaration, the name, constructor name, and field names of a data declaration.
 class FoldMembers a where
     foldMembers :: forall r. (S.Name -> r -> r) -> r -> a -> r
 
 instance FoldMembers (A.Decl a) where
-    foldMembers f r (A.ClassDecl _ _ _ _ mxs) = maybe r (foldl (foldDeclared f) r) mxs  -- class context => x | fundeps where decls
-    foldMembers f r (A.DataDecl _ _ _ _ xs _) = foldl (foldDeclared f) r xs -- data/newtype _ x = ...
-    foldMembers f r (A.GDataDecl _ _ _ _ _ xs _) = foldl (foldDeclared f) r xs
+    foldMembers f r0 (A.ClassDecl _ _ hd _ mxs) = foldl' (foldDeclared f) (foldDeclared f r0 hd) (fromMaybe [] mxs)  -- class context => x | fundeps where decls
+    foldMembers f r (A.DataDecl _ _ _ _ xs _) = foldl' (foldDeclared f) r xs -- data/newtype _ x = ...
+    foldMembers f r (A.GDataDecl _ _ _ _ _ xs _) = foldl' (foldDeclared f) r xs
     foldMembers _ r _ = r
 
 -- The following instances of FoldDeclared are only called by the FoldMembers instances.  Hopefully.
@@ -185,10 +191,10 @@ instance FoldDeclared (A.QualConDecl l) where
 instance FoldDeclared (A.ConDecl l) where
     foldDeclared f r (A.ConDecl _ x _ts) = foldDeclared f r x   -- ordinary data constructor
     foldDeclared f r (A.InfixConDecl _ _t1 x _t2) = foldDeclared f r x  -- infix data constructor
-    foldDeclared f r (A.RecDecl _ x fs) = let r' = foldDeclared f r x in foldl (foldDeclared f) r' fs   -- record constructor
+    foldDeclared f r0 (A.RecDecl _ x fs) = foldl' (foldDeclared f) (foldDeclared f r0 x) fs   -- record constructor
 
 instance FoldDeclared (A.FieldDecl l) where
-    foldDeclared f r (A.FieldDecl _ xs _) = foldl (foldDeclared f) r xs
+    foldDeclared f r (A.FieldDecl _ xs _) = foldl' (foldDeclared f) r xs
 
 instance FoldDeclared (A.GadtDecl l) where
-    foldDeclared f r (A.GadtDecl _ x xs _) = let r' = foldDeclared f r x in maybe r' (foldl (foldDeclared f) r') xs
+    foldDeclared f r (A.GadtDecl _ x xs _) = let r' = foldDeclared f r x in maybe r' (foldl' (foldDeclared f) r') xs
