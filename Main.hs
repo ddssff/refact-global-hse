@@ -23,8 +23,14 @@ main :: IO ()
 main = testOn "/home/dsf/git/atp-haskell/src" (moveDeclsAndClean f)
     where
       f :: ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
-      f k (A.TypeSig _ [A.Ident _ s] _) | s == "tryfindM" = k {_moduleName = S.ModuleName "Data.Logic.ATP.FOL"}
-      f k (A.FunBind _ [A.Match _ (A.Ident _ s) _ _ _]) | s == "tryfindM" = k {_moduleName = S.ModuleName "Data.Logic.ATP.FOL"}
+      f k (A.TypeSig _ [A.Ident _ s] _)
+          | s == "tryfindM" =
+              k {_modulePath = "Data/Logic/ATP/FOL.hs",
+                 _moduleName = S.ModuleName "Data.Logic.ATP.FOL"}
+      f k (A.FunBind _ [A.Match _ (A.Ident _ s) _ _ _])
+          | s == "tryfindM" =
+              k {_modulePath = "Data/Logic/ATP/FOL.hs",
+                 _moduleName = S.ModuleName "Data.Logic.ATP.FOL"}
       f k _d = k
 
 testOn :: FilePath -> (FilePath -> [ModuleInfo] -> IO ()) -> IO ()
