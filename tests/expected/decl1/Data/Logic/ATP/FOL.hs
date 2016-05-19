@@ -34,6 +34,7 @@ module Data.Logic.ATP.FOL
     , ApFormula, EqFormula
     -- * Tests
     , testFOL
+    , tryfindM
     ) where
 
 import Data.Logic.ATP.Apply (ApAtom, HasApply(PredOf, TermOf, overterms, onterms), Predicate)
@@ -444,6 +445,8 @@ test11 =
 testFOL :: Test
 testFOL = TestLabel "FOL" (TestList [test01, test02, test03, test04,
                                      test05, test06, test07, test08, test09,
-                                     test10, test11])tryfindM :: Monad m => (t -> m (Failing a)) -> [t] -> m (Failing a)
+                                     test10, test11])
+
+tryfindM :: Monad m => (t -> m (Failing a)) -> [t] -> m (Failing a)
 tryfindM _ [] = return $ Failure ["tryfindM"]
 

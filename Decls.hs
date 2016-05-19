@@ -31,6 +31,7 @@ import SrcLoc (srcLoc, endLoc, spanText, splitText, textSpan)
 import Symbols (FoldDeclared(foldDeclared), symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
+import System.FilePath.Extra (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Text.PrettyPrint.HughesPJClass (prettyShow)
@@ -50,7 +51,7 @@ $(makeLenses ''S)
 
 moveDeclsAndClean :: MoveSpec -> FilePath -> [ModuleInfo] -> IO ()
 moveDeclsAndClean f scratch modules =
-    mapM_ (\(m, s) -> if _moduleText m /= s then writeFile (_modulePath (_moduleKey m) ++ ".new") s else pure ())
+    mapM_ (\(m, s) -> if _moduleText m /= s then replaceFile (_modulePath (_moduleKey m)) s else pure ())
           (moveDecls f modules)
 
 -- | Specifies where to move each declaration of each module.
@@ -130,6 +131,7 @@ newImports f modules thismodule imports = do
                              else (skip . endLoc . A.ann) spec) specs
              -- Output the portion of the ImportDecl following the last ImportSpec.
              (tell' . endLoc . A.ann) x
+             -- Output a new import decl for each symbol that has moved
              mapM_ (\(name, specs) -> do
                       tell "\n"
                       (tell . prettyPrint') (sImportDecl x) {S.importModule = name, S.importSpecs = Just (hiding, map sImportSpec (Set.toList specs))})

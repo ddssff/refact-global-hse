@@ -17,7 +17,6 @@ module Data.Logic.ATP.Lib
     -- , itlist2
     -- , itlist  -- same as foldr with last arguments flipped
     , tryfind
-    , tryfindM
     , runRS
     , evalRS
     , settryfind
