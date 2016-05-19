@@ -449,4 +449,4 @@ testFOL = TestLabel "FOL" (TestList [test01, test02, test03, test04,
 
 tryfindM :: Monad m => (t -> m (Failing a)) -> [t] -> m (Failing a)
 tryfindM _ [] = return $ Failure ["tryfindM"]
-
+tryfindM f (h : t) = f h >>= failing (\_ -> tryfindM f t) (return . Success)
