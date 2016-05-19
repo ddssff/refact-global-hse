@@ -65,9 +65,9 @@ moveDecls f modules = map (\info -> (info, moveDeclsOfModule f modules info)) mo
 
 -- Update one module
 moveDeclsOfModule :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> String
-moveDeclsOfModule f modules info@(ModuleInfo {_module = A.Module l h _ i ds}) =
+moveDeclsOfModule f modules info@(ModuleInfo {_module = m@(A.Module l h _ i ds)}) =
     snd $ evalRWS (do tell' (srcLoc l)
-                      newHeader f modules h
+                      newHeader f modules info h
                       newImports f modules info i
                       newDecls f modules info ds
                       t <- view id
@@ -86,14 +86,53 @@ tell' l = do
 -- | Write the new export list.  Exports of symbols that have moved
 -- out are removed.  Exports of symbols that have moved in are added
 -- *if* the symbol is imported anywhere else.
-newHeader :: MoveSpec -> [ModuleInfo] -> Maybe (A.ModuleHead SrcSpanInfo) -> RWS String String S ()
-newHeader f modules (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList l specs)))) = do
+newHeader :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> Maybe (A.ModuleHead SrcSpanInfo) -> RWS String String S ()
+newHeader f modules m@(ModuleInfo {_moduleKey = k, _module = A.Module _ _ _ _ ds})
+              (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList l specs)))) = do
   tell' (srcLoc l) -- write everything to beginning of first export
-  mapM_ doExport specs
+  mapM_ (doExport f m) specs
+  let syms = concatMap newExports (filter (\x -> _moduleKey x /= _moduleKey m) modules)
+  (tell . concatMap ((sep ++) . prettyPrint) . nub) syms
+  -- mapM_ newExports (filter (\x -> _moduleKey x /= _moduleKey m) modules)
     where
-      doExport :: A.ExportSpec SrcSpanInfo -> RWS String String S ()
-      doExport x = (tell' . endLoc . A.ann) x
-newHeader f modules _ = pure ()
+      -- This should be inferred from the module text
+      sep = "\n    , "
+      -- Scan a module other than m for declarations moving to m.  If
+      -- found, transfer the export from there to here.
+      newExports :: ModuleInfo -> [S.Name]
+      newExports m'@(ModuleInfo {_moduleKey = k', _module = A.Module l h _ i ds}) =
+          concatMap (\d -> if (f k' d == k) then foldDeclared (:) [] d else []) ds
+      -- exportSpecText :: A.Decl SrcSpanInfo -> String
+      -- exportSpecText d = (concatMap ((", " ++) . prettyPrint) . nub . foldDeclared (:) []) d
+
+newHeader f modules _ _ = pure ()
+
+-- | Find the declaration of the export spec in the current module.
+-- If it is not there, it is a re-export which we just keep.
+doExport :: MoveSpec -> ModuleInfo -> A.ExportSpec SrcSpanInfo -> RWS String String S ()
+doExport f info@(ModuleInfo {_moduleKey = k}) spec =
+    case findDeclOfExportSpec info spec of
+      Nothing -> (tell' . endLoc . A.ann) spec
+      Just d -> case f k d of
+                  k' | k' == k -> (tell' . endLoc . A.ann) spec
+                  _ -> point .= (endLoc . A.ann) spec
+    where
+      -- Find the declaration that causes all the symbols in the
+      -- ImportSpec to come into existance.
+findDeclOfExportSpec :: ModuleInfo -> A.ExportSpec SrcSpanInfo -> Maybe (A.Decl SrcSpanInfo)
+findDeclOfExportSpec info spec =
+    findDeclOfSymbols info (foldDeclared Set.insert mempty spec)
+    where
+      findDeclOfSymbols :: ModuleInfo -> Set S.Name -> Maybe (A.Decl SrcSpanInfo)
+      findDeclOfSymbols info@(ModuleInfo {_module = A.Module _ _ _ _ decls}) syms | null syms = Nothing
+      findDeclOfSymbols info@(ModuleInfo {_module = A.Module _ _ _ _ decls}) syms =
+          case filter (isSubsetOf syms . foldDeclared Set.insert mempty) (filter notSig decls) of
+            [d] -> Just d
+            [] -> Nothing
+            ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (map srcLoc ds)
+      notSig (A.TypeSig {}) = False
+      notSig _ = True
+
 {-
     fold $
     foldHeader echo2 echo
@@ -171,11 +210,12 @@ newImports f modules thismodule imports = do
       findDeclOfImportSpec :: ModuleInfo -> A.ImportSpec SrcSpanInfo -> Maybe (A.Decl SrcSpanInfo)
       findDeclOfImportSpec info spec = findDeclOfSymbols info (foldDeclared Set.insert mempty spec)
       findDeclOfSymbols :: ModuleInfo -> Set S.Name -> Maybe (A.Decl SrcSpanInfo)
+      findDeclOfSymbols info@(ModuleInfo {_module = A.Module _ _ _ _ decls}) syms | null syms = Nothing
       findDeclOfSymbols info@(ModuleInfo {_module = A.Module _ _ _ _ decls}) syms =
           case filter (isSubsetOf syms . foldDeclared Set.insert mempty) (filter notSig decls) of
             [d] -> Just d
             [] -> Nothing
-            ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show ds
+            ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (map srcLoc ds)
 
       notSig (A.TypeSig {}) = False
       notSig _ = True
