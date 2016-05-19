@@ -27,7 +27,7 @@ import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Pretty (defaultMode, PPHsMode(layout), PPLayout(PPInLine), prettyPrint, prettyPrintWithMode, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo(..), SrcLoc(..), mkSrcSpan)
 import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(importLoc, importModule, importSpecs), ModuleName(..), Name(..))
-import SrcLoc (srcLoc, endLoc, spanText, splitText, textSpan)
+import SrcLoc (srcLoc, endLoc, spanText, splitText, textSpan, gFind)
 import Symbols (FoldDeclared(foldDeclared), symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
@@ -37,6 +37,7 @@ import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Text.PrettyPrint.HughesPJClass (prettyShow)
 import Types (DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule,
               ModuleInfo(..), ModuleKey(_modulePath, _moduleTop, _moduleName))
+import Utils (dropWhile2)
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
@@ -280,15 +281,7 @@ newDecls :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> [A.Decl SrcSpanInfo] -> RW
 newDecls f modules info decls = do
   oldDecls
   newDecls
-    -- fold (foldDecls (\_ _ _ _ r -> r) (\s r -> r |> s) info mempty)
     where
-{-
-      testDecls :: ModuleInfo -> String
-      testDecls m = fold (foldDecls (\d pref s suff r ->
-                                         case f (_moduleKey m) d of
-                                           k | k == _moduleKey info -> r |> pref <> s <> suff
-                                           _ -> r) ignore2 m mempty)
--}
       -- Declarations that were already here and are to remain
       oldDecls :: RWS String String S ()
       oldDecls = mapM_ (\d -> case f (_moduleKey info) d of
@@ -298,25 +291,25 @@ newDecls f modules info decls = do
       -- We have to scan all the modules we know about for this.
       newDecls :: RWS String String S ()
       newDecls = mapM_ (\m@(ModuleInfo {_module = A.Module mspan _ _ _ decls}) ->
-                            mapM_ (\d -> let syms = foldDeclared Set.insert mempty d in
-                                         case f (_moduleKey m) d of
+                            mapM_ (\d -> case f (_moduleKey m) d of
                                            k | k == _moduleKey info -> do
-                                             -- FIXME: Need to get the original text here
-                                             -- trace ("decl span: " ++ show d) (pure ())
-                                             -- trace ("module span: " ++ show mspan) (pure ())
-                                             tell (declText mspan (_moduleText m) d)
-                                             -- tell (spanText (A.ann d) (_moduleText m))
-                                             -- tell "\n"
-                                             -- tell (prettyPrint d)
+                                             tell (declText m d)
                                            k -> pure ()) decls)
                        (filter (\m -> _moduleKey m /= _moduleKey info) modules)
 
-declText :: SrcSpanInfo -> String -> A.Decl SrcSpanInfo -> String
-declText mspan mtext d =
-    case dropWhile (< (srcLoc d)) (map srcLoc (srcInfoPoints mspan)) of
-      (p1 : p2 : _) -> spanText (mkSrcSpan p1 p2) mtext
-      [p1] -> snd (splitText p1 mtext)
-      [] -> error "Unexpected srcInfoPoints"
+-- | Get the text of a declaration including the preceding whitespace
+declText :: ModuleInfo -> A.Decl SrcSpanInfo -> String
+declText (ModuleInfo {_module = m@(A.Module _ mh ps is ds), _moduleText = mtext}) d =
+    -- Find the end of the last object preceding d - could be the
+    -- preceding declaration, the last import, the last pragma, or the
+    -- module header.  If none of that exists use the module start
+    -- location.
+    let p = case ds of
+              (d1 : _) | d == d1 -> endLoc (last (maybe [] (\x -> [A.ann x]) mh ++ map A.ann ps ++ map A.ann is))
+              ds -> case dropWhile2 (\_  md2 -> Just d /= md2) ds of
+                      (d1 : d2 : _) -> endLoc d1
+                      [] -> srcLoc (A.ann m) in
+    spanText (mkSrcSpan p (endLoc d)) mtext
 
 #if 0
 -- | Given an ImportSpec, return a map from symbol names to the module
