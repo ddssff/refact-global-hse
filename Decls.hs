@@ -149,9 +149,16 @@ skip loc = point .= loc
 -- Find the declaration of the symbols of an import spec.  If that
 -- declaration moved, update the module name.
 newImports :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> [A.ImportDecl SrcSpanInfo] -> RWS String String S ()
-newImports f modules thismodule imports = do
+newImports f modules thismodule@(ModuleInfo {_moduleKey = k}) imports = do
   mapM_ doImportDecl imports
+  mapM_ doNewImports (filter (\m -> _moduleKey m /= k) modules)
     where
+      -- If a declaration is moving from another module to this one, all of
+      -- that module's imports must be duplicated here.
+      doNewImports :: ModuleInfo -> RWS String String S ()
+      doNewImports m@(ModuleInfo {_moduleKey = k', _module = A.Module _ _ _ is@(_ : _) ds}) =
+          when (any (\d -> f k' d == k) ds) (tell ("\n" ++ spanText (mkSrcSpan (srcLoc (head is)) (endLoc (last is))) (_moduleText m)))
+
       doImportDecl x@(A.ImportDecl {importSpecs = Nothing}) = (tell' . endLoc . A.ann) x
       doImportDecl x@(A.ImportDecl {importModule = name, importSpecs = Just (A.ImportSpecList l hiding specs)}) =
           do let oldModname = sModuleName name

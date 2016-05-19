@@ -335,7 +335,7 @@ fv :: (IsFirstOrder formula, v ~ VarOf formula) => formula -> Set v
 fv fm =
     foldQuantified qu co ne tf at fm
     where
-      qu _ x p = difference (fv p) (singleton x)
+      qu _ x p = difference (fv p) (Set.singleton x)
       ne p = fv p
       co p _ q = union (fv p) (fv q)
       tf _ = Set.empty
@@ -354,7 +354,7 @@ fva = overterms (\t s -> Set.union (fvt t) s) mempty
 
 -- | Find the variables in a term
 fvt :: (IsTerm term, v ~ TVarOf term) => term -> Set v
-fvt tm = foldTerm singleton (\_ args -> unions (map fvt args)) tm
+fvt tm = foldTerm Set.singleton (\_ args -> unions (map fvt args)) tm
 
 -- | Universal closure of a formula.
 generalize :: IsFirstOrder formula => formula -> formula
@@ -417,7 +417,7 @@ substq :: (IsFirstOrder formula, v ~ VarOf formula, term ~ TermOf (AtomOf formul
           Map v term -> (v -> formula -> formula) -> v -> formula -> formula
 substq subfn qu x p =
   let x' = if setAny (\y -> Set.member x (fvt(tryApplyD subfn y (vt y))))
-                     (difference (fv p) (singleton x))
+                     (difference (fv p) (Set.singleton x))
            then variant x (fv (subst (undefine x subfn) p)) else x in
   qu x' (subst ((x |-> vt x') subfn) p)
 

@@ -18,6 +18,7 @@ import IO (withCurrentDirectory, withTempDirectory)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
 import Language.Haskell.Exts.Pretty
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
+import Language.Haskell.Exts.Annotated.Simplify (sName)
 import qualified Language.Haskell.Exts.Syntax as S
 import Symbols (foldDeclared)
 import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
@@ -43,17 +44,21 @@ decl1 =
       assertString diff
     where
       f :: ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
-      f k d | Set.member (S.Ident "tryfindM") (foldDeclared Set.insert mempty d) =
-                k {_modulePath = "Data/Logic/ATP/FOL.hs",
-                   _moduleName = S.ModuleName "Data.Logic.ATP.FOL"}
       f k (A.TypeSig _ [A.Ident _ s] _)
-          | s == "tryfindM" =
+          | s == "tryfindM" || s == "failing" =
               k {_modulePath = "Data/Logic/ATP/FOL.hs",
                  _moduleName = S.ModuleName "Data.Logic.ATP.FOL"}
-      f k (A.FunBind _ [A.Match _ (A.Ident _ s) _ _ _])
-          | s == "tryfindM" =
+      f k (A.FunBind _ ms)
+          | any (`elem` [S.Ident "tryfindM", S.Ident "failing"])
+                (map (\match -> case match of
+                                  A.Match _ name _ _ _ -> sName name
+                                  A.InfixMatch _ _ name _ _ _ -> sName name) ms) =
               k {_modulePath = "Data/Logic/ATP/FOL.hs",
                  _moduleName = S.ModuleName "Data.Logic.ATP.FOL"}
+      f k d | Set.member (S.Ident "tryfindM") (foldDeclared Set.insert mempty d) =
+                trace ("Expected TypeSig or FunBind: " ++ show d)
+                      (k {_modulePath = "Data/Logic/ATP/FOL.hs",
+                          _moduleName = S.ModuleName "Data.Logic.ATP.FOL"})
       f k d@(A.FunBind _ _) = {-trace ("FunBind: " ++ show (foldDeclared (:) mempty d))-} k
       f k (A.ClassDecl _ _mcxt _dh _fd _mcds) = k
       f k (A.DataDecl _ _dn _mcxt _dh _qcs _md) = k

@@ -34,6 +34,7 @@ module Data.Logic.ATP.FOL
     , ApFormula, EqFormula
     -- * Tests
     , testFOL
+    , failing
     , tryfindM
     ) where
 
@@ -52,6 +53,26 @@ import Data.Set as Set (difference, empty, fold, fromList, member, Set, singleto
 import Data.String (IsString(fromString))
 import Prelude hiding (pred)
 import Test.HUnit
+import Control.Applicative.Error (Failing(..))
+import Control.Concurrent (forkIO, killThread, newEmptyMVar, putMVar, takeMVar, threadDelay)
+import Control.Monad.RWS (evalRWS, runRWS, RWS)
+import Data.Data (Data)
+import Data.Foldable as Foldable
+import Data.Function (on)
+import qualified Data.List as List (map)
+import Data.Map.Strict as Map (delete, findMin, insert, lookup, Map, member, singleton)
+import Data.Maybe
+import Data.Monoid ((<>))
+import Data.Sequence as Seq (Seq, viewl, ViewL(EmptyL, (:<)), (><), singleton)
+import Data.Set as Set (delete, empty, fold, fromList, insert, minView, Set, singleton, union)
+import qualified Data.Set as Set (map)
+import Data.Time.Clock (DiffTime, diffUTCTime, getCurrentTime, NominalDiffTime)
+import Data.Typeable (Typeable)
+import Debug.Trace (trace)
+import Prelude hiding (map)
+import System.IO (hPutStrLn, stderr)
+import Text.PrettyPrint.HughesPJClass (Doc, fsep, punctuate, comma, space, Pretty(pPrint), text)
+import Test.HUnit (assertEqual, Test(TestCase, TestLabel, TestList))
 
 -- | Combine IsQuantified, HasApply, IsTerm, and make sure the term is
 -- using the same variable type as the formula.
@@ -336,7 +357,7 @@ fv :: (IsFirstOrder formula, v ~ VarOf formula) => formula -> Set v
 fv fm =
     foldQuantified qu co ne tf at fm
     where
-      qu _ x p = difference (fv p) (singleton x)
+      qu _ x p = difference (fv p) (Set.singleton x)
       ne p = fv p
       co p _ q = union (fv p) (fv q)
       tf _ = Set.empty
@@ -355,7 +376,7 @@ fva = overterms (\t s -> Set.union (fvt t) s) mempty
 
 -- | Find the variables in a term
 fvt :: (IsTerm term, v ~ TVarOf term) => term -> Set v
-fvt tm = foldTerm singleton (\_ args -> unions (map fvt args)) tm
+fvt tm = foldTerm Set.singleton (\_ args -> unions (map fvt args)) tm
 
 -- | Universal closure of a formula.
 generalize :: IsFirstOrder formula => formula -> formula
@@ -418,7 +439,7 @@ substq :: (IsFirstOrder formula, v ~ VarOf formula, term ~ TermOf (AtomOf formul
           Map v term -> (v -> formula -> formula) -> v -> formula -> formula
 substq subfn qu x p =
   let x' = if setAny (\y -> Set.member x (fvt(tryApplyD subfn y (vt y))))
-                     (difference (fv p) (singleton x))
+                     (difference (fv p) (Set.singleton x))
            then variant x (fv (subst (undefine x subfn) p)) else x in
   qu x' (subst ((x |-> vt x') subfn) p)
 
@@ -446,6 +467,10 @@ testFOL :: Test
 testFOL = TestLabel "FOL" (TestList [test01, test02, test03, test04,
                                      test05, test06, test07, test08, test09,
                                      test10, test11])
+
+failing :: ([String] -> b) -> (a -> b) -> Failing a -> b
+failing f _ (Failure errs) = f errs
+failing _ f (Success a)    = f a
 
 tryfindM :: Monad m => (t -> m (Failing a)) -> [t] -> m (Failing a)
 tryfindM _ [] = return $ Failure ["tryfindM"]

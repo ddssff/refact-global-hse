@@ -8,7 +8,6 @@
 
 module Data.Logic.ATP.Lib
     ( Failing(Success, Failure)
-    , failing
     , SetLike(slView, slMap, slUnion, slEmpty, slSingleton), slInsert, prettyFoldable
 
     , setAny
@@ -77,10 +76,6 @@ import Test.HUnit (assertEqual, Test(TestCase, TestLabel, TestList))
 -- | An error idiom.  Rather like the error monad, but collect all
 -- errors together
 type ErrorMsg = String
-
-failing :: ([String] -> b) -> (a -> b) -> Failing a -> b
-failing f _ (Failure errs) = f errs
-failing _ f (Success a)    = f a
 
 -- Declare a Monad instance for Failing so we can chain a series of
 -- Failing actions with >> or >>=.  If any action fails the subsequent
