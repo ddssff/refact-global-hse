@@ -15,13 +15,10 @@ module SrcLoc
     , validateParseResults
 #endif
     , fixSpan
-    , gFind
     ) where
 
 import Debug.Trace
-import Control.Monad (MonadPlus, msum)
 import Control.Monad.State (get, put, runState, State)
-import Data.Generics (Data, listify, Typeable)
 import Data.List (groupBy, partition, sort)
 import Data.Monoid ((<>))
 import Data.Set (Set, toList)
@@ -29,6 +26,7 @@ import Data.Tree (Tree, unfoldTree)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann){-, Module(..)-})
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..), mkSrcSpan)
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), text)
+-- import Utils (gFind)
 
 -- | A version of lines that preserves the presence or absence of a
 -- terminating newline
@@ -204,9 +202,6 @@ validateParseResults modul t =
 
 instance Pretty SrcLoc where
     pPrint l = text ("(l" <> show (srcLine l) ++ ",c" ++ show (srcColumn l) ++ ")")
-
-gFind :: (MonadPlus m, Data a, Typeable b) => a -> m b
-gFind = msum . map return . listify (const True)
 
 -- This happens, a span with end column 0, even though column
 -- numbering begins at 1.  Is it a bug in haskell-src-exts?
