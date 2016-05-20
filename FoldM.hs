@@ -144,7 +144,7 @@ adjustSpans text comments sps@(x : _) =
                          (Comment _ csp _ : cs)
                              | srcLoc'' csp <= loc_ st ->
                                  -- We reached the comment, skip past it and discard
-                                 case srcPairText (loc_ st) (endLoc'' csp) (text_ st) of
+                                 case srcPairText (loc_ st, endLoc'' csp) (text_ st) of
                                    ("", _) -> return ()
                                    (comm, t') ->
                                        let loc' = increaseSrcLoc comm (loc_ st) in
@@ -203,7 +203,7 @@ foldModuleM topf pragmaf namef warnf pref exportf postf importf declf sepf (Modu
           do (tl, l, sps, r) <- get
              case l < endLoc' sp of
                True -> do
-                 let (p, s) = srcPairText l (endLoc' sp) tl
+                 let (p, s) = srcPairText (l, endLoc' sp) tl
                  r' <- lift $ f p r
                  put (s, endLoc' sp, sps, r')
                False -> pure ()
@@ -220,7 +220,7 @@ foldModuleM topf pragmaf namef warnf pref exportf postf importf declf sepf (Modu
                    do let l' = srcLoc' sp
                       case l <= l' of
                         True -> do
-                          let (b, a) = srcPairText l l' tl
+                          let (b, a) = srcPairText (l, l') tl
                           r' <- lift $ f b r
                           put (a, l', sps, r')
                         False -> pure ()
@@ -237,11 +237,11 @@ foldModuleM topf pragmaf namef warnf pref exportf postf importf declf sepf (Modu
              let -- Another haskell-src-exts bug?  If a module ends
                  -- with no newline, endLoc will be at the beginning
                  -- of the following (nonexistant) line.
-                 (pre, tl') = srcPairText l (srcLoc' sp) tl
+                 (pre, tl') = srcPairText (l, srcLoc' sp) tl
                  l' = endLoc' sp
-                 (s, tl'') = srcPairText (srcLoc' sp) l' tl'
+                 (s, tl'') = srcPairText (srcLoc' sp, l') tl'
                  l'' = adjust1 tl'' l'
-                 (post, tl''') = srcPairText l' l'' tl''
+                 (post, tl''') = srcPairText (l', l'') tl''
              r' <- lift $ f x pre s post r
              put (tl''', l'', sps', r')
 

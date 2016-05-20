@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns, CPP, FlexibleInstances, ScopedTypeVariables, UndecidableInstances #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 module SrcLoc
-    ( srcSpan
+    ( SpanInfo(srcSpan)
     , srcLoc
     , endLoc
     , textEndLoc
@@ -18,6 +18,7 @@ module SrcLoc
     ) where
 
 import Debug.Trace
+import Control.Lens (_2, view)
 import Control.Monad.State (get, put, runState, State)
 import Data.List (groupBy, partition, sort)
 import Data.Monoid ((<>))
@@ -90,17 +91,17 @@ textSpan path s =
 -- | Return the text before and after a location
 splitText :: SrcLoc -> String -> (String, String)
 splitText l s =
-    srcPairText (l {srcLine = 1, srcColumn = 1}) l s
+    srcPairText (l {srcLine = 1, srcColumn = 1}, l) s
 
 -- | Return the text before, within, and after a span
-splitSpan :: SrcLoc -> SrcLoc -> String -> (String, String, String)
-splitSpan b e s =
-    let (pref, s') = splitText b s in
-    let (s'', suff) = srcPairText b e s' in
+splitSpan :: SpanInfo a => a -> String -> (String, String, String)
+splitSpan sp s =
+    let (pref, s') = splitText (srcLoc sp) s in
+    let (s'', suff) = srcPairText sp s' in
     (pref, s'', suff)
 
 spanText :: SpanInfo a => a -> String -> String
-spanText sp t = (\(_, x, _) -> x) (splitSpan (srcLoc sp) (endLoc sp) t)
+spanText sp t = view _2 (splitSpan sp t)
 
 -- spanText :: A.Annotated ast => ast SrcSpanInfo -> String -> String
 -- spanText sp t = (\(_, x, _) -> x) (splitSpan (srcLoc sp) (endLoc sp) t) -- t
@@ -108,10 +109,12 @@ spanText sp t = (\(_, x, _) -> x) (splitSpan (srcLoc sp) (endLoc sp) t)
 
 -- | Given a beginning and end location, and a string which starts at
 -- the beginning location, return a (beforeend,afterend) pair.
-srcPairText :: SrcLoc -> SrcLoc -> String -> (String, String)
-srcPairText b0 e s0 =
+srcPairText :: SpanInfo a => a -> String -> (String, String)
+srcPairText sp s0 =
     fst $ runState f (b0, "", s0)
     where
+      b0 = srcLoc sp
+      e = endLoc sp
       f :: State (SrcLoc, String, String) (String, String)
       f = do (b, r, s) <- get
              case (srcLine b < srcLine e, srcColumn b < srcColumn e) of
