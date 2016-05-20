@@ -34,26 +34,23 @@ module Data.Logic.ATP.FOL
     , ApFormula, EqFormula
     -- * Tests
     , testFOL
-    , tryfindM
     ) where
 
-import Control.Applicative.Error (Failing(..))
 import Data.Logic.ATP.Apply (ApAtom, HasApply(PredOf, TermOf, overterms, onterms), Predicate)
 import Data.Logic.ATP.Equate ((.=.), EqAtom, foldEquate, HasEquate)
 import Data.Logic.ATP.Formulas (fromBool, IsFormula(..))
-import Data.Logic.ATP.Lib (failing, setAny, tryApplyD, undefine, (|->))
+import Data.Logic.ATP.Lib (setAny, tryApplyD, undefine, (|->))
 import Data.Logic.ATP.Lit ((.~.), foldLiteral, JustLiteral)
 import Data.Logic.ATP.Pretty (prettyShow)
-import Data.Logic.ATP.Prop (IsPropositional((.&.), (.|.), (.=>.), (.<=>.)), BinOp(..))
-import Data.Logic.ATP.Quantified (Quant((:!:), (:?:)), exists, foldQuantified, for_all, IsQuantified(VarOf), QFormula)
-import Data.Logic.ATP.Term (IsTerm(FunOf, TVarOf, vt, fApp), FName, foldTerm, V, variant)
+import Data.Logic.ATP.Prop (BinOp(..), IsPropositional((.&.), (.|.), (.=>.), (.<=>.)))
+import Data.Logic.ATP.Quantified (exists, foldQuantified, for_all, IsQuantified(VarOf), Quant((:!:), (:?:)), QFormula)
+import Data.Logic.ATP.Term (FName, foldTerm, IsTerm(FunOf, TVarOf, vt, fApp), V, variant)
 import Data.Map.Strict as Map (empty, fromList, insert, lookup, Map)
 import Data.Maybe (fromMaybe)
 import Data.Set as Set (difference, empty, fold, fromList, member, Set, singleton, union, unions)
 import Data.String (IsString(fromString))
-import Prelude (($), (&&), Num((*), (+), (-)), (++), (.), Monad((>>=), return), and, Bool(..), Eq(..), error, filter, Int, Integral(mod), map, Monoid(mempty), not, or, Show(show), (||))
-import Prelude hiding (map, pred)
-import Test.HUnit (assertEqual, Test(..))
+import Prelude hiding (pred)
+import Test.HUnit
 
 -- | Combine IsQuantified, HasApply, IsTerm, and make sure the term is
 -- using the same variable type as the formula.
@@ -448,7 +445,3 @@ testFOL :: Test
 testFOL = TestLabel "FOL" (TestList [test01, test02, test03, test04,
                                      test05, test06, test07, test08, test09,
                                      test10, test11])
-
-tryfindM :: Monad m => (t -> m (Failing a)) -> [t] -> m (Failing a)
-tryfindM _ [] = return $ Failure ["tryfindM"]
-tryfindM f (h : t) = f h >>= failing (\_ -> tryfindM f t) (return . Success)
