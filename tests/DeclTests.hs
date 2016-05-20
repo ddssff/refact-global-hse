@@ -25,6 +25,7 @@ import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType
 import System.Process (readProcess, readProcessWithExitCode)
 import Test.HUnit
 import Types
+import Utils (gitResetSubdir)
 
 declTests :: Test
 declTests = TestList [ decl1 ]
@@ -32,13 +33,13 @@ declTests = TestList [ decl1 ]
 decl1 :: Test
 decl1 =
     TestCase $ do
-      readProcess "git" ["checkout", "--", "tests/input"] ""
+      gitResetSubdir "tests/input"
       withCurrentDirectory "tests/input" $
         withTempDirectory True "." "scratch" $ \scratch -> do
           paths <- (catMaybes . map (stripPrefix "./")) <$> (find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
           loadModules paths >>= moveDeclsAndClean moveSpec1 scratch
       (_, diff, _) <- readProcessWithExitCode "diff" ["-ru", "tests/expected/decl1", "tests/input"] ""
-      readProcess "git" ["checkout", "--", "tests/input"] ""
+      gitResetSubdir "tests/input"
       assertString diff
 
 moveSpec1 :: ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
