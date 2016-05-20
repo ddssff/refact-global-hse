@@ -18,7 +18,7 @@ import SrcLoc (endLoc, spanText, srcLoc, textSpan)
 import Symbols (FoldDeclared(foldDeclared))
 import System.FilePath.Extra (replaceFile)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _moduleText), ModuleKey(_moduleName, _modulePath), loadModule)
+import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _moduleText, _modulePath), ModuleKey(_moduleName), loadModule)
 import Utils (dropWhile2)
 
 -- | Specifies where to move each declaration of each module.
@@ -29,8 +29,8 @@ makeMoveSpec :: String -> String -> String -> MoveSpec
 makeMoveSpec fname mname mname' =
     \mkey decl ->
         let syms = foldDeclared Set.insert mempty decl in
-        if _moduleName mkey == S.ModuleName mname && (Set.member (S.Ident fname) syms || Set.member (S.Symbol fname) syms)
-        then mkey {_moduleName = S.ModuleName mname'}
+        if _moduleName mkey == Just (S.ModuleName mname) && (Set.member (S.Ident fname) syms || Set.member (S.Symbol fname) syms)
+        then mkey {_moduleName = Just (S.ModuleName mname')}
         else mkey
 
 prettyPrint' :: A.Pretty a => a -> String
@@ -44,7 +44,7 @@ moveDeclsAndClean :: MoveSpec -> FilePath -> [ModuleInfo] -> IO ()
 moveDeclsAndClean moveSpec scratch modules = do
   -- Move the declarations and rewrite the updated modules
   paths <- mapM (\(m, s) -> do
-                   let p = _modulePath (_moduleKey m)
+                   let p = _modulePath m
                    case _moduleText m == s of
                      True -> return Nothing
                      False -> replaceFile p s >> return (Just p))
@@ -190,7 +190,7 @@ newImports moveSpec modules (ModuleInfo {_moduleKey = k}) imports = do
                   tell ("\n" ++
                         prettyPrint (S.ImportDecl
                                           { S.importLoc = srcLoc (_module m)
-                                          , S.importModule = _moduleName k'
+                                          , S.importModule = maybe (S.ModuleName "Main") id (_moduleName k')
                                           , S.importQualified = False
                                           , S.importSrc = False
                                           , S.importSafe = False
@@ -221,7 +221,7 @@ newModuleOfImportSpec :: MoveSpec -> [ModuleInfo] -> S.ModuleName -> A.ImportSpe
 newModuleOfImportSpec moveSpec modules oldModname spec =
     case findModuleByName modules oldModname of
       Just info -> case findDeclOfImportSpec info spec of
-                     Just d -> Just (_moduleName (moveSpec (_moduleKey info) d))
+                     Just d -> _moduleName (moveSpec (_moduleKey info) d)
                      -- Everything else we can leave alone - even if we can't
                      -- find a declaration, they might be re-exported.
                      Nothing {- | isReexport info spec -} -> Just oldModname
@@ -307,12 +307,12 @@ newDecls moveSpec modules info decls = do
       -- We have to scan all the modules we know about for this.
       newDecls' :: RWS String String S ()
       newDecls' = mapM_ (\m@(ModuleInfo {_module = A.Module _mspan _ _ _ decls'}) ->
-                             trace ("newDecls' " ++ show (_modulePath (_moduleKey m))) (pure ()) >>
+                             trace ("newDecls' " ++ show (_modulePath m)) (pure ()) >>
                              mapM_ (\d -> case moveSpec (_moduleKey m) d of
-                                            k | k == _moduleKey info -> do
+                                            k | k /= _moduleKey info -> pure ()
+                                            k -> do
                                               trace ("Moving " ++ show (foldDeclared (:) [] d) ++ " from " ++ show ((_moduleKey m)) ++ " to " ++ show (k)) (pure ())
-                                              tell (declText m d)
-                                            _k -> pure ()) decls')
+                                              tell (declText m d)) decls')
                         (filter (\m -> _moduleKey m /= _moduleKey info) modules)
 
 -- | Get the text of a declaration including the preceding whitespace

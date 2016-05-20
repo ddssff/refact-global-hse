@@ -29,13 +29,13 @@ import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
 import System.FilePath.Extra (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
-import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _moduleText), ModuleKey(_modulePath, _moduleTop), DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule)
+import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleText), ModuleKey(_moduleTop), DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> [ModuleInfo] -> m ()
 cleanImports scratch info =
     dump >> mapM_ (\x -> do newText <- doModule scratch x
-                            let path = _moduleTop (_moduleKey x) </> _modulePath (_moduleKey x)
+                            let path = _moduleTop (_moduleKey x) </> _modulePath x
                             liftIO $ case newText of
                                        Nothing -> putStrLn (path ++ ": unable to clean imports")
                                        Just s | _moduleText x /= s ->
@@ -52,7 +52,7 @@ cleanImports scratch info =
                     ["--make", "-c", "-ddump-minimal-imports", "-outputdir", scratch, "-i" ++
                     intercalate ":" (toList (Set.map _moduleTop keys))] ++
                     concatMap ppExtension hseExtensions ++
-                    Set.toList (Set.map _modulePath keys)
+                    map _modulePath info
         (code, _out, err) <- liftIO $ readProcessWithExitCode cmd args' ""
         case code of
           ExitSuccess -> return ()

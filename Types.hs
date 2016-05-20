@@ -28,19 +28,20 @@ import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Syntax as S (ModuleName(..), Name(..))
 import SrcLoc (fixSpan, textSpan)
 import System.Directory (canonicalizePath)
-import System.FilePath (addExtension, dropExtension, joinPath, splitDirectories, splitExtension, splitFileName)
+import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension, splitFileName)
 import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
 
 -- A module is uniquely identitifed by its path and name
 data ModuleKey =
-    ModuleKey { _moduleTop :: FilePath      -- The <dir> for which ghc -i<dir> finds this module
-              , _modulePath :: FilePath     -- The path relative to _moduleTop where the module text is
-              , _moduleName :: S.ModuleName -- The module name
+    ModuleKey { _moduleTop :: FilePath      -- ^ The <dir> for which ghc -i<dir> finds this module
+              , _moduleName :: Maybe S.ModuleName
+              -- ^ The module name, if it has one.
               } deriving (Eq, Ord, Show)
 data ModuleInfo =
     ModuleInfo { _moduleKey :: ModuleKey
                , _module :: A.Module SrcSpanInfo
                , _moduleComments :: [Comment]
+               , _modulePath :: FilePath
                , _moduleText :: String
                , _moduleSpan :: SrcSpanInfo
                }
@@ -90,6 +91,7 @@ loadModule path =
         pure $ ModuleInfo { _moduleKey = key
                           , _module = parsed
                           , _moduleComments = comments
+                          , _modulePath = makeRelative (_moduleTop key) path
                           , _moduleText = moduleText
                           , _moduleSpan = textSpan path moduleText }
       mode = Exts.defaultParseMode {Exts.extensions = hseExtensions, Exts.parseFilename = path, Exts.fixities = Nothing }
@@ -113,24 +115,23 @@ moduleKey _ (A.XmlPage {}) = error "XmlPage"
 moduleKey _ (A.XmlHybrid {}) = error "XmlHybrid"
 moduleKey path (A.Module _ Nothing _ _ _) = do
   path' <- canonicalizePath path
-  let (top, sub) = splitFileName path'
-      sub' = dropExtension sub
-  pure $ ModuleKey top sub (S.ModuleName sub' {-"Main"-})
+  let (top, _sub) = splitFileName path'
+  pure $ ModuleKey top Nothing
 moduleKey path (A.Module _ (Just (A.ModuleHead _ (A.ModuleName _ name) _ _)) _ _ _) = do
   path' <- canonicalizePath path
   let name' = splitModuleName name
-      (path'', ext) = splitExtension path'
+      (path'', _ext) = splitExtension path'
       dirs = splitDirectories path''
       (dirs', name'') = splitAt (length dirs - length name') dirs
   when (name'' /= name') (error $ "Module name mismatch - name: " ++ show name' ++ ", path: " ++ show name'')
   pure $ ModuleKey (joinPath dirs')
-                   (addExtension (joinPath name'') ext)
-                   (S.ModuleName (intercalate "." name''))
+                   (Just (S.ModuleName (intercalate "." name'')))
       where
         splitModuleName = filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))
 
 instance Pretty ModuleKey where
-    pPrint (ModuleKey {_moduleTop = t, _moduleName = S.ModuleName n}) = text (n ++ " (in " ++ show t ++ ")")
+    pPrint (ModuleKey {_moduleName = m}) =
+        text (maybe "Main" (\(S.ModuleName n) -> n) m)
 
 -- | Collect the declared types of a standalone deriving declaration.
 class DerivDeclTypes a where

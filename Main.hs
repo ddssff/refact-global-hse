@@ -26,12 +26,10 @@ main = testOn "/home/dsf/git/atp-haskell/src" (moveDeclsAndClean moveSpec)
 moveSpec :: ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
 moveSpec k (A.TypeSig _ [A.Ident _ s] _)
     | s == "tryfindM" =
-        k {_modulePath = "Data/Logic/ATP/FOL.hs",
-           _moduleName = S.ModuleName "Data.Logic.ATP.FOL"}
+        k {_moduleName = Just (S.ModuleName "Data.Logic.ATP.FOL")}
 moveSpec k (A.FunBind _ [A.Match _ (A.Ident _ s) _ _ _])
     | s == "tryfindM" =
-        k {_modulePath = "Data/Logic/ATP/FOL.hs",
-           _moduleName = S.ModuleName "Data.Logic.ATP.FOL"}
+        k {_moduleName = Just (S.ModuleName "Data.Logic.ATP.FOL")}
 moveSpec k _d = k
 
 testOn :: FilePath -> (FilePath -> [ModuleInfo] -> IO ()) -> IO ()
