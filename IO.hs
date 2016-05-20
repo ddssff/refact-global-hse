@@ -5,19 +5,11 @@ module IO
     , withCurrentDirectory
     ) where
 
-import Control.Exception (SomeException)
 import Control.Exception.Lifted as IO (bracket, catch)
 import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
-import Decls ({-moveDecls,-} moveDeclsAndClean)
---import Imports (cleanImports)
-import qualified Language.Haskell.Exts.Annotated.Syntax as A
-import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
-import qualified Language.Haskell.Exts.Syntax as S
 import System.Directory (getCurrentDirectory, removeDirectoryRecursive, setCurrentDirectory)
-import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import qualified System.IO.Temp as Temp (createTempDirectory)
-import Types (loadModule, ModuleInfo(..), ModuleKey(..))
 
 withCurrentDirectory :: (MonadIO m, MonadBaseControl IO m) => FilePath -> m a -> m a
 withCurrentDirectory path action =

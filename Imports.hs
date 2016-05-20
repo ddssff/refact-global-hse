@@ -27,8 +27,9 @@ import SrcLoc (srcLoc)
 import Symbols (symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
+import System.FilePath.Extra (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
-import Types (DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule, ModuleInfo(ModuleInfo, _module, _moduleKey, _moduleText), ModuleKey(_modulePath, _moduleTop))
+import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _moduleText), ModuleKey(_modulePath, _moduleTop), DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> [ModuleInfo] -> m ()
@@ -41,7 +42,7 @@ cleanImports scratch info =
                                                         do putStrLn (path ++ " imports changed")
                                                            -- let (path', ext) = splitExtension path in
                                                            -- writeFile {-path' ++ "-new" ++ ext-} s
-                                                           writeFile path s
+                                                           replaceFile path s
                                        Just _ -> pure ()) info
     where
       keys = Set.fromList (map _moduleKey info)

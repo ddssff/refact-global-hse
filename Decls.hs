@@ -1,42 +1,25 @@
 {-# LANGUAGE CPP, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
 module Decls (moveDeclsAndClean, moveDecls) where
 
-import Debug.Trace
 import Control.Exception (SomeException)
-import Control.Lens hiding ((|>))
-import Control.Monad.RWS
-import Control.Monad.State
-import Control.Monad.Trans (liftIO, MonadIO)
-import Data.Char (toLower)
-import Data.Foldable (fold)
-import Data.Function (on)
-import Data.List (find, foldl', groupBy, intercalate, nub, sortBy)
-import Data.Map as Map (delete, fromListWith, findWithDefault, insertWith, Map, toList)
-import Data.Maybe (catMaybes, fromMaybe, mapMaybe)
-import Data.Monoid ((<>))
-import Data.Sequence (Seq, (|>), (<|))
-import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, singleton, toList, union, unions)
-import qualified Data.Set as Set (map)
+import Control.Lens ((.=), makeLenses, use, view)
+import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS, when)
+import Data.List (nub)
+import Data.Map as Map (delete, findWithDefault, fromListWith, Map, toList)
+import Data.Maybe (catMaybes, mapMaybe)
+import Data.Set as Set (insert, isSubsetOf, member, Set, singleton, toList, union)
 import Imports (cleanImports)
 import qualified Language.Haskell.Exts.Annotated as A
-import Language.Haskell.Exts.Annotated.Simplify as S
+import Language.Haskell.Exts.Annotated.Simplify (sCName, sImportDecl, sImportSpec, sModuleName, sName)
+import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
+import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S
-import Language.Haskell.Exts.Annotated.ExactPrint (exactPrint)
-import Language.Haskell.Exts.Extension (Extension(EnableExtension))
-import Language.Haskell.Exts.Pretty (defaultMode, PPHsMode(layout), PPLayout(PPInLine), prettyPrint, prettyPrintWithMode, prettyPrintStyleMode)
-import Language.Haskell.Exts.SrcLoc (SrcSpanInfo(..), SrcLoc(..), mkSrcSpan)
-import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(importLoc, importModule, importSpecs), ModuleName(..), Name(..))
-import SrcLoc (srcLoc, endLoc, spanText, splitText, textSpan)
-import Symbols (FoldDeclared(foldDeclared), symbolsDeclaredBy)
-import System.Exit (ExitCode(ExitSuccess, ExitFailure))
-import System.FilePath ((</>))
+import SrcLoc (endLoc, spanText, srcLoc, textSpan)
+import Symbols (FoldDeclared(foldDeclared))
 import System.FilePath.Extra (replaceFile)
-import System.Process (readProcessWithExitCode, showCommandForUser)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Text.PrettyPrint.HughesPJClass (prettyShow)
-import Types (DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule,
-              ModuleInfo(..), ModuleKey(_modulePath, _moduleTop, _moduleName))
-import Utils (dropWhile2, gFind)
+import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _moduleText), ModuleKey(_moduleName, _modulePath), loadModule)
+import Utils (dropWhile2)
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
@@ -147,8 +130,6 @@ findDeclOfExportSpec info spec =
             [d] -> Just d
             [] -> Nothing
             ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (map srcLoc ds)
-      notSig (A.TypeSig {}) = False
-      notSig _ = True
 
 skip :: SrcLoc -> RWS String String S ()
 skip loc = point .= loc
@@ -156,7 +137,7 @@ skip loc = point .= loc
 -- Find the declaration of the symbols of an import spec.  If that
 -- declaration moved, update the module name.
 newImports :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> [A.ImportDecl SrcSpanInfo] -> RWS String String S ()
-newImports moveSpec modules thismodule@(ModuleInfo {_moduleKey = k}) imports = do
+newImports moveSpec modules (ModuleInfo {_moduleKey = k}) imports = do
   mapM_ doImportDecl imports
   mapM_ doNewImports (filter (\m -> _moduleKey m /= k) modules)
     where
@@ -169,33 +150,37 @@ newImports moveSpec modules thismodule@(ModuleInfo {_moduleKey = k}) imports = d
             tell ("\n" ++ spanText (mkSrcSpan (srcLoc (head is)) (endLoc (last is))) (_moduleText m))
             case maybe [] (\(A.ModuleHead _ _ _ mesl) -> maybe [] (\(A.ExportSpecList _ especs) -> especs) mesl) mh of
               [] -> pure ()
-              especs -> tell ("\n" ++
-                              prettyPrint (S.ImportDecl
-                                                { S.importLoc = srcLoc (_module m)
-                                                , S.importModule = _moduleName (_moduleKey m)
-                                                , S.importQualified = False
-                                                , S.importSrc = False
-                                                , S.importSafe = False
-                                                , S.importPkg = Nothing
-                                                , S.importAs = Nothing
-                                                , S.importSpecs = Just (False, mapMaybe toImportSpec (filter (eSpecPred m) especs)) }))
-      eSpecPred :: ModuleInfo -> A.ExportSpec SrcSpanInfo -> Bool
-      -- Add imports of the exports whose declarations stayed put
-      eSpecPred m espec = (findNewKeyOfExportSpec moveSpec m espec == Just (_moduleKey m))
+              especs ->
+                  -- Add imports of the exports whose declarations stayed put
+                  tell ("\n" ++
+                        prettyPrint (S.ImportDecl
+                                          { S.importLoc = srcLoc (_module m)
+                                          , S.importModule = _moduleName k'
+                                          , S.importQualified = False
+                                          , S.importSrc = False
+                                          , S.importSafe = False
+                                          , S.importPkg = Nothing
+                                          , S.importAs = Nothing
+                                          , S.importSpecs = Just (False, mapMaybe toImportSpec (filter (eSpecPred moveSpec m) especs)) }))
+
+      eSpecPred :: MoveSpec -> ModuleInfo -> A.ExportSpec SrcSpanInfo -> Bool
+      eSpecPred moveSpec m espec = (findNewKeyOfExportSpec moveSpec m espec == Just (_moduleKey m))
+
       -- Build an import spec corresponding to an export spec.
       toImportSpec :: A.ExportSpec SrcSpanInfo -> Maybe S.ImportSpec
-      toImportSpec (A.EVar l (A.Qual _ mname name)) = Just $ S.IVar (sName name)
-      toImportSpec (A.EVar l (A.UnQual _ name)) = Just $ S.IVar (sName name)
-      toImportSpec (A.EAbs l space (A.UnQual _ name)) = Nothing
-      toImportSpec (A.EAbs l space (A.Qual _ mname name)) = Nothing
-      toImportSpec (A.EThingAll l (A.UnQual _ name)) = Just $ S.IThingAll (sName name)
-      toImportSpec (A.EThingAll l (A.Qual _ mname name)) = Nothing
-      toImportSpec (A.EThingWith l (A.UnQual _ name) cnames) = Just $ S.IThingWith (sName name) (map sCName cnames)
-      toImportSpec (A.EThingWith l (A.Qual _ mname name) cnames) = Nothing
+      toImportSpec (A.EVar _ (A.Qual _ mname name)) = Just $ S.IVar (sName name)
+      toImportSpec (A.EVar _ (A.UnQual _ name)) = Just $ S.IVar (sName name)
+      toImportSpec (A.EAbs _ space (A.UnQual _ name)) = Nothing
+      toImportSpec (A.EAbs _ space (A.Qual _ mname name)) = Nothing
+      toImportSpec (A.EThingAll _ (A.UnQual _ name)) = Just $ S.IThingAll (sName name)
+      toImportSpec (A.EThingAll _ (A.Qual _ mname name)) = Nothing
+      toImportSpec (A.EThingWith _ (A.UnQual _ name) cnames) = Just $ S.IThingWith (sName name) (map sCName cnames)
+      toImportSpec (A.EThingWith _ (A.Qual _ mname name) cnames) = Nothing
       toImportSpec _ = Nothing
 
+      doImportDecl :: A.ImportDecl SrcSpanInfo -> RWS String String S ()
       doImportDecl x@(A.ImportDecl {importSpecs = Nothing}) = (tell' . endLoc . A.ann) x
-      doImportDecl x@(A.ImportDecl {importModule = name, importSpecs = Just (A.ImportSpecList l hiding specs)}) =
+      doImportDecl x@(A.ImportDecl {importModule = name, importSpecs = Just (A.ImportSpecList _ hiding specs)}) =
           do let oldModname = sModuleName name
              -- Build a map from module key to set of specs to be
              -- imported from it.

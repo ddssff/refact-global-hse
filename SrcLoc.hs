@@ -18,15 +18,15 @@ module SrcLoc
     , fixSpan
     ) where
 
-import Debug.Trace
 import Control.Lens (_2, view)
 import Control.Monad.State (get, put, runState, State)
 import Data.List (groupBy, partition, sort)
 import Data.Monoid ((<>))
 import Data.Set (Set, toList)
 import Data.Tree (Tree, unfoldTree)
-import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann){-, Module(..)-})
-import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..), mkSrcSpan)
+import Debug.Trace (trace)
+import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann))
+import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), text)
 -- import Utils (gFind)
 

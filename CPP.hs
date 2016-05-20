@@ -10,8 +10,8 @@ module CPP
   ) where
 
 import Data.List (isSuffixOf)
-import Language.Haskell.Exts.Annotated (Comment, impliesExts, KnownExtension(CPP), Module, ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
--- import Language.Preprocessor.Cpphs (BoolOptions(BoolOptions, ansi, hashline, lang, literate, locations, macros, pragma, stripC89, stripEol, warnings), CpphsOptions(..), runCpphs)
+import Language.Haskell.Exts.Annotated (ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), Comment, KnownExtension(CPP), impliesExts, Module, parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
+import Language.Preprocessor.Cpphs (BoolOptions(..), CpphsOptions(..), runCpphs)
 import Language.Preprocessor.Cpphs hiding (defaultCpphsOptions)
 import qualified Language.Preprocessor.Cpphs as Orig (defaultCpphsOptions)
 import Language.Preprocessor.Unlit (unlit)

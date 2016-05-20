@@ -2,7 +2,7 @@
 module Utils where
 
 import Control.Monad (MonadPlus, msum)
-import Data.Generics
+import Data.Generics (Data(gmapM), GenericM, listify, Typeable)
 import Data.Sequence (Seq, (|>))
 
 -- | dropWhile where predicate operates on two list elements.
