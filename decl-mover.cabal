@@ -2,7 +2,7 @@ Name: decl-mover
 Version: 1.0
 Synopsis: Move declarations between modules, clean up import lists
 Description: Move declarations between modules, clean up import lists
-Homepage: https://github.com/seereason/decl-mover
+Homepage: https://github.com/ddssff/decl-mover
 License: BSD3
 Author: David Fox
 Maintainer: David Fox
