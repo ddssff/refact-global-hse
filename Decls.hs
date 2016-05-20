@@ -1,12 +1,12 @@
 {-# LANGUAGE CPP, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
-module Decls (moveDeclsAndClean, moveDecls) where
+module Decls (makeMoveSpec, moveDeclsAndClean, moveDecls) where
 
 import Control.Exception (SomeException)
 import Control.Lens ((.=), makeLenses, use, view)
 import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS, when)
 import Data.List (nub)
 import Data.Maybe (catMaybes, mapMaybe)
-import Data.Set as Set (insert, isSubsetOf, Set)
+import Data.Set as Set (insert, isSubsetOf, member, Set)
 import Imports (cleanImports)
 import qualified Language.Haskell.Exts.Annotated as A
 import Language.Haskell.Exts.Annotated.Simplify (sCName, sImportDecl, sImportSpec, sModuleName, sName)
@@ -22,6 +22,15 @@ import Utils (dropWhile2)
 
 -- | Specifies where to move each declaration of each module.
 type MoveSpec = ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
+
+-- Some simple MoveSpec builders.
+makeMoveSpec :: String -> String -> String -> MoveSpec
+makeMoveSpec fname mname mname' =
+    \mkey decl ->
+        let syms = foldDeclared Set.insert mempty decl in
+        if _moduleName mkey == S.ModuleName mname && (Set.member (S.Ident fname) syms || Set.member (S.Symbol fname) syms)
+        then mkey {_moduleName = S.ModuleName mname'}
+        else mkey
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
