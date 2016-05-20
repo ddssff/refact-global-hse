@@ -1,4 +1,6 @@
-:load Decls
+:load Main
 :m +System.Process
 :m +Test.HUnit
+:m +Decls
+:m +Types
 :m +Utils
