@@ -17,7 +17,6 @@ import Data.Monoid ((<>))
 import Data.Sequence (Seq, (|>), (<|))
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, singleton, toList, union, unions)
 import qualified Data.Set as Set (map)
-import Fold (foldDecls, foldExports, foldHeader, foldImports, echo2, echo, ignore, ignore2)
 import Imports (cleanImports)
 import qualified Language.Haskell.Exts.Annotated as A
 import Language.Haskell.Exts.Annotated.Simplify as S
