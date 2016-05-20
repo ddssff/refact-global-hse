@@ -7,11 +7,12 @@ module Types
     , hsFlags
     , hsSourceDirs
     , loadModule
+    , loadModules
     , DerivDeclTypes(derivDeclTypes)
     ) where
 
 import qualified CPP (BoolOptions(locations), CpphsOptions(boolopts), defaultCpphsOptions, parseFileWithCommentsAndCPP)
-import Control.Exception (Exception)
+import Control.Exception (Exception, SomeException)
 import Control.Exception.Lifted as IO (try)
 import Control.Monad (when)
 import Control.Monad.Trans (MonadIO(liftIO))
@@ -65,6 +66,12 @@ hsFlags = []
 
 hsSourceDirs :: [FilePath]
 hsSourceDirs = []
+
+loadModules :: [FilePath] -> IO [ModuleInfo]
+loadModules = mapM loadModule'
+    where
+      loadModule' :: FilePath -> IO ModuleInfo
+      loadModule' path = either (error . show) id <$> (loadModule path :: IO (Either SomeException ModuleInfo))
 
 loadModule :: Exception e => FilePath -> IO (Either e ModuleInfo)
 loadModule path =

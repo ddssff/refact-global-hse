@@ -36,15 +36,10 @@ decl1 =
       withCurrentDirectory "tests/input" $
         withTempDirectory True "." "scratch" $ \scratch -> do
           paths <- (catMaybes . map (stripPrefix "./")) <$> (find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
-          modules <- mapM loadModule' paths
-          moveDeclsAndClean moveSpec1 scratch modules
-          -- diff <- readProcess "git" ["diff", "Data"] ""
+          loadModules paths >>= moveDeclsAndClean moveSpec1 scratch
       (_, diff, _) <- readProcessWithExitCode "diff" ["-ru", "tests/expected/decl1", "tests/input"] ""
       readProcess "git" ["checkout", "--", "tests/input"] ""
       assertString diff
-    where
-      loadModule' :: FilePath -> IO ModuleInfo
-      loadModule' path = either (error . show) id <$> (loadModule path :: IO (Either SomeException ModuleInfo))
 
 moveSpec1 :: ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
 moveSpec1 k (A.TypeSig _ [A.Ident _ s] _)
