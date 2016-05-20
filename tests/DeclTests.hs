@@ -45,7 +45,7 @@ decl1 =
 moveSpec1 :: ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
 moveSpec1 k (A.TypeSig _ [A.Ident _ s] _)
     | s == "tryfindM" {-|| s == "failing"-} =
-        k {_moduleName = Just (S.ModuleName "Data.Logic.ATP.FOL")}
+        k {_moduleName = Just (S.ModuleName "Data.Logic.ATP.Tableaux")}
 moveSpec1 k (A.FunBind _ ms)
     | any (`elem` [S.Ident "tryfindM" {-, S.Ident "failing"-}])
           (map (\match -> case match of
@@ -55,8 +55,8 @@ moveSpec1 k (A.FunBind _ ms)
 {-
 moveSpec1 k d | Set.member (S.Ident "tryfindM") (foldDeclared Set.insert mempty d) =
                   trace ("Expected TypeSig or FunBind: " ++ show d)
-                        (k {_modulePath = "Data/Logic/ATP/FOL.hs",
-                            _moduleName = S.ModuleName "Data.Logic.ATP.FOL"})
+                        (k {_modulePath = "Data/Logic/ATP/Tableaux.hs",
+                            _moduleName = S.ModuleName "Data.Logic.ATP.Tableaux"})
 moveSpec1 k d@(A.FunBind _ _) = {-trace ("FunBind: " ++ show (foldDeclared (:) mempty d))-} k
 moveSpec1 k (A.ClassDecl _ _mcxt _dh _fd _mcds) = k
 moveSpec1 k (A.DataDecl _ _dn _mcxt _dh _qcs _md) = k

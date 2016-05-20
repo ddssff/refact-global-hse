@@ -20,28 +20,33 @@ module Data.Logic.ATP.Tableaux
     , K(K)
     , tab
     , testTableaux
+    , tryfindM
     ) where
 
-import Data.Logic.ATP.Apply (HasApply(TermOf), pApp)
 import Control.Monad.RWS (RWS)
 import Control.Monad.State (execStateT, StateT)
+import Data.Foldable as Foldable (Foldable(length))
 import Data.List as List (map)
+import Data.Logic.ATP.Apply (HasApply(TermOf), pApp)
 import Data.Logic.ATP.FOL (asubst, fv, generalize, IsFirstOrder, subst)
-import Data.Logic.ATP.Formulas (atomic, IsFormula(asBool, AtomOf), onatoms, overatoms)
+import Data.Logic.ATP.Formulas (IsFormula(asBool, AtomOf), atomic, onatoms, overatoms)
 import Data.Logic.ATP.Herbrand (davisputnam)
-import Data.Logic.ATP.Lib ((|=>), allpairs, deepen, Depth(Depth), distrib, evalRS, Failing(Success, Failure), failing, settryfind, tryfindM)
+import Data.Logic.ATP.Lib (allpairs, deepen, Depth(Depth), distrib, evalRS, failing, Failing(Success, Failure), settryfind, (|=>))
 import Data.Logic.ATP.Lit ((.~.), convertToLiteral, IsLiteral, JustLiteral, LFormula, positive)
 import Data.Logic.ATP.LitWrapper (JL)
 import Data.Logic.ATP.Pretty (assertEqual', Pretty(pPrint), prettyShow, text)
-import Data.Logic.ATP.Prop ( (.&.), (.=>.), (.<=>.), (.|.), BinOp((:&:), (:|:)), PFormula, simpdnf)
-import Data.Logic.ATP.Quantified (exists, foldQuantified, for_all, Quant((:!:)))
+import Data.Logic.ATP.Prop ((.&.), (.<=>.), (.=>.), (.|.), BinOp((:&:), (:|:)), PFormula, simpdnf)
+import Data.Logic.ATP.Quantified (Quant((:!:)), exists, foldQuantified, for_all)
 import Data.Logic.ATP.Skolem (askolemize, Formula, HasSkolem(SVarOf, toSkolem), runSkolem, simpdnf', skolemize, SkTerm)
 import Data.Logic.ATP.Term (fApp, IsTerm(TVarOf, FunOf), vt)
 import Data.Logic.ATP.Unif (Unify(UTermOf), unify_literals)
-import Data.Map.Strict as Map
-import Data.Set as Set
+import Data.Map.Strict as Map (empty, fromList, Map)
+import Data.Maybe (Maybe(..))
+import Data.Set as Set (empty, map, minView, partition, Set, singleton, toList, union)
 import Data.String (IsString(..))
-import Prelude hiding (compare)
+import Prelude (($), Num((*), (+)), (++), (.), Ord((<)), (<$>), Eq((==)), Monad((>>=), return), Applicative(pure), Bool(False), Enum(fromEnum, pred, succ, toEnum), error, fst, id, Int, Show(show), snd, zip)
+import Prelude hiding (map)
+import Test.HUnit (Test(..))
 import Test.HUnit hiding (State)
 
 -- | Unify complementary literals.
@@ -110,57 +115,57 @@ p20 = TestCase $ assertEqual' "p20 - prawitz (p. 175)" expected input
 -- Comparison of number of ground instances.
 -- -------------------------------------------------------------------------
 
-compare :: (IsFirstOrder formula, Ord formula, Unify Failing (atom, atom), term ~ UTermOf (atom, atom), HasSkolem function, Show formula,
+compare' :: (IsFirstOrder formula, Ord formula, Unify Failing (atom, atom), term ~ UTermOf (atom, atom), HasSkolem function, Show formula,
             atom ~ AtomOf formula, term ~ TermOf atom, function ~ FunOf term,
             v ~ TVarOf term, v ~ SVarOf function) =>
            formula -> (Int, Int)
-compare fm = (prawitz fm, davisputnam fm)
+compare' fm = (prawitz fm, davisputnam fm)
 
 p19 :: Test
 p19 = TestCase $ assertEqual' "p19" expected input
     where
       fm :: Formula
       fm = exists "x" (for_all "y" (for_all "z" ((pApp "P" [vt "y"] .=>. pApp "Q" [vt "z"]) .=>. pApp "P" [vt "x"] .=>. pApp "Q" [vt "x"])))
-      input = compare fm
+      input = compare' fm
       expected = (3, 3)
 
 {-
 START_INTERACTIVE;;
-let p20 = compare
+let p20 = compare'
  <<(for_all x y. exists z. for_all w. P[vt "x"] .&. Q[vt "y"] .=>. R[vt "z"] .&. U[vt "w"])
    .=>. (exists x y. P[vt "x"] .&. Q[vt "y"]) .=>. (exists z. R[vt "z"])>>;;
 
-let p24 = compare
+let p24 = compare'
  <<~(exists x. U[vt "x"] .&. Q[vt "x"]) .&.
    (for_all x. P[vt "x"] .=>. Q[vt "x"] .|. R[vt "x"]) .&.
    ~(exists x. P[vt "x"] .=>. (exists x. Q[vt "x"])) .&.
    (for_all x. Q[vt "x"] .&. R[vt "x"] .=>. U[vt "x"])
    .=>. (exists x. P[vt "x"] .&. R[vt "x"])>>;;
 
-let p39 = compare
+let p39 = compare'
  <<~(exists x. for_all y. P(y,x) .<=>. ~P(y,y))>>;;
 
-let p42 = compare
+let p42 = compare'
  <<~(exists y. for_all x. P(x,y) .<=>. ~(exists z. P(x,z) .&. P(z,x)))>>;;
 
 {- **** Too slow?
 
-let p43 = compare
+let p43 = compare'
  <<(for_all x y. Q(x,y) .<=>. for_all z. P(z,x) .<=>. P(z,y))
    .=>. for_all x y. Q(x,y) .<=>. Q(y,x)>>;;
 
  ***** -}
 
-let p44 = compare
+let p44 = compare'
  <<(for_all x. P[vt "x"] .=>. (exists y. G[vt "y"] .&. H(x,y)) .&.
    (exists y. G[vt "y"] .&. ~H(x,y))) .&.
    (exists x. J[vt "x"] .&. (for_all y. G[vt "y"] .=>. H(x,y)))
    .=>. (exists x. J[vt "x"] .&. ~P[vt "x"])>>;;
 
-let p59 = compare
+let p59 = compare'
  <<(for_all x. P[vt "x"] .<=>. ~P(f[vt "x"])) .=>. (exists x. P[vt "x"] .&. ~P(f[vt "x"]))>>;;
 
-let p60 = compare
+let p60 = compare'
  <<for_all x. P(x,f[vt "x"]) .<=>.
              exists y. (for_all z. P(z,y) .=>. P(z,f[vt "x"])) .&. P(x,y)>>;;
 
@@ -663,3 +668,7 @@ let davis_putnam_example = time splittab
 
 testTableaux :: Test
 testTableaux = TestLabel "Tableaux" (TestList [p20, p19, p38])
+
+tryfindM :: Monad m => (t -> m (Failing a)) -> [t] -> m (Failing a)
+tryfindM _ [] = return $ Failure ["tryfindM"]
+tryfindM f (h : t) = f h >>= failing (\_ -> tryfindM f t) (return . Success)
