@@ -24,11 +24,7 @@ import Utils (dropWhile2)
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
 
-data S =
-    S
-    { _hiding :: Bool
-    , _subterms :: [String]
-    , _point :: SrcLoc }
+data S = S { _point :: SrcLoc }
 
 $(makeLenses ''S)
 
@@ -68,7 +64,8 @@ moveDeclsOfModule moveSpec modules info@(ModuleInfo {_module = A.Module l h _ i 
                       tell' (endLoc (textSpan (srcFilename (endLoc l)) t))
                   )
                   (_moduleText info)
-                  (S False [] ((srcLoc l) {srcLine = 1, srcColumn = 1}))
+                  (S ((srcLoc l) {srcLine = 1, srcColumn = 1}))
+moveDeclsOfModule _ _ _ = error "Unexpected module type"
 
 tell' :: SrcLoc -> RWS String String S ()
 tell' l = do
@@ -103,6 +100,7 @@ newExports moveSpec modules m =
       newExportsFromModule :: ModuleInfo -> [S.Name]
       newExportsFromModule (ModuleInfo {_moduleKey = k', _module = A.Module _l _h _ _i ds}) =
           concatMap (\d -> if (moveSpec k' d == k) then foldDeclared (:) [] d else []) ds
+      newExportsFromModule _ = error "Unexpected module type"
 
 -- | Find the declaration of the export spec in the current module.
 -- If it is not there, it is a re-export which we just keep.
@@ -124,12 +122,13 @@ findDeclOfExportSpec info spec =
     findDeclOfSymbols info (foldDeclared Set.insert mempty spec)
     where
       findDeclOfSymbols :: ModuleInfo -> Set S.Name -> Maybe (A.Decl SrcSpanInfo)
-      findDeclOfSymbols (ModuleInfo {_module = A.Module _ _ _ _ decls}) syms | null syms = Nothing
+      findDeclOfSymbols (ModuleInfo {_module = A.Module _ _ _ _ _}) syms | null syms = Nothing
       findDeclOfSymbols (ModuleInfo {_module = A.Module _ _ _ _ decls}) syms =
           case filter (isSubsetOf syms . foldDeclared Set.insert mempty) (filter notSig decls) of
             [d] -> Just d
             [] -> Nothing
             ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (map srcLoc ds)
+      findDeclOfSymbols _ _ = error "Unexpected module type"
 
 skip :: SrcLoc -> RWS String String S ()
 skip loc = point .= loc
@@ -161,12 +160,13 @@ newImports moveSpec modules (ModuleInfo {_moduleKey = k}) imports = do
                                           , S.importSafe = False
                                           , S.importPkg = Nothing
                                           , S.importAs = Nothing
-                                          , S.importSpecs = Just (False, mapMaybe toImportSpec (filter (eSpecPred moveSpec m) especs)) }))
+                                          , S.importSpecs = Just (False, ispecs m especs) }))
+      doNewImports _ = error "Unexpected module type"
 
-      eSpecPred :: MoveSpec -> ModuleInfo -> A.ExportSpec SrcSpanInfo -> Bool
-      eSpecPred moveSpec m espec = (findNewKeyOfExportSpec moveSpec m espec == Just (_moduleKey m))
+      ispecs m especs = mapMaybe toImportSpec (filter (\e -> findNewKeyOfExportSpec moveSpec m e == Just (_moduleKey m)) especs)
 
-      -- Build an import spec corresponding to an export spec.
+      -- Build an import spec corresponding to an export spec.  This
+      -- probably needs work.
       toImportSpec :: A.ExportSpec SrcSpanInfo -> Maybe S.ImportSpec
       toImportSpec (A.EVar _ (A.Qual _ mname name)) = Just $ S.IVar (sName name)
       toImportSpec (A.EVar _ (A.UnQual _ name)) = Just $ S.IVar (sName name)
@@ -178,6 +178,10 @@ newImports moveSpec modules (ModuleInfo {_moduleKey = k}) imports = do
       toImportSpec (A.EThingWith _ (A.Qual _ mname name) cnames) = Nothing
       toImportSpec _ = Nothing
 
+      -- Process one import declaration.  Depending on moveSpec, a lot
+      -- of different things could happen to it - it might be kept,
+      -- discarded, some of its symbols might be moved to another
+      -- import, or discarded.
       doImportDecl :: A.ImportDecl SrcSpanInfo -> RWS String String S ()
       doImportDecl x@(A.ImportDecl {importSpecs = Nothing}) = (tell' . endLoc . A.ann) x
       doImportDecl x@(A.ImportDecl {importModule = name, importSpecs = Just (A.ImportSpecList _ hiding specs)}) =
@@ -188,9 +192,9 @@ newImports moveSpec modules (ModuleInfo {_moduleKey = k}) imports = do
                  mp = Map.fromListWith Set.union
                         (mapMaybe g (zip (map (newModuleOfImportSpec moveSpec modules oldModname) specs)
                                          (map singleton specs)))
-                 g :: (Maybe k, a) -> Maybe (k, a)
+                 g :: (Maybe n, a) -> Maybe (n, a)
                  g (Nothing, _) = Nothing
-                 g (Just k, a) = Just (k, a)
+                 g (Just n, a) = Just (n, a)
              -- Some specs will need to be imported
              -- via new ImportDecls to appear after this one.
              (tell' . srcLoc . A.ann) x
@@ -201,10 +205,14 @@ newImports moveSpec modules (ModuleInfo {_moduleKey = k}) imports = do
              -- Output the portion of the ImportDecl following the last ImportSpec.
              (tell' . endLoc . A.ann) x
              -- Output a new import decl for each symbol that has moved
-             mapM_ (\(name, specs) -> do
+             mapM_ (\(name', specs') -> do
                       tell "\n"
-                      (tell . prettyPrint') (sImportDecl x) {S.importModule = name, S.importSpecs = Just (hiding, map sImportSpec (Set.toList specs))})
+                      (tell . prettyPrint') (sImportDecl x) { S.importModule = name'
+                                                            , S.importSpecs = Just (hiding, map sImportSpec (Set.toList specs'))})
                    (Map.toList (Map.delete oldModname mp))
+
+      -- doImportSpec :: A.ImportDecl SrcSpanInfo -> A.ImportSpec SrcSpanInfo -> RWS String String S ()
+      -- doImportSpec imp spec = undefined
 
 -- | Given in import spec and the name of the module it was imported
 -- from, return the name of the new module where it will now be
@@ -220,19 +228,20 @@ newModuleOfImportSpec moveSpec modules oldModname spec =
                      -- Nothing -> trace ("Unable to find decl of " ++ prettyPrint' spec ++ " in " ++ show oldModname) Nothing
       -- If we don't know about the module leave the import spec alone
       Nothing -> Just oldModname
+
+findModuleByName :: [ModuleInfo] -> S.ModuleName -> Maybe ModuleInfo
+findModuleByName modules oldModname =
+    case filter (testModuleName oldModname) modules of
+      [m] -> Just m
+      [] -> Nothing
+      _ms -> error $ "Multiple " ++ show oldModname
     where
-      findModuleByName :: [ModuleInfo] -> S.ModuleName -> Maybe ModuleInfo
-      findModuleByName modules oldModname =
-          case filter (testModuleName oldModname) modules of
-            [m] -> Just m
-            [] -> Nothing
-            ms -> error $ "Multiple " ++ show oldModname
-          where
-            testModuleName :: S.ModuleName -> ModuleInfo -> Bool
-            testModuleName modName info@(ModuleInfo {_module = A.Module _ (Just (A.ModuleHead _ name _ _)) _ _ _}) =
-                sModuleName name == modName
-            testModuleName modName info@(ModuleInfo {_module = A.Module _ Nothing _ _ _}) =
-                modName == S.ModuleName "Main"
+      testModuleName :: S.ModuleName -> ModuleInfo -> Bool
+      testModuleName modName (ModuleInfo {_module = A.Module _ (Just (A.ModuleHead _ name _ _)) _ _ _}) =
+          sModuleName name == modName
+      testModuleName modName (ModuleInfo {_module = A.Module _ Nothing _ _ _}) =
+          modName == S.ModuleName "Main"
+      testModuleName _ _ = error "Unexpected module type"
 
 -- | Find the declaration in a module that causes all the symbols in
 -- the ImportSpec to come into existance.
@@ -240,13 +249,15 @@ findDeclOfImportSpec :: ModuleInfo -> A.ImportSpec SrcSpanInfo -> Maybe (A.Decl 
 findDeclOfImportSpec info spec = findDeclOfSymbols info (foldDeclared Set.insert mempty spec)
     where
       findDeclOfSymbols :: ModuleInfo -> Set S.Name -> Maybe (A.Decl SrcSpanInfo)
-      findDeclOfSymbols info@(ModuleInfo {_module = A.Module _ _ _ _ decls}) syms | null syms = Nothing
-      findDeclOfSymbols info@(ModuleInfo {_module = A.Module _ _ _ _ decls}) syms =
+      findDeclOfSymbols (ModuleInfo {_module = A.Module _ _ _ _ _}) syms | null syms = Nothing
+      findDeclOfSymbols (ModuleInfo {_module = A.Module _ _ _ _ decls}) syms =
           case filter (isSubsetOf syms . foldDeclared Set.insert mempty) (filter notSig decls) of
             [d] -> Just d
             [] -> Nothing
             ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (map srcLoc ds)
+      findDeclOfSymbols _ _ = error "Unexpected module type"
 
+notSig :: A.Decl t -> Bool
 notSig (A.TypeSig {}) = False
 notSig _ = True
 
@@ -283,7 +294,7 @@ reexports sym e = Set.member sym (foldDeclared Set.insert mempty e)
 newDecls :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> [A.Decl SrcSpanInfo] -> RWS String String S ()
 newDecls moveSpec modules info decls = do
   oldDecls
-  newDecls
+  newDecls'
     where
       -- Declarations that were already here and are to remain
       oldDecls :: RWS String String S ()
@@ -292,13 +303,13 @@ newDecls moveSpec modules info decls = do
                                 _ -> point .= endLoc d) decls
       -- Declarations that are moving here from other modules.
       -- We have to scan all the modules we know about for this.
-      newDecls :: RWS String String S ()
-      newDecls = mapM_ (\m@(ModuleInfo {_module = A.Module mspan _ _ _ decls}) ->
-                            mapM_ (\d -> case moveSpec (_moduleKey m) d of
-                                           k | k == _moduleKey info -> do
-                                             tell (declText m d)
-                                           k -> pure ()) decls)
-                       (filter (\m -> _moduleKey m /= _moduleKey info) modules)
+      newDecls' :: RWS String String S ()
+      newDecls' = mapM_ (\m@(ModuleInfo {_module = A.Module _mspan _ _ _ decls'}) ->
+                             mapM_ (\d -> case moveSpec (_moduleKey m) d of
+                                            k | k == _moduleKey info -> do
+                                              tell (declText m d)
+                                            _k -> pure ()) decls')
+                        (filter (\m -> _moduleKey m /= _moduleKey info) modules)
 
 -- | Get the text of a declaration including the preceding whitespace
 declText :: ModuleInfo -> A.Decl SrcSpanInfo -> String
@@ -309,7 +320,8 @@ declText (ModuleInfo {_module = m@(A.Module _ mh ps is ds), _moduleText = mtext}
     -- location.
     let p = case ds of
               (d1 : _) | d == d1 -> endLoc (last (maybe [] (\x -> [A.ann x]) mh ++ map A.ann ps ++ map A.ann is))
-              ds -> case dropWhile2 (\_  md2 -> Just d /= md2) ds of
-                      (d1 : d2 : _) -> endLoc d1
-                      [] -> srcLoc (A.ann m) in
+              _ -> case dropWhile2 (\_  md2 -> Just d /= md2) ds of
+                     (d1 : _) -> endLoc d1
+                     [] -> srcLoc (A.ann m) in
     spanText (mkSrcSpan p (endLoc d)) mtext
+declText _ _ = error "Unexpected module type"
