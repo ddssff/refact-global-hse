@@ -65,19 +65,19 @@ moveDecls moveSpec modules = map (\info -> moveDeclsOfModule moveSpec modules in
 -- Update one module
 moveDeclsOfModule :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> String
 moveDeclsOfModule moveSpec modules info@(ModuleInfo {_module = A.Module l h _ i ds}) =
-    snd $ evalRWS (do tell' (srcLoc l)
+    snd $ evalRWS (do keep (srcLoc l)
                       newHeader moveSpec modules info h
                       newImports moveSpec modules info i
                       newDecls moveSpec modules info ds
                       t <- view id
-                      tell' (endLoc (textSpan (srcFilename (endLoc l)) t))
+                      keep (endLoc (textSpan (srcFilename (endLoc l)) t))
                   )
                   (_moduleText info)
                   (S ((srcLoc l) {srcLine = 1, srcColumn = 1}))
 moveDeclsOfModule _ _ _ = error "Unexpected module type"
 
-tell' :: SrcLoc -> RWS String String S ()
-tell' l = do
+keep :: SrcLoc -> RWS String String S ()
+keep l = do
   t <- view id
   p <- use point
   tell (spanText (p, l) t)
@@ -88,7 +88,7 @@ tell' l = do
 -- *if* the symbol is imported anywhere else.
 newHeader :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> Maybe (A.ModuleHead SrcSpanInfo) -> RWS String String S ()
 newHeader moveSpec modules m (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList l specs)))) = do
-  tell' (srcLoc l) -- write everything to beginning of first export
+  keep (srcLoc l) -- write everything to beginning of first export
   mapM_ (doExport moveSpec m) specs
   (tell . concatMap ((sep ++) . prettyPrint) . nub) (newExports moveSpec modules m)
   -- mapM_ newExports (filter (\x -> _moduleKey x /= _moduleKey m) modules)
@@ -116,8 +116,8 @@ newExports moveSpec modules m =
 doExport :: MoveSpec -> ModuleInfo -> A.ExportSpec SrcSpanInfo -> RWS String String S ()
 doExport moveSpec info@(ModuleInfo {_moduleKey = k}) spec =
     case findNewKeyOfExportSpec moveSpec info spec of
-      Nothing -> (tell' . endLoc . A.ann) spec
-      Just k' | k' == k -> (tell' . endLoc . A.ann) spec
+      Nothing -> (keep . endLoc . A.ann) spec
+      Just k' | k' == k -> (keep . endLoc . A.ann) spec
       _ -> point .= (endLoc . A.ann) spec
 
 findNewKeyOfExportSpec :: MoveSpec -> ModuleInfo -> A.ExportSpec SrcSpanInfo -> Maybe ModuleKey
@@ -153,17 +153,17 @@ newImports moveSpec modules (ModuleInfo {_moduleKey = k}) imports = do
       -- either be kept, discarded, or moved to a new import with a
       -- new module name.
       doImportDecl :: A.ImportDecl SrcSpanInfo -> RWS String String S ()
-      doImportDecl x@(A.ImportDecl {importSpecs = Nothing}) = (tell' . endLoc . A.ann) x
+      doImportDecl x@(A.ImportDecl {importSpecs = Nothing}) = (keep . endLoc . A.ann) x
       doImportDecl x@(A.ImportDecl {importModule = name, importSpecs = Just (A.ImportSpecList _ hiding specs)}) =
-          do (tell' . srcLoc . A.ann) x
+          do (keep . srcLoc . A.ann) x
              mapM_ (doOldImportSpec (sModuleName name) hiding) specs
-             (tell' . endLoc . A.ann) x
+             (keep . endLoc . A.ann) x
              mapM_ (doNewImportSpec (sModuleName name) hiding (sImportDecl x)) specs
 
       doOldImportSpec :: S.ModuleName -> Bool -> A.ImportSpec SrcSpanInfo -> RWS String String S ()
       doOldImportSpec name hiding spec =
           case newModuleOfImportSpec moveSpec modules name spec of
-            Just name' | name' == name -> (tell' . endLoc . A.ann) spec
+            Just name' | name' == name -> (keep . endLoc . A.ann) spec
             _ -> (skip . endLoc . A.ann) spec
       doNewImportSpec :: S.ModuleName -> Bool -> S.ImportDecl -> A.ImportSpec SrcSpanInfo -> RWS String String S ()
       doNewImportSpec name hiding idecl spec =
@@ -299,7 +299,7 @@ newDecls moveSpec modules info decls = do
       -- Declarations that were already here and are to remain
       oldDecls :: RWS String String S ()
       oldDecls = mapM_ (\d -> case moveSpec (_moduleKey info) d of
-                                k | k == _moduleKey info -> tell' (endLoc d)
+                                k | k == _moduleKey info -> keep (endLoc d)
                                 k -> trace ("Moving " ++ show (foldDeclared (:) [] d) ++ " to " ++ show (k) ++ " from " ++ show ((_moduleKey info))) (pure ()) >>
                                      point .= endLoc d) decls
       -- Declarations that are moving here from other modules.
