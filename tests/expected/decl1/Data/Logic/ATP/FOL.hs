@@ -34,45 +34,26 @@ module Data.Logic.ATP.FOL
     , ApFormula, EqFormula
     -- * Tests
     , testFOL
-    , failing
     , tryfindM
     ) where
 
+import Control.Applicative.Error (Failing(..))
 import Data.Logic.ATP.Apply (ApAtom, HasApply(PredOf, TermOf, overterms, onterms), Predicate)
 import Data.Logic.ATP.Equate ((.=.), EqAtom, foldEquate, HasEquate)
 import Data.Logic.ATP.Formulas (fromBool, IsFormula(..))
-import Data.Logic.ATP.Lib (setAny, tryApplyD, undefine, (|->))
+import Data.Logic.ATP.Lib (failing, setAny, tryApplyD, undefine, (|->))
 import Data.Logic.ATP.Lit ((.~.), foldLiteral, JustLiteral)
 import Data.Logic.ATP.Pretty (prettyShow)
-import Data.Logic.ATP.Prop (BinOp(..), IsPropositional((.&.), (.|.), (.=>.), (.<=>.)))
-import Data.Logic.ATP.Quantified (exists, foldQuantified, for_all, IsQuantified(VarOf), Quant((:!:), (:?:)), QFormula)
-import Data.Logic.ATP.Term (FName, foldTerm, IsTerm(FunOf, TVarOf, vt, fApp), V, variant)
+import Data.Logic.ATP.Prop (IsPropositional((.&.), (.|.), (.=>.), (.<=>.)), BinOp(..))
+import Data.Logic.ATP.Quantified (Quant((:!:), (:?:)), exists, foldQuantified, for_all, IsQuantified(VarOf), QFormula)
+import Data.Logic.ATP.Term (IsTerm(FunOf, TVarOf, vt, fApp), FName, foldTerm, V, variant)
 import Data.Map.Strict as Map (empty, fromList, insert, lookup, Map)
 import Data.Maybe (fromMaybe)
 import Data.Set as Set (difference, empty, fold, fromList, member, Set, singleton, union, unions)
 import Data.String (IsString(fromString))
-import Prelude hiding (pred)
-import Test.HUnit
-import Control.Applicative.Error (Failing(..))
-import Control.Concurrent (forkIO, killThread, newEmptyMVar, putMVar, takeMVar, threadDelay)
-import Control.Monad.RWS (evalRWS, runRWS, RWS)
-import Data.Data (Data)
-import Data.Foldable as Foldable
-import Data.Function (on)
-import qualified Data.List as List (map)
-import Data.Map.Strict as Map (delete, findMin, insert, lookup, Map, member, singleton)
-import Data.Maybe
-import Data.Monoid ((<>))
-import Data.Sequence as Seq (Seq, viewl, ViewL(EmptyL, (:<)), (><), singleton)
-import Data.Set as Set (delete, empty, fold, fromList, insert, minView, Set, singleton, union)
-import qualified Data.Set as Set (map)
-import Data.Time.Clock (DiffTime, diffUTCTime, getCurrentTime, NominalDiffTime)
-import Data.Typeable (Typeable)
-import Debug.Trace (trace)
-import Prelude hiding (map)
-import System.IO (hPutStrLn, stderr)
-import Text.PrettyPrint.HughesPJClass (Doc, fsep, punctuate, comma, space, Pretty(pPrint), text)
-import Test.HUnit (assertEqual, Test(TestCase, TestLabel, TestList))
+import Prelude (($), (&&), Num((*), (+), (-)), (++), (.), Monad((>>=), return), and, Bool(..), Eq(..), error, filter, Int, Integral(mod), map, Monoid(mempty), not, or, Show(show), (||))
+import Prelude hiding (map, pred)
+import Test.HUnit (assertEqual, Test(..))
 
 -- | Combine IsQuantified, HasApply, IsTerm, and make sure the term is
 -- using the same variable type as the formula.
@@ -467,10 +448,6 @@ testFOL :: Test
 testFOL = TestLabel "FOL" (TestList [test01, test02, test03, test04,
                                      test05, test06, test07, test08, test09,
                                      test10, test11])
-
-failing :: ([String] -> b) -> (a -> b) -> Failing a -> b
-failing f _ (Failure errs) = f errs
-failing _ f (Success a)    = f a
 
 tryfindM :: Monad m => (t -> m (Failing a)) -> [t] -> m (Failing a)
 tryfindM _ [] = return $ Failure ["tryfindM"]

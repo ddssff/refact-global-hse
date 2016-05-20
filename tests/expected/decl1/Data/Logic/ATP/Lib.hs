@@ -8,6 +8,7 @@
 
 module Data.Logic.ATP.Lib
     ( Failing(Success, Failure)
+    , failing
     , SetLike(slView, slMap, slUnion, slEmpty, slSingleton), slInsert, prettyFoldable
 
     , setAny
@@ -56,26 +57,31 @@ import Control.Applicative.Error (Failing(..))
 import Control.Concurrent (forkIO, killThread, newEmptyMVar, putMVar, takeMVar, threadDelay)
 import Control.Monad.RWS (evalRWS, runRWS, RWS)
 import Data.Data (Data)
-import Data.Foldable as Foldable
+import Data.Foldable as Foldable (all, any, find, Foldable(foldr, foldr1), mapM_, maximumBy)
 import Data.Function (on)
 import qualified Data.List as List (map)
 import Data.Map.Strict as Map (delete, findMin, insert, lookup, Map, member, singleton)
-import Data.Maybe
+import Data.Maybe (catMaybes, fromMaybe, isNothing, maybe, Maybe(..))
 import Data.Monoid ((<>))
-import Data.Sequence as Seq (Seq, viewl, ViewL(EmptyL, (:<)), (><), singleton)
+import Data.Sequence as Seq (ViewL(EmptyL, (:<)), (><), Seq, singleton, viewl)
 import Data.Set as Set (delete, empty, fold, fromList, insert, minView, Set, singleton, union)
 import qualified Data.Set as Set (map)
 import Data.Time.Clock (DiffTime, diffUTCTime, getCurrentTime, NominalDiffTime)
 import Data.Typeable (Typeable)
 import Debug.Trace (trace)
+import Prelude (($), (++), Num((-)), (.), Fractional((/)), (<$>), Eq((==)), Ord((>), compare), Bool(..), const, Either(..), Enum(fromEnum, succ, toEnum), flip, Functor(fmap), fst, Int, IO, Traversable(mapM), Monoid(mempty), Monad(..), Ordering, Rational, Read, realToFrac, Show(show), String, unlines)
 import Prelude hiding (map)
 import System.IO (hPutStrLn, stderr)
-import Text.PrettyPrint.HughesPJClass (Doc, fsep, punctuate, comma, space, Pretty(pPrint), text)
 import Test.HUnit (assertEqual, Test(TestCase, TestLabel, TestList))
+import Text.PrettyPrint.HughesPJClass (comma, Doc, fsep, Pretty(pPrint), punctuate, space, text)
 
 -- | An error idiom.  Rather like the error monad, but collect all
 -- errors together
 type ErrorMsg = String
+
+failing :: ([String] -> b) -> (a -> b) -> Failing a -> b
+failing f _ (Failure errs) = f errs
+failing _ f (Success a)    = f a
 
 -- Declare a Monad instance for Failing so we can chain a series of
 -- Failing actions with >> or >>=.  If any action fails the subsequent

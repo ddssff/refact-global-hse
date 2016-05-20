@@ -17,8 +17,7 @@ module Data.Logic.ATP.DP
 
 import Data.Logic.ATP.DefCNF (NumAtom(ai, ma), defcnfs)
 import Data.Logic.ATP.Formulas (IsFormula(AtomOf))
-import Data.Logic.ATP.Lib (Failing(Success, Failure), allpairs, minimize, maximize, defined, (|->), setmapfilter, flatten)
-import Data.Logic.ATP.FOL (failing)
+import Data.Logic.ATP.Lib (Failing(Success, Failure), failing, allpairs, minimize, maximize, defined, (|->), setmapfilter, flatten)
 import Data.Logic.ATP.Lit (IsLiteral, (.~.), negative, positive, negate, negated)
 import Data.Logic.ATP.Prop (trivial, JustPropositional, PFormula)
 import Data.Logic.ATP.PropExamples (Knows(K), prime)
