@@ -343,7 +343,7 @@ newDecls moveSpec modules info decls = do
       -- We have to scan all the modules we know about for this.
       newDecls' :: RWS String String S ()
       newDecls' = mapM_ (\m@(ModuleInfo {_module = A.Module _mspan _ _ _ decls'}) ->
-                             trace ("newDecls' " ++ show (_modulePath m)) (pure ()) >>
+                             -- trace ("newDecls' " ++ show (_modulePath m)) (pure ()) >>
                              mapM_ (\d -> case moveSpec (_moduleKey m) d of
                                             k | k /= _moduleKey info -> pure ()
                                             k -> do
