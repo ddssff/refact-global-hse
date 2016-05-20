@@ -3,6 +3,7 @@ module Decls (makeMoveSpec, moveDeclsAndClean, moveDecls) where
 
 import Control.Exception (SomeException)
 import Control.Lens ((.=), makeLenses, use, view)
+import Control.Monad (unless)
 import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS, when)
 import Data.List (nub)
 import Data.Maybe (catMaybes, mapMaybe)
@@ -183,15 +184,16 @@ newImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = A.Modul
 
       -- Add new imports due to declarations moving from another
       -- module (k') to this one (k).  All of the imports in k' must
-      -- be duplicated here.  Also, all of the exports in k' exports
-      -- must be turned into imports here (with updated module names.)
-      -- Finally, if a declaration d moves from here to k', we need to
-      -- add an import of d here (as long as k' doesn't import k.)
+      -- be duplicated here (except for imports of k).  Also, all of
+      -- the exports in k' exports must be turned into imports here
+      -- (with updated module names.)  Finally, if a declaration d
+      -- moves from here to k', we need to add an import of d here (as
+      -- long as k' doesn't import k.)
       doNewImports :: ModuleInfo -> RWS String String S ()
       doNewImports someModule@(ModuleInfo {_moduleKey = someKey, _module = A.Module _ mh _ is@(_ : _) ds'}) =
           do when (any (\d -> moveSpec someKey d == thisKey) ds') $ do
                -- Duplicate module's import section
-               tell ("\n" ++ spanText (mkSrcSpan (srcLoc (head is)) (endLoc (last is))) (_moduleText someModule))
+               mapM_ (\i -> when (_moduleName thisKey /= Just (sModuleName (A.importModule i))) (tell "\n" >> (tell . prettyPrint') i)) is
                -- If module has explicit exports, turn them into imports and insert
                case maybe [] (\(A.ModuleHead _ _ _ mesl) -> maybe [] (\(A.ExportSpecList _ especs) -> especs) mesl) mh of
                  [] -> pure ()
@@ -219,18 +221,19 @@ newImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = A.Modul
                 | destKey /= thisKey ->
                     -- Find the destination module
                     case _moduleName destKey >>= findModuleByName modules of
-                      Just destModule@(ModuleInfo {_module = A.Module _ _ _ destModuleImports _}) ->
-                          -- Are there any imports from thisModule in destModule?
-                          case any (\i -> sModuleName (A.importModule i) == thisModuleName) destModuleImports of
-                            -- If not we can add an import from
-                            -- destKey of d, (though this still might
-                            -- create a circular import.)
-                            False -> do
-                              tell "\n"
-                              (tell . prettyPrint') (importSpecFromDecl destModuleName d)
-                            True -> pure ()
+                      Just destModule ->
+                          -- Are there any imports from thisModule in
+                          -- destModule?  If not we can add an import
+                          -- from destKey of d, (though this still
+                          -- might create a circular import.)
+                          unless (importsFrom thisModuleName destModule)
+                                 (tell "\n" >> (tell . prettyPrint') (importSpecFromDecl destModuleName d))
                       _ -> pure ()
             _ -> pure ()
+
+      importsFrom :: S.ModuleName -> ModuleInfo -> Bool
+      importsFrom name info@(ModuleInfo {_module = A.Module _ _ _ is _}) =
+          any (\i -> sModuleName (A.importModule i) == name) is
 
       importSpecFromDecl :: S.ModuleName -> A.Decl SrcSpanInfo -> S.ImportDecl
       importSpecFromDecl m d =
