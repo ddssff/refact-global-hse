@@ -7,6 +7,7 @@ import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS, when)
 import Data.List (nub)
 import Data.Maybe (catMaybes, mapMaybe)
 import Data.Set as Set (insert, isSubsetOf, member, Set)
+import Debug.Trace (trace)
 import Imports (cleanImports)
 import qualified Language.Haskell.Exts.Annotated as A
 import Language.Haskell.Exts.Annotated.Simplify (sCName, sImportDecl, sImportSpec, sModuleName, sName)
@@ -299,13 +300,16 @@ newDecls moveSpec modules info decls = do
       oldDecls :: RWS String String S ()
       oldDecls = mapM_ (\d -> case moveSpec (_moduleKey info) d of
                                 k | k == _moduleKey info -> tell' (endLoc d)
-                                _ -> point .= endLoc d) decls
+                                k -> trace ("Moving " ++ show (foldDeclared (:) [] d) ++ " to " ++ show (k) ++ " from " ++ show ((_moduleKey info))) (pure ()) >>
+                                     point .= endLoc d) decls
       -- Declarations that are moving here from other modules.
       -- We have to scan all the modules we know about for this.
       newDecls' :: RWS String String S ()
       newDecls' = mapM_ (\m@(ModuleInfo {_module = A.Module _mspan _ _ _ decls'}) ->
+                             trace ("newDecls' " ++ show (_modulePath (_moduleKey m))) (pure ()) >>
                              mapM_ (\d -> case moveSpec (_moduleKey m) d of
                                             k | k == _moduleKey info -> do
+                                              trace ("Moving " ++ show (foldDeclared (:) [] d) ++ " from " ++ show ((_moduleKey m)) ++ " to " ++ show (k)) (pure ())
                                               tell (declText m d)
                                             _k -> pure ()) decls')
                         (filter (\m -> _moduleKey m /= _moduleKey info) modules)
