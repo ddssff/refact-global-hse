@@ -299,9 +299,10 @@ newDecls moveSpec modules info decls = do
       -- Declarations that were already here and are to remain
       oldDecls :: RWS String String S ()
       oldDecls = mapM_ (\d -> case moveSpec (_moduleKey info) d of
-                                k | k == _moduleKey info -> keep (endLoc d)
-                                k -> trace ("Moving " ++ show (foldDeclared (:) [] d) ++ " to " ++ show (k) ++ " from " ++ show ((_moduleKey info))) (pure ()) >>
-                                     point .= endLoc d) decls
+                                k | k /= _moduleKey info -> do
+                                  trace ("Moving " ++ show (foldDeclared (:) [] d) ++ " to " ++ show (k) ++ " from " ++ show ((_moduleKey info))) (pure ())
+                                  point .= endLoc d
+                                _ -> keep (endLoc d)) decls
       -- Declarations that are moving here from other modules.
       -- We have to scan all the modules we know about for this.
       newDecls' :: RWS String String S ()
