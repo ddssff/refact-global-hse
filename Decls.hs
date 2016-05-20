@@ -76,7 +76,7 @@ moveDecls moveSpec modules = map (\info -> moveDeclsOfModule moveSpec modules in
 
 -- Update one module
 moveDeclsOfModule :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> String
-moveDeclsOfModule moveSpec modules info@(ModuleInfo {_module = m@(A.Module l h _ i ds)}) =
+moveDeclsOfModule moveSpec modules info@(ModuleInfo {_module = A.Module l h _ i ds}) =
     snd $ evalRWS (do tell' (srcLoc l)
                       newHeader moveSpec modules info h
                       newImports moveSpec modules info i
@@ -98,8 +98,7 @@ tell' l = do
 -- out are removed.  Exports of symbols that have moved in are added
 -- *if* the symbol is imported anywhere else.
 newHeader :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> Maybe (A.ModuleHead SrcSpanInfo) -> RWS String String S ()
-newHeader moveSpec modules m@(ModuleInfo {_moduleKey = k, _module = A.Module _ _ _ _ ds})
-              (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList l specs)))) = do
+newHeader moveSpec modules m (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList l specs)))) = do
   tell' (srcLoc l) -- write everything to beginning of first export
   mapM_ (doExport moveSpec m) specs
   (tell . concatMap ((sep ++) . prettyPrint) . nub) (newExports moveSpec modules m)
@@ -111,6 +110,7 @@ newHeader moveSpec modules m@(ModuleInfo {_moduleKey = k, _module = A.Module _ _
       -- exportSpecText d = (concatMap ((", " ++) . prettyPrint) . nub . foldDeclared (:) []) d
 newHeader _ _ _ _ = pure ()
 
+newExports :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> [S.Name]
 newExports moveSpec modules m =
     concatMap newExportsFromModule (filter (\x -> _moduleKey x /= _moduleKey m) modules)
     where
@@ -118,7 +118,7 @@ newExports moveSpec modules m =
       -- Scan a module other than m for declarations moving to m.  If
       -- found, transfer the export from there to here.
       newExportsFromModule :: ModuleInfo -> [S.Name]
-      newExportsFromModule m'@(ModuleInfo {_moduleKey = k', _module = A.Module l h _ i ds}) =
+      newExportsFromModule (ModuleInfo {_moduleKey = k', _module = A.Module _l _h _ _i ds}) =
           concatMap (\d -> if (moveSpec k' d == k) then foldDeclared (:) [] d else []) ds
 
 -- | Find the declaration of the export spec in the current module.
@@ -141,8 +141,8 @@ findDeclOfExportSpec info spec =
     findDeclOfSymbols info (foldDeclared Set.insert mempty spec)
     where
       findDeclOfSymbols :: ModuleInfo -> Set S.Name -> Maybe (A.Decl SrcSpanInfo)
-      findDeclOfSymbols info@(ModuleInfo {_module = A.Module _ _ _ _ decls}) syms | null syms = Nothing
-      findDeclOfSymbols info@(ModuleInfo {_module = A.Module _ _ _ _ decls}) syms =
+      findDeclOfSymbols (ModuleInfo {_module = A.Module _ _ _ _ decls}) syms | null syms = Nothing
+      findDeclOfSymbols (ModuleInfo {_module = A.Module _ _ _ _ decls}) syms =
           case filter (isSubsetOf syms . foldDeclared Set.insert mempty) (filter notSig decls) of
             [d] -> Just d
             [] -> Nothing

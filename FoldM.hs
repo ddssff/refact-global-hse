@@ -2,8 +2,7 @@
 {-# LANGUAGE BangPatterns, CPP, FlexibleContexts, FlexibleInstances, ScopedTypeVariables, StandaloneDeriving #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 module FoldM
-    ( (|$>)
-    , foldModuleM
+    ( foldModuleM
     , foldHeaderM
     , foldExportsM
     , foldImportsM
@@ -26,10 +25,6 @@ import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import SrcLoc (increaseSrcLoc, srcPairText)
 import Types (ModuleInfo(ModuleInfo, _module, _moduleComments, _moduleText))
-
--- | Monadic version of Data.Sequence.|>
-(|$>) :: Applicative m => m (Seq a) -> m a -> m (Seq a)
-(|$>) s x = (|>) <$> s <*> x
 
 --type Module = A.Module SrcSpanInfo
 --type ModuleHead = A.ModuleHead SrcSpanInfo

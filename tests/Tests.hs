@@ -13,9 +13,17 @@ import GHC.Generics
 import IO (withTempDirectory, withCurrentDirectory)
 import Language.Haskell.Exts.Annotated
 import Types (loadModule, ModuleInfo(..))
-import Text.PrettyPrint.HughesPJClass (prettyShow)
+-- import Text.PrettyPrint.HughesPJClass (prettyShow)
 import SrcLoc
 import Symbols (foldDeclared)
+import System.Exit (ExitCode(..), exitWith)
+import DeclTests (decl1)
+import Test.HUnit (errors, failures, runTestTT, Test(TestList))
+
+main :: IO ()
+main = runTestTT (TestList [decl1]) >>= doCounts
+    where
+      doCounts counts' = exitWith (if errors counts' /= 0 || failures counts' /= 0 then ExitFailure 1 else ExitSuccess)
 
 data St
     = St { _text :: String
@@ -25,24 +33,28 @@ data St
 $(makeLenses ''St)
 
 -- | Return the text before, within, and after a span
+{-
 splitSpan :: SrcLoc -> SrcLoc -> String -> (String, String, String)
 splitSpan b e s =
     let (pref, s') = splitText b s in
-    let (s'', suff) = srcPairText b e s' in
+    let (s'', suff) = srcPairText (b, e) s' in
     (pref, s'', suff)
+-}
 
 -- | Return the text before and after a location
+{-
 splitText :: SrcLoc -> String -> (String, String)
 splitText l s =
     srcPairText (l {srcLine = 1, srcColumn = 1}) l s
+-}
 
 data Info
     = Info
-      { srcSpanInfo :: SrcSpanInfo
-      , startLoc :: SrcLoc
-      , prefix :: String
-      , spanText :: String
-      , suffix :: String
+      { _srcSpanInfo :: SrcSpanInfo
+      , _startLoc :: SrcLoc
+      , _prefix :: String
+      , _spanText :: String
+      , _suffix :: String
       } deriving Show
 
 {-
@@ -57,7 +69,7 @@ test1 = do
   putStrLn (show m')
       where
         f :: ModuleInfo -> SrcSpanInfo -> Info
-        f info x = let (p, i, s) = splitSpan (srcLoc x) (endLoc x) (_moduleText info) in Info x (getPointLoc x) p i s
+        f info x = let (p, i, s) = splitSpan (srcLoc x, endLoc x) (_moduleText info) in Info x (getPointLoc x) p i s
 
 test2 :: IO (Module Info)
 test2 = do
@@ -66,7 +78,7 @@ test2 = do
   traverse (f info) m
     where
       f :: ModuleInfo -> SrcSpanInfo -> IO Info
-      f info x = let (p, i, s) = splitSpan (srcLoc x) (endLoc x) (_moduleText info) in pure (Info x (getPointLoc x) p i s)
+      f info x = let (p, i, s) = splitSpan (srcLoc x, endLoc x) (_moduleText info) in pure (Info x (getPointLoc x) p i s)
 
 test3 :: IO (Module Int)
 test3 = do
@@ -135,9 +147,9 @@ test5 = do
               (rpt : _) = case dropWhile (\p -> p < endLoc x) (map srcLoc (srcInfoPoints parent) ++ [endLoc parent]) of
                             [] -> error $ "No rpt for " ++ show (endLoc x) ++ " among " ++ show (srcInfoPoints parent ++ [srcInfoSpan parent])
                             xs -> xs
-          (pre, text') <- srcPairText <$> pure lpt <*> pure (srcLoc x) <*> use text
-          (mid, text'') <- srcPairText <$> pure (srcLoc x) <*> pure (endLoc x) <*> pure text'
-          (post, text''') <- srcPairText <$> pure (endLoc x) <*> pure rpt <*> pure text''
+          (pre, text') <- srcPairText <$> pure (lpt, srcLoc x) <*> use text
+          (mid, text'') <- srcPairText <$> pure (srcLoc x, endLoc x) <*> pure text'
+          (post, text''') <- srcPairText <$> pure (endLoc x, rpt) <*> pure text''
           stack %= (x :)
           text .= text'
           point .= srcLoc x

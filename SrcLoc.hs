@@ -8,6 +8,7 @@ module SrcLoc
     , increaseSrcLoc
     , textSpan
     , splitText
+    , splitSpan
     , spanText
     , srcPairText
     , makeTree

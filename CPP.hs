@@ -11,7 +11,7 @@ module CPP
 
 import Data.List (isSuffixOf)
 import Language.Haskell.Exts.Annotated (Comment, impliesExts, KnownExtension(CPP), Module, ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
-import Language.Preprocessor.Cpphs (BoolOptions(BoolOptions, ansi, hashline, lang, literate, locations, macros, pragma, stripC89, stripEol, warnings), CpphsOptions(..), runCpphs)
+-- import Language.Preprocessor.Cpphs (BoolOptions(BoolOptions, ansi, hashline, lang, literate, locations, macros, pragma, stripC89, stripEol, warnings), CpphsOptions(..), runCpphs)
 import Language.Preprocessor.Cpphs hiding (defaultCpphsOptions)
 import qualified Language.Preprocessor.Cpphs as Orig (defaultCpphsOptions)
 import Language.Preprocessor.Unlit (unlit)
@@ -28,19 +28,19 @@ parseFileContentsWithCommentsAndCPP
     :: CpphsOptions -> ParseMode -> String
     -> IO (ParseResult (Module SrcSpanInfo, [Comment], String))
 parseFileContentsWithCommentsAndCPP cppopts p rawStr = do
-    let filename = parseFilename p
-        md = delit filename rawStr
+    let file = parseFilename p
+        md = delit file rawStr
         cppMode = updateExtensions p md
     processedSrc <- cpp cppopts cppMode md
     let finalMode = updateExtensions cppMode processedSrc
     return $ parseModuleWithComments finalMode processedSrc >>= \(m, cs) -> pure (m, cs, processedSrc)
 
 updateExtensions :: ParseMode -> String -> ParseMode
-updateExtensions p mod =
+updateExtensions p modname =
   let oldLang = baseLanguage p
       exts = extensions p
       (bLang, extraExts) =
-          case (ignoreLanguagePragmas p, readExtensions mod) of
+          case (ignoreLanguagePragmas p, readExtensions modname) of
             (False, Just (mLang, es)) ->
                  (case mLang of {Nothing -> oldLang;Just newLang -> newLang}, es)
             _ -> (oldLang, [])
@@ -49,6 +49,7 @@ updateExtensions p mod =
        , baseLanguage = bLang
        }
 
+cpp :: CpphsOptions -> ParseMode -> String -> IO String
 cpp cppopts p str
   | CPP `elem` impliesExts (toExtensionList (baseLanguage p) (extensions p))
   = runCpphs cppopts (parseFilename p) str
@@ -56,7 +57,8 @@ cpp cppopts p str
 
 delit :: String -> String -> String
 delit fn = if ".lhs" `isSuffixOf` fn then unlit fn else id
- 
+
+defaultCpphsOptions :: CpphsOptions
 defaultCpphsOptions =
   Orig.defaultCpphsOptions
   { boolopts = (boolopts Orig.defaultCpphsOptions)

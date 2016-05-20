@@ -1,0 +1,59 @@
+Name: decl-mover
+Version: 1.0
+Synopsis: Move declarations between modules, clean up import lists
+Description: Move declarations between modules, clean up import lists
+Homepage: https://github.com/seereason/decl-mover
+License: BSD3
+Author: David Fox
+Maintainer: David Fox
+Cabal-Version: >= 1.9
+Build-Type: Simple
+
+Library
+  Build-Depends:
+    base,
+    containers,
+    cpphs,
+    directory,
+    filemanip,
+    filemanip-extra,
+    filepath,
+    haskell-src-exts,
+    lens,
+    lifted-base,
+    monad-control,
+    mtl,
+    pretty,
+    process,
+    syb,
+    temporary
+  Exposed-Modules:
+    CPP
+    Decls
+    FoldM
+    Imports
+    IO
+    SrcLoc
+    Symbols
+    Types
+    Utils
+  GHC-options: -Wall -O2
+
+Test-Suite decl-mover-tests
+  Type: exitcode-stdio-1.0
+  Hs-Source-Dirs: tests
+  Main-Is: Tests.hs
+  Build-Depends:
+    base,
+    containers,
+    decl-mover,
+    filemanip,
+    haskell-src-exts,
+    HUnit,
+    lens,
+    mtl,
+    process,
+    syb
+  GHC-options: -Wall -O2
+
+

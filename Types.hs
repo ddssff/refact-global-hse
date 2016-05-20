@@ -91,6 +91,7 @@ loadModule path =
 -- affect the line numbers of the output text, so we can use the
 -- resulting SrcSpan info on the original text.  Macro expansions
 -- could still mess this up.
+cpphsOptions :: CPP.CpphsOptions
 cpphsOptions =
     CPP.defaultCpphsOptions
     { CPP.boolopts =
