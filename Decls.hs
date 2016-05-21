@@ -191,25 +191,29 @@ newImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = A.Modul
       -- long as k' doesn't import k.)
       doNewImports :: ModuleInfo -> RWS String String S ()
       doNewImports someModule@(ModuleInfo {_moduleKey = someKey, _module = A.Module _ mh _ is@(_ : _) ds'}) =
-          do when (any (\d -> moveSpec someKey d == thisKey) ds') $ do
-               -- Duplicate module's import section
-               mapM_ (\i -> when (_moduleName thisKey /= Just (sModuleName (A.importModule i))) (tell "\n" >> (tell . prettyPrint') i)) is
+          case (any (\d -> moveSpec someKey d == thisKey) ds', _moduleName thisKey) of
+            (True, Just thisModuleName) -> do
+              -- Duplicate module's import section
+              mapM_ (\i -> when (_moduleName thisKey /= Just (sModuleName (A.importModule i))) (tell "\n" >> (tell . prettyPrint') i)) is
                -- If module has explicit exports, turn them into imports and insert
-               case maybe [] (\(A.ModuleHead _ _ _ mesl) -> maybe [] (\(A.ExportSpecList _ especs) -> especs) mesl) mh of
-                 [] -> pure ()
-                 especs ->
-                     -- Add imports of the exports whose declarations stayed put
-                     tell ("\n" ++
-                           prettyPrint (S.ImportDecl
-                                             { S.importLoc = srcLoc (_module someModule)
-                                             , S.importModule = maybe (S.ModuleName "Main") id (_moduleName someKey)
-                                             , S.importQualified = False
-                                             , S.importSrc = False
-                                             , S.importSafe = False
-                                             , S.importPkg = Nothing
-                                             , S.importAs = Nothing
-                                             , S.importSpecs = Just (False, ispecs someModule especs) }))
-      doNewImports _ = error "Unexpected module type"
+              case (maybe [] (\(A.ModuleHead _ _ _ mesl) -> maybe [] (\(A.ExportSpecList _ especs) -> especs) mesl) mh,
+                    importsFrom thisModuleName someModule) of
+                (especs@(_ : _), False) ->
+                    -- Add imports of the exports whose declarations stayed put
+                    trace ("Import symbols exported by " ++ show (_moduleName someKey) ++ " into " ++ show thisModuleName) (pure ()) >>
+                    tell ("\n" ++
+                          prettyPrint (S.ImportDecl
+                                            { S.importLoc = srcLoc (_module someModule)
+                                            , S.importModule = maybe (S.ModuleName "Main") id (_moduleName someKey)
+                                            , S.importQualified = False
+                                            , S.importSrc = False
+                                            , S.importSafe = False
+                                            , S.importPkg = Nothing
+                                            , S.importAs = Nothing
+                                            , S.importSpecs = Just (False, ispecs someModule especs) }))
+                _ -> pure ()
+            _ -> pure ()
+      doNewImports _ = error "doNewImports: Unexpected module type"
 
       -- If a declaration d is moving from k to destKey, we may need
       -- to import its symbols due to its use by remaining
