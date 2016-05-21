@@ -278,10 +278,10 @@ importsForArrivingDecls moveSpec
                         someModule@(ModuleInfo {_moduleKey = someKey, _module = A.Module _ _ _ is ds}) =
     if any (\d -> moveSpec someKey d == thisKey) ds
     then concatMap
-             (\i -> "\n" ++ prettyPrint' i)
+             (\i -> "\n" ++ prettyPrint' i ++ " -- arriving")
              (filter (\i -> _moduleName thisKey /= Just (sModuleName (A.importModule i))) is) ++
          concatMap
-             (\i -> "\n" ++ prettyPrint' i)
+             (\i -> "\n" ++ prettyPrint' i ++ " -- arriving")
              (maybeToList (importDeclFromExportSpecs moveSpec thisKey someModule))
     else ""
 importsForArrivingDecls _ _ _ = ""

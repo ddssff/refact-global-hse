@@ -39,6 +39,13 @@ Library
     Utils
   GHC-options: -Wall -O2
 
+executable move-decls
+  Hs-Source-Dirs: scripts
+  Main-Is: Move.hs
+  Build-Depends:
+    base,
+    decl-mover
+
 Test-Suite decl-mover-tests
   Type: exitcode-stdio-1.0
   Hs-Source-Dirs: tests
@@ -55,5 +62,3 @@ Test-Suite decl-mover-tests
     process,
     syb
   GHC-options: -Wall -O2
-
-

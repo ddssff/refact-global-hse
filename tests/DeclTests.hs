@@ -33,14 +33,17 @@ declTests = TestList [ decl1 ]
 decl1 :: Test
 decl1 =
     TestCase $ do
-      gitResetSubdir "tests/input"
-      withCurrentDirectory "tests/input" $
+      gitResetSubdir input
+      withCurrentDirectory input $
         withTempDirectory True "." "scratch" $ \scratch -> do
           paths <- (catMaybes . map (stripPrefix "./")) <$> (find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
           loadModules paths >>= moveDeclsAndClean moveSpec1 scratch
-      (_, diff, _) <- readProcessWithExitCode "diff" ["-ru", "tests/expected/decl1", "tests/input"] ""
-      gitResetSubdir "tests/input"
+      (_, diff, _) <- readProcessWithExitCode "diff" ["-ru", expected, input] ""
+      gitResetSubdir input
       assertString diff
+    where
+      input = "tests/input/atp-haskell"
+      expected = "tests/expected/decl1"
 
 moveSpec1 :: ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
 moveSpec1 k (A.TypeSig _ [A.Ident _ s] _)
