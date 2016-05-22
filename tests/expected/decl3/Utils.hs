@@ -1,13 +1,15 @@
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
 module Utils where
 
+import Control.Exception (catch, SomeException, throw)
 import Control.Monad (MonadPlus, msum)
 import Data.Bool (bool)
 import Data.Generics (Data(gmapM), GenericM, listify, Typeable)
 import Data.List (groupBy)
 import Data.Sequence (Seq, (|>))
 import System.Exit (ExitCode(..))
-import System.Process (readProcessWithExitCode)
+import System.IO (hPutStrLn, stderr)
+import System.Process (readProcess, readProcessWithExitCode)
 
 -- | dropWhile where predicate operates on two list elements.
 dropWhile2 :: (a -> Maybe a -> Bool) -> [a] -> [a]
@@ -42,10 +44,9 @@ gitResetHard = do
 -- repository.  (Does this every throw an exception?)
 gitResetSubdir :: FilePath -> IO ()
 gitResetSubdir dir = do
-  (code, _out, _err) <- readProcessWithExitCode "git" ["checkout", "--", dir] ""
-  case code of
-    ExitSuccess -> pure ()
-    ExitFailure _n -> error ("gitResetSubdir " ++ show dir)
+  (readProcess "git" ["checkout", "--", dir] "" >>
+   readProcess "git" ["clean", "-f", dir] "" >> pure ())
+  `catch` \(e :: SomeException) -> hPutStrLn stderr ("gitResetSubdir " ++ show dir ++ " failed: " ++ show e) >> throw e
 
 -- | Determine whether the repository containing the working directory
 -- is in a clean state.

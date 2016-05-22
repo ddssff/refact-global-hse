@@ -6,6 +6,7 @@
 module Imports (cleanImports) where
 
 import Control.Exception (SomeException)
+import Control.Monad (void)
 import Control.Monad.Trans (liftIO, MonadIO)
 import Data.Char (toLower)
 import Data.Foldable (fold)
@@ -16,6 +17,7 @@ import Data.Monoid ((<>))
 import Data.Sequence ((|>))
 import Data.Set as Set (fromList, member, Set, toList, unions)
 import qualified Data.Set as Set (map)
+import Debug.Trace (trace)
 import FoldM (foldDeclsM, foldExportsM, foldHeaderM, foldImportsM)
 import qualified Language.Haskell.Exts.Annotated as A (ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), SrcLoc(SrcLoc))
 import Language.Haskell.Exts.Annotated.Simplify as S (sImportDecl, sImportSpec, sModuleName, sName)
@@ -27,12 +29,13 @@ import SrcLoc (srcLoc)
 import Symbols (symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
-import System.FilePath.Extra (replaceFile)
+import System.FilePath.Extra2 (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
 import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleText), ModuleKey(_moduleTop), DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> [ModuleInfo] -> m ()
+cleanImports scratch [] = trace ("cleanImports - no modules") (pure ())
 cleanImports scratch info =
     dump >> mapM_ (\x -> do newText <- doModule scratch x
                             let path = _moduleTop (_moduleKey x) </> _modulePath x
@@ -42,7 +45,7 @@ cleanImports scratch info =
                                                         do putStrLn (path ++ " imports changed")
                                                            -- let (path', ext) = splitExtension path in
                                                            -- writeFile {-path' ++ "-new" ++ ext-} s
-                                                           replaceFile path s
+                                                           void $ replaceFile path s
                                        Just _ -> pure ()) info
     where
       keys = Set.fromList (map _moduleKey info)
