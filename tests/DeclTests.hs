@@ -23,7 +23,7 @@ import Types
 import Utils (gitResetSubdir)
 
 declTests :: Test
-declTests = TestList [decl1, decl2]
+declTests = TestList [decl1, decl2, decl3]
 
 -- Test moving a declaration to a module that currently imports it
 decl1 :: Test
@@ -71,6 +71,14 @@ moveSpec1 k _ = k
 -- Test updating import of decl that moved from A to B in module C
 decl2 :: Test
 decl2 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl2" (makeMoveSpec "withCurrentDirectory" "IO" "Tmp")
+
+-- Test moving a declaration to a module that does *not* currently
+-- import it.  Now we don't know whether it leaves behind uses for
+-- which we need to import it (which might be called "moving down") or
+-- if we are moving it to the place where it is used (which could be
+-- called "moving up".)
+decl3 :: Test
+decl3 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl3" (makeMoveSpec "lines'" "SrcLoc" "Utils")
 
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
 testMoveSpec input expected moveSpec = do
