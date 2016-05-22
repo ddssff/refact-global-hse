@@ -1,14 +1,18 @@
 {-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
 module Utils where
 
-import Control.Exception (catch, SomeException, throw)
-import Control.Exception.Lifted as IO (bracket, catch, throw)
+import Control.Exception (SomeException, throw)
+import Control.Exception.Lifted as IO (bracket, catch)
 import Control.Monad (MonadPlus, msum)
+import Control.Monad.Trans (liftIO, MonadIO)
+import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Bool (bool)
 import Data.Generics (Data(gmapM), GenericM, listify, Typeable)
 import Data.Sequence (Seq, (|>))
+import System.Directory (removeDirectoryRecursive)
 import System.Exit (ExitCode(..))
 import System.IO (hPutStrLn, stderr)
+import qualified System.IO.Temp as Temp (createTempDirectory)
 import System.Process (readProcess, readProcessWithExitCode)
 
 -- | dropWhile where predicate operates on two list elements.
@@ -63,3 +67,19 @@ gitIsClean = do
 
 withCleanRepo :: IO a -> IO a
 withCleanRepo action = gitIsClean >>= bool (error "withCleanRepo: please commit or revert changes") action
+               -- (const action `catch` (\e -> liftIO (putStrLn ("in " ++ path) >> throw e)))
+
+withTempDirectory :: (MonadIO m, MonadBaseControl IO m) =>
+                     Bool
+                  -> FilePath -- ^ Temp directory to create the directory in
+                  -> String   -- ^ Directory name template. See 'openTempFile'.
+                  -> (FilePath -> m a) -- ^ Callback that can use the directory
+                  -> m a
+withTempDirectory cleanup targetDir template callback =
+    IO.bracket
+       (liftIO $ Temp.createTempDirectory targetDir template)
+       (if cleanup then liftIO . ignoringIOErrors . removeDirectoryRecursive else const (pure ()))
+       callback
+
+ignoringIOErrors :: IO () -> IO ()
+ignoringIOErrors ioe = ioe `IO.catch` (\e -> const (return ()) (e :: IOError))

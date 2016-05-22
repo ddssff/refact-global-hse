@@ -10,20 +10,22 @@ module DeclTests where
 
 import Data.List hiding (find)
 import Data.Maybe
-import Decls (makeMoveSpec, moveDeclsAndClean, MoveSpec)
+import Decls (appendMoveSpecs, makeMoveSpec, moveDeclsAndClean, MoveSpec)
 import IO (withCurrentDirectory, withTempDirectory)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
+import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Annotated.Simplify (sName)
 import qualified Language.Haskell.Exts.Syntax as S
 import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import System.Process (readProcessWithExitCode)
+import Symbols (foldDeclared)
 import Test.HUnit
 import Types
 import Utils (gitResetSubdir)
 
 declTests :: Test
-declTests = TestList [decl1, decl2, decl3]
+declTests = TestList [decl1, decl2, decl3, decl4]
 
 -- Test moving a declaration to a module that currently imports it
 decl1 :: Test
@@ -80,13 +82,25 @@ decl2 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl2" 
 decl3 :: Test
 decl3 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl3" (makeMoveSpec "lines'" "SrcLoc" "Utils")
 
+decl4 :: Test
+decl4 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl4" spec
+    where
+      spec = appendMoveSpecs (makeMoveSpec "withTempDirectory" "IO" "Utils") (makeMoveSpec "ignoringIOErrors" "IO" "Utils")
+
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
 testMoveSpec input expected moveSpec = do
   gitResetSubdir input
   withCurrentDirectory input $
     withTempDirectory True "." "scratch" $ \scratch -> do
       paths <- (catMaybes . map (stripPrefix "./")) <$> (find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
-      loadModules paths >>= moveDeclsAndClean moveSpec scratch
+      loadModules paths >>= {-mapM (testSpec moveSpec) >>=-} moveDeclsAndClean moveSpec scratch
   (_, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, input] ""
   gitResetSubdir input
   assertString diff
+
+testSpec :: MoveSpec -> ModuleInfo -> IO ModuleInfo
+testSpec moveSpec m@(ModuleInfo {_moduleKey = k, _module = A.Module _ _ _ _ ds}) = do
+  putStrLn ("---- module " ++ show (_moduleName k) ++ " ----")
+  mapM (\d -> let k' = moveSpec k d in
+              putStrLn (show (foldDeclared (:) [] d) ++ ": " ++ if k /= k' then show k ++ " " ++  " -> " ++ show k' else "unchanged")) ds
+  return m

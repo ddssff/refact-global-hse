@@ -2,6 +2,7 @@
 module Utils where
 
 import Control.Exception (catch, SomeException, throw)
+import Control.Exception.Lifted as IO (bracket, catch, throw)
 import Control.Monad (MonadPlus, msum)
 import Data.Bool (bool)
 import Data.Generics (Data(gmapM), GenericM, listify, Typeable)
@@ -45,7 +46,7 @@ gitResetSubdir :: FilePath -> IO ()
 gitResetSubdir dir = do
   (readProcess "git" ["checkout", "--", dir] "" >>
    readProcess "git" ["clean", "-f", dir] "" >> pure ())
-  `catch` \(e :: SomeException) -> hPutStrLn stderr ("gitResetSubdir " ++ show dir ++ " failed: " ++ show e) >> throw e
+  `IO.catch` \(e :: SomeException) -> hPutStrLn stderr ("gitResetSubdir " ++ show dir ++ " failed: " ++ show e) >> throw e
 
 -- | Determine whether the repository containing the working directory
 -- is in a clean state.

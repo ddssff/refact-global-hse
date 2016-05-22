@@ -212,13 +212,6 @@ test6 =  do
       doExportSpecs :: [ExportSpec SrcSpanInfo] -> StateT St IO [ExportSpec SrcSpanInfo]
       doExportSpecs x = trace ("h: " ++ show x) (pure x)
 
--- | Parse a module and write its ast to /tmp/syntax
-test7 :: IO ()
-test7 = do
-  Right info <- withCurrentDirectory "../atp-haskell/src" $ loadModule "Data/Logic/ATP/Pretty.hs" :: IO (Either SomeException ModuleInfo)
-  (writeFile "/tmp/syntax" . show . _module) info
-  -- putStrLn . show . filter (\x -> srcSpanEndColumn x == 0) $ (gFind (_module info) :: [SrcSpan])
-
 -- Tests of foldDeclared
 test8a :: IO ()
 test8a = do
