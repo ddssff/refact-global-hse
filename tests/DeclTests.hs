@@ -10,7 +10,7 @@ module DeclTests where
 
 import Data.List hiding (find)
 import Data.Maybe
-import Decls (makeMoveSpec, moveDeclsAndClean)
+import Decls (makeMoveSpec, moveDeclsAndClean, MoveSpec)
 import IO (withCurrentDirectory, withTempDirectory)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
@@ -27,36 +27,17 @@ declTests = TestList [decl1, decl2]
 
 -- Test moving a declaration to a module that currently imports it
 decl1 :: Test
-decl1 =
-    TestCase $ do
-      gitResetSubdir input
-      withCurrentDirectory input $
-        withTempDirectory True "." "scratch" $ \scratch -> do
-          paths <- (catMaybes . map (stripPrefix "./")) <$> (find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
-          loadModules paths >>= moveDeclsAndClean moveSpec1 scratch
-      (_, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, input] ""
-      gitResetSubdir input
-      assertString diff
-    where
-      input = "tests/input/atp-haskell"
-      expected = "tests/expected/decl1"
+decl1 = TestCase $ testMoveSpec "tests/input/atp-haskell" "tests/expected/decl1" moveSpec1
 
--- Test moving a declaration to a non-existant module
--- Test updating import of decl that moved from A to B in module C
-decl2 :: Test
-decl2 =
-    TestCase $ do
-      gitResetSubdir input
-      withCurrentDirectory input $
-        withTempDirectory True "." "scratch" $ \scratch -> do
-          paths <- (catMaybes . map (stripPrefix "./")) <$> (find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
-          loadModules paths >>= moveDeclsAndClean (makeMoveSpec "withCurrentDirectory" "IO" "Tmp") scratch
-      (_, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, input] ""
-      gitResetSubdir input
-      assertString diff
-    where
-      input = "tests/input/decl-mover"
-      expected = "tests/expected/decl2"
+-- Move tryfindM from Lib to Tableaux.  Tableaux already imports
+-- tryfindM, so that import should be removed.  The question is, now
+-- that tryfindM has moved out of Lib, can we or must we import
+-- tryfindM it from Tableaux?  The answer is no, because of this loop:
+--
+--     Tableaux -> Quantified -> Prop -> Lib -> Tableaux.
+--
+-- The fact that Tableaux already imports Lib forces us to omit any
+-- import of Tableaux from Lib.
 
 moveSpec1 :: ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
 moveSpec1 k (A.TypeSig _ [A.Ident _ s] _)
@@ -85,3 +66,19 @@ moveSpec1 k (A.DerivDecl {}) = k
 moveSpec1 k d = error $ "Unexpected decl: " ++ take 120 (show d) ++ ".."
 -}
 moveSpec1 k _ = k
+
+-- Test moving a declaration to a non-existant module
+-- Test updating import of decl that moved from A to B in module C
+decl2 :: Test
+decl2 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl2" (makeMoveSpec "withCurrentDirectory" "IO" "Tmp")
+
+testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
+testMoveSpec input expected moveSpec = do
+  gitResetSubdir input
+  withCurrentDirectory input $
+    withTempDirectory True "." "scratch" $ \scratch -> do
+      paths <- (catMaybes . map (stripPrefix "./")) <$> (find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
+      loadModules paths >>= moveDeclsAndClean moveSpec scratch
+  (_, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, input] ""
+  gitResetSubdir input
+  assertString diff

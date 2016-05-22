@@ -7,17 +7,15 @@ module IO
     ) where
 
 import Control.Exception (SomeException)
-import Control.Exception.Lifted as IO (bracket, catch, throw, try)
+import Control.Exception.Lifted as IO (bracket, catch, throw)
 import Control.Monad (when)
-import Control.Monad.Base (MonadBase)
 import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
-import Debug.Trace
 import System.Directory (createDirectoryIfMissing, getCurrentDirectory, removeDirectoryRecursive, removeFile, setCurrentDirectory)
 import System.FilePath (splitFileName)
 import System.IO.Error
 import qualified System.IO.Temp as Temp (createTempDirectory)
-import System.Posix.Files
+-- import System.Posix.Files
 
 withCurrentDirectory :: forall m a. (MonadIO m, MonadBaseControl IO m) => FilePath -> m a -> m a
 withCurrentDirectory path action =
@@ -44,12 +42,8 @@ ignoringIOErrors ioe = ioe `IO.catch` (\e -> const (return ()) (e :: IOError))
 
 replaceFile :: FilePath -> String -> IO ()
 replaceFile path text = do
-  createDirectoryIfMissing True (parentPath path)
+  createDirectoryIfMissing True (fst (splitFileName path))
   removeFile path `catch` (\e -> if isDoesNotExistError e then return () else ioError e)
   writeFile path ({-trace (path ++ " text: " ++ show text)-} text)
   text' <- readFile path
   when (text /= text') (error $ "Failed to replace " ++ show path)
-    where
-      -- Return the path of the directory containing a file.
-      parentPath :: FilePath -> FilePath
-      parentPath path = fst (splitFileName path)

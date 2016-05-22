@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
-module Decls (makeMoveSpec, moveDeclsAndClean, moveDecls) where
+module Decls (makeMoveSpec, moveDeclsAndClean, moveDecls, MoveSpec) where
 
 import Control.Exception (SomeException)
 import Control.Lens ((.=), makeLenses, use, view)
@@ -110,7 +110,7 @@ newModuleMap moveSpec modules =
             doModule thisKey pairs =
                 "module " ++ maybe "Main" prettyPrint (_moduleName thisKey) ++ "(" ++
                 intercalate exportSep (newExports moveSpec modules thisKey) ++ "\n    ) where\n" ++
-                concatMap (\(someKey, ds) -> importsForArrivingDecls moveSpec thisKey (findModuleByKeyUnsafe modules someKey)) pairs ++
+                concatMap (\(someKey, ds) -> importsForArrivingDecls moveSpec thisKey [] (findModuleByKeyUnsafe modules someKey)) pairs ++
                 -- importsForDepartingDecls moveSpec modules thisKey ++  new module, no decls can depart
                 newDecls moveSpec modules thisKey ++ "\n"
       declMap :: Map ModuleKey [(ModuleKey, A.Decl SrcSpanInfo)]
@@ -226,9 +226,10 @@ skip loc = point .= loc
 -- Find the declaration of the symbols of an import spec.  If that
 -- declaration moved, update the module name.
 updateImports :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> RWS String String St ()
-updateImports moveSpec modules thisModule@(ModuleInfo {_moduleKey = thisKey, _module = A.Module _ _ _ imports _}) = do
+updateImports moveSpec modules thisModule@(ModuleInfo {_moduleKey = thisKey@(ModuleKey {_moduleName = Just thisModuleName}),
+                                                       _module = A.Module _ _ _ thisModuleImports _}) = do
   -- Update the existing imports
-  mapM_ doImportDecl imports
+  mapM_ doImportDecl thisModuleImports
   mapM_ doNewImports (filter (\m -> _moduleKey m /= thisKey) modules)
     where
       -- Process one import declaration.  Each of its specs will
@@ -245,13 +246,20 @@ updateImports moveSpec modules thisModule@(ModuleInfo {_moduleKey = thisKey, _mo
       doImportSpec :: S.ModuleName -> Bool -> A.ImportSpec SrcSpanInfo -> RWS String String St ()
       doImportSpec name hiding spec =
           case newModuleOfImportSpec moveSpec modules name spec of
-            Just name' | name' == name -> (keep . endLoc . A.ann) spec
+            Just name'
+                | -- Retain import if module name is unchanged
+                  name' == name -> (keep . endLoc . A.ann) spec
             _ -> (skip . endLoc . A.ann) spec
 
       importsForMovingDecls :: S.ModuleName -> Bool -> A.ImportSpec SrcSpanInfo -> RWS String String St ()
       importsForMovingDecls name hiding spec =
           case newModuleOfImportSpec moveSpec modules name spec of
-            Just name' | name' /= name -> tell ("\nimport " ++ prettyPrint' name' ++ " (" ++ prettyPrint' spec ++ ")")
+            Just name'
+                | -- has import module name changed?
+                  name' /= name &&
+                  -- don't generate self imports
+                  name' /= thisModuleName ->
+                    tell ("\nimport " ++ prettyPrint' name' ++ " (" ++ prettyPrint' spec ++ ")")
             _ -> pure ()
 
       -- Add new imports due to declarations moving from someKey to
@@ -263,7 +271,7 @@ updateImports moveSpec modules thisModule@(ModuleInfo {_moduleKey = thisKey, _mo
       -- here (as long as someKey doesn't import thisKey)
       doNewImports :: ModuleInfo -> RWS String String St ()
       doNewImports someModule = do
-        tell $ importsForArrivingDecls moveSpec thisKey someModule ++
+        tell $ importsForArrivingDecls moveSpec thisKey thisModuleImports someModule ++
                importsForDepartingDecls moveSpec modules (findModuleByKey modules thisKey)
 updateImports _ _  _ = error "Unexpected module"
 
@@ -277,35 +285,36 @@ importsForDepartingDecls moveSpec modules (Just thisModule@(ModuleInfo {_moduleK
                        someKey@(ModuleKey {_moduleName = Just someModuleName})
                            | someKey /= thisKey ->
                                case findModuleByKey modules someKey of
-                                 Just someModule ->
-                                     case someModuleName `importsSymbolsFrom` thisModule of
-                                       False -> "\n" ++ prettyPrint' (importSpecFromDecl someModuleName d) ++ " -- " ++ prettyPrint someModuleName ++ " `importsSymbolsFrom` " ++ prettyPrint thisModuleName ++ " -> " ++ show (someModuleName `importsSymbolsFrom` thisModule)
+                                 Just someModule@(ModuleInfo {_module = A.Module _ _ _ someModuleImports _}) ->
+                                     case someModuleImports `importsSymbolsFrom` thisModuleName of
+                                       False -> "\n" ++ prettyPrint' (importSpecFromDecl someModuleName d) ++ " -- " ++ prettyPrint someModuleName ++ " `importsSymbolsFrom` " ++ prettyPrint thisModuleName ++ " -> " ++ show (someModuleImports `importsSymbolsFrom` thisModuleName)
                                        True -> ""
                                  Nothing -> ""
                        _ -> "") ds
 importsForDepartingDecls _ _ _ = ""
 
-importsForArrivingDecls :: MoveSpec -> ModuleKey -> ModuleInfo -> String
-importsForArrivingDecls moveSpec thisKey someModule@(ModuleInfo {_moduleKey = someKey, _module = A.Module _ _ _ is ds}) =
+importsForArrivingDecls :: MoveSpec -> ModuleKey -> [A.ImportDecl SrcSpanInfo] -> ModuleInfo -> String
+importsForArrivingDecls moveSpec thisKey thisModuleImports someModule@(ModuleInfo {_moduleKey = someKey, _module = A.Module _ _ _ is ds}) =
     if any (\d -> moveSpec someKey d == thisKey) ds
     then concatMap
              (\i -> "\n" ++ prettyPrint' i)
              (filter (\i -> _moduleName thisKey /= Just (sModuleName (A.importModule i))) is) ++
          concatMap
              (\i -> "\n" ++ prettyPrint' i)
-             (maybeToList (importDeclFromExportSpecs moveSpec thisKey someModule))
+             (maybeToList (importDeclFromExportSpecs moveSpec thisModuleImports someModule))
     else ""
-importsForArrivingDecls _ _ _ = ""
+importsForArrivingDecls _ _ _ _ = ""
 
 -- | If a declaration moves from someModule to thisModule, and nothing
 -- in thisModule is imported by someModule, add imports to thisModule
 -- of all the symbols exported by someModule.
-importDeclFromExportSpecs :: MoveSpec -> ModuleKey -> ModuleInfo -> Maybe S.ImportDecl
+importDeclFromExportSpecs :: MoveSpec -> [A.ImportDecl SrcSpanInfo] -> ModuleInfo -> Maybe S.ImportDecl
 importDeclFromExportSpecs moveSpec
-                          (ModuleKey {_moduleName = Just thisModuleName})
-                          someInfo@(ModuleInfo {_moduleKey = someKey,
-                                         _module = someModule@(A.Module _ (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList _ especs@(_ : _))))) _ _ _)}) =
-    case importsSymbolsFrom thisModuleName someInfo of
+                          thisModuleImports
+                          someInfo@(ModuleInfo
+                                    {_moduleKey = someKey@(ModuleKey {_moduleName = Just someModuleName}),
+                                     _module = someModule@(A.Module _ (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList _ especs@(_ : _))))) _ _ _)}) =
+    case thisModuleImports `importsSymbolsFrom` someModuleName of
       False -> Just (S.ImportDecl { S.importLoc = srcLoc someModule
                                   , S.importModule = maybe (S.ModuleName "Main") id (_moduleName someKey)
                                   , S.importQualified = False
@@ -335,10 +344,8 @@ importDeclFromExportSpecs moveSpec
 importDeclFromExportSpecs _ _ _ = Nothing
 
 -- | Does module m import from name?
-importsSymbolsFrom :: S.ModuleName -> ModuleInfo -> Bool
-importsSymbolsFrom name (ModuleInfo {_module = A.Module _ _ _ is _}) =
-    any (\i -> sModuleName (A.importModule i) == name) is
-importsSymbolsFrom _ _ = False
+importsSymbolsFrom :: [A.ImportDecl SrcSpanInfo] -> S.ModuleName -> Bool
+importsSymbolsFrom imports importee = any (\i -> sModuleName (A.importModule i) == importee) imports
 
 -- | Build an ImportDecl that imports the symbols of d from m.
 importSpecFromDecl :: S.ModuleName -> A.Decl SrcSpanInfo -> S.ImportDecl
