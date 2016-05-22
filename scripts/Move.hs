@@ -27,7 +27,10 @@ main = do
               (fns, [], [], []) -> finalize (foldr ($) params0 fns)
               _ -> error (usageInfo "specify modules and at least one move spec" options)
   withCleanRepo $ withTempDirectory True "." "scratch" $ \scratch ->
-      loadModules (view moduverse params) >>= moveDeclsAndClean (view moveSpec params) scratch
+      loadModules (view moduverse params) >>= moveDeclsAndClean (traceMoveSpec (view moveSpec params)) scratch
+
+traceMoveSpec :: MoveSpec -> MoveSpec
+traceMoveSpec f = \k d -> let k' = f k d in if k /= k' then (trace ("moveSpec " ++ show k ++ " d -> " ++ show k') k') else k'
 
 -- | Search the findDir directories for paths and add them to moduverse.
 finalize :: Params -> IO Params

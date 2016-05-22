@@ -64,8 +64,10 @@ makeMoveSpec fname mname mname' =
     \mkey decl ->
         let syms = foldDeclared Set.insert mempty decl in
         if _moduleName mkey == Just (S.ModuleName mname) && (Set.member (S.Ident fname) syms || Set.member (S.Symbol fname) syms)
-        then mkey {_moduleName = Just (S.ModuleName mname')}
+        then {-t1 mkey decl-} (mkey {_moduleName = Just (S.ModuleName mname')})
         else mkey
+    -- where
+      -- t1 mkey decl x = trace ("moveSpec " ++ show mkey ++ " " ++ show (foldDeclared (:) [] decl) ++ " -> " ++ show x) x
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
