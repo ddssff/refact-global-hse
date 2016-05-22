@@ -32,7 +32,7 @@ main = do
 -- | Search the findDir directories for paths and add them to moduverse.
 finalize :: Params -> IO Params
 finalize params = do
-  paths <- concat <$> mapM (\dir -> map (makeRelative dir) <$> (find (depth ==? 0) (extension ==? ".hs" &&? fileType ==? RegularFile) (view topDir params </> dir)))
+  paths <- concat <$> mapM (\dir -> map (makeRelative (view topDir params </> dir)) <$> (find (depth ==? 0) (extension ==? ".hs" &&? fileType ==? RegularFile) (view topDir params </> dir)))
                            (_findDirs params)
   trace ("Adding modules in " ++ show (view topDir params) ++ ": " ++ show paths) (pure ())
   return $ over moduverse (++ paths) params
