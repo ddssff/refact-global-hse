@@ -44,7 +44,10 @@ executable move-decls
   Main-Is: Move.hs
   Build-Depends:
     base,
-    decl-mover
+    decl-mover,
+    filemanip,
+    filepath,
+    lens
 
 Test-Suite decl-mover-tests
   Type: exitcode-stdio-1.0

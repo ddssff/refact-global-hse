@@ -15,7 +15,6 @@ import System.Directory (createDirectoryIfMissing, getCurrentDirectory, removeDi
 import System.FilePath (splitFileName)
 import System.IO.Error
 import qualified System.IO.Temp as Temp (createTempDirectory)
--- import System.Posix.Files
 
 withCurrentDirectory :: forall m a. (MonadIO m, MonadBaseControl IO m) => FilePath -> m a -> m a
 withCurrentDirectory path action =

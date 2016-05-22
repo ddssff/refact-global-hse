@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
-module Decls (makeMoveSpec, moveDeclsAndClean, moveDecls, MoveSpec) where
+module Decls (makeMoveSpec, appendMoveSpecs, identityMoveSpec, moveDeclsAndClean, moveDecls, MoveSpec) where
 
 import Control.Exception (SomeException)
 import Control.Lens ((.=), makeLenses, use, view)
@@ -28,6 +28,16 @@ import Utils (dropWhile2)
 -- | Specifies where to move each declaration of each module.  Given a
 -- departure module key and a declaration, return an arrival module key.
 type MoveSpec = ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
+
+appendMoveSpecs :: MoveSpec -> MoveSpec -> MoveSpec
+appendMoveSpecs f g =
+    \k0 d ->
+        case (f k0 d, g k0 d) of
+          (k1, k2) | k1 == k2 -> k1
+          (k1, k2) | k1 == k0 -> k2
+          _ -> k0
+
+identityMoveSpec = \k _ -> k
 
 -- | Declaration moves can be characterized as one of two types, Down
 -- or Up.  This must be computed by scanning the parsed code of the
