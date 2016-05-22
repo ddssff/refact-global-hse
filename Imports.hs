@@ -17,6 +17,7 @@ import Data.Monoid ((<>))
 import Data.Sequence ((|>))
 import Data.Set as Set (fromList, member, Set, toList, unions)
 import qualified Data.Set as Set (map)
+import Debug.Trace (trace)
 import FoldM (foldDeclsM, foldExportsM, foldHeaderM, foldImportsM)
 import qualified Language.Haskell.Exts.Annotated as A (ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), SrcLoc(SrcLoc))
 import Language.Haskell.Exts.Annotated.Simplify as S (sImportDecl, sImportSpec, sModuleName, sName)
@@ -34,6 +35,7 @@ import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleTe
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> [ModuleInfo] -> m ()
+cleanImports scratch [] = trace ("cleanImports - no modules") (pure ())
 cleanImports scratch info =
     dump >> mapM_ (\x -> do newText <- doModule scratch x
                             let path = _moduleTop (_moduleKey x) </> _modulePath x
