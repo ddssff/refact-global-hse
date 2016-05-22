@@ -85,7 +85,7 @@ moveDeclsOfModule moveSpec modules info@(ModuleInfo {_module = A.Module l _ _ _ 
                   )
                   (_moduleText info)
                   (St {_point = ((srcLoc l) {srcLine = 1, srcColumn = 1}), _newmods = mempty})
-moveDeclsOfModule _ _ _ = error "Unexpected module type"
+moveDeclsOfModule _ _ x = error $ "moveDeclsOfModule - unexpected module: " ++ show (_module x)
 
 -- | Unsafe ModuleInfo lookup
 findModuleByKey :: [ModuleInfo] -> ModuleKey -> Maybe ModuleInfo
@@ -199,7 +199,7 @@ newExports moveSpec modules thisKey =
       newExportsFromModule :: ModuleInfo -> [S.Name]
       newExportsFromModule (ModuleInfo {_moduleKey = k', _module = A.Module _l _h _ _i ds}) =
           concatMap (\d -> if (moveSpec k' d == thisKey) then foldDeclared (:) [] d else []) ds
-      newExportsFromModule _ = error "Unexpected module type"
+      newExportsFromModule x = error $ "newExports - unexpected module: " ++ show (_module x)
 
 findNewKeyOfExportSpec :: MoveSpec -> ModuleInfo -> A.ExportSpec SrcSpanInfo -> Maybe ModuleKey
 findNewKeyOfExportSpec moveSpec info@(ModuleInfo {_moduleKey = k}) spec =
@@ -218,7 +218,7 @@ findDeclOfExportSpec info spec =
             [d] -> Just d
             [] -> Nothing
             ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (map srcLoc ds)
-      findDeclOfSymbols _ _ = error "Unexpected module type"
+      findDeclOfSymbols x _ = error $ "findDeclOfExportSpec - unexpected module: " ++ show (_module x)
 
 skip :: SrcLoc -> RWS String String St ()
 skip loc = point .= loc
@@ -273,7 +273,7 @@ updateImports moveSpec modules thisModule@(ModuleInfo {_moduleKey = thisKey@(Mod
       doNewImports someModule = do
         tell $ importsForArrivingDecls moveSpec thisKey thisModuleImports someModule ++
                importsForDepartingDecls moveSpec modules (findModuleByKey modules thisKey)
-updateImports _ _  _ = error "Unexpected module"
+updateImports _ _ x = error $ "updateImports - unexpected module: " ++ show (_module x)
 
 -- | If a decl is move from thisModule to someModule we may need to
 -- import its symbols to satisfy remaining declarations that use it.
@@ -386,7 +386,7 @@ findModuleByName modules oldModname =
           sModuleName name == modName
       testModuleName modName (ModuleInfo {_module = A.Module _ Nothing _ _ _}) =
           modName == S.ModuleName "Main"
-      testModuleName _ _ = error "Unexpected module type"
+      testModuleName _ x = error $ "findModuleByName - unexpected module: " ++ show (_module x)
 
 -- | Find the declaration in a module that causes all the symbols in
 -- the ImportSpec to come into existance.
@@ -400,7 +400,7 @@ findDeclOfImportSpec info spec = findDeclOfSymbols info (foldDeclared Set.insert
             [d] -> Just d
             [] -> Nothing
             ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (map srcLoc ds)
-      findDeclOfSymbols _ _ = error "Unexpected module type"
+      findDeclOfSymbols x _ = error $ "findDeclOfImportSpec - unexpected module: " ++ show (_module x)
 
 notSig :: A.Decl t -> Bool
 notSig (A.TypeSig {}) = False
@@ -445,7 +445,7 @@ updateDecls moveSpec modules info@(ModuleInfo {_module = A.Module _ _ _ _ decls}
                    point .= endLoc d
                  _ -> keep (endLoc d)) decls
   tell $ newDecls moveSpec modules (_moduleKey info)
-updateDecls _ _ _ = error "Unexpected module"
+updateDecls _ _ x = error $ "updateDecls - unexpected module: " ++ show (_module x)
 
 -- | Declarations that are moving here from other modules.
 newDecls :: MoveSpec -> [ModuleInfo] -> ModuleKey -> String
@@ -469,4 +469,4 @@ declText (ModuleInfo {_module = m@(A.Module _ mh ps is ds), _moduleText = mtext}
                      (d1 : _) -> endLoc d1
                      [] -> srcLoc (A.ann m) in
     spanText (mkSrcSpan p (endLoc d)) mtext
-declText _ _ = error "Unexpected module type"
+declText x _ = error $ "declText - unexpected module: " ++ show (_module x)
