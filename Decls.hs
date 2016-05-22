@@ -226,7 +226,7 @@ skip loc = point .= loc
 -- Find the declaration of the symbols of an import spec.  If that
 -- declaration moved, update the module name.
 updateImports :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> RWS String String St ()
-updateImports moveSpec modules thisModule@(ModuleInfo {_moduleKey = thisKey@(ModuleKey {_moduleName = Just thisModuleName}),
+updateImports moveSpec modules thisModule@(ModuleInfo {_moduleKey = thisKey@(ModuleKey {_moduleName = thisModuleName}),
                                                        _module = A.Module _ _ _ thisModuleImports _}) = do
   -- Update the existing imports
   mapM_ doImportDecl thisModuleImports
@@ -258,7 +258,7 @@ updateImports moveSpec modules thisModule@(ModuleInfo {_moduleKey = thisKey@(Mod
                 | -- has import module name changed?
                   name' /= name &&
                   -- don't generate self imports
-                  name' /= thisModuleName ->
+                  Just name' /= thisModuleName ->
                     tell ("\nimport " ++ prettyPrint' name' ++ " (" ++ prettyPrint' spec ++ ")")
             _ -> pure ()
 
