@@ -6,7 +6,6 @@
 module Imports (cleanImports) where
 
 import Control.Exception (SomeException)
-import Control.Monad (void)
 import Control.Monad.Trans (liftIO, MonadIO)
 import Data.Char (toLower)
 import Data.Foldable (fold)
@@ -28,7 +27,7 @@ import SrcLoc (srcLoc)
 import Symbols (symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
-import System.FilePath.Extra2 (replaceFile)
+import System.FilePath.Extra (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
 import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleText), ModuleKey(_moduleTop), DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule)
 
@@ -43,7 +42,7 @@ cleanImports scratch info =
                                                         do putStrLn (path ++ " imports changed")
                                                            -- let (path', ext) = splitExtension path in
                                                            -- writeFile {-path' ++ "-new" ++ ext-} s
-                                                           void $ replaceFile path s
+                                                           replaceFile path s
                                        Just _ -> pure ()) info
     where
       keys = Set.fromList (map _moduleKey info)

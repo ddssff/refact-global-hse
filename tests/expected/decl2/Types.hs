@@ -4,7 +4,6 @@ module Types
     ( ModuleKey(..)
     , ModuleInfo(..)
     , fullPathOfModuleInfo
-    , fullPathOfModuleKey
     , hseExtensions
     , hsFlags
     , hsSourceDirs
@@ -30,7 +29,7 @@ import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Syntax as S (ModuleName(..), Name(..))
 import SrcLoc (fixSpan, textSpan)
 import System.Directory (canonicalizePath)
-import System.FilePath ((</>), (<.>), joinPath, makeRelative, splitDirectories, splitExtension, splitFileName)
+import System.FilePath ((</>), joinPath, makeRelative, splitDirectories, splitExtension, splitFileName)
 import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
 
 -- A module is uniquely identitifed by its path and name
@@ -50,12 +49,6 @@ data ModuleInfo =
 
 fullPathOfModuleInfo :: ModuleInfo -> FilePath
 fullPathOfModuleInfo m = _moduleTop (_moduleKey m) </> _modulePath m
-
-fullPathOfModuleKey :: ModuleKey -> FilePath
-fullPathOfModuleKey (ModuleKey {_moduleTop = top, _moduleName = mname}) =
-    top </> maybe "Main" moduleNameToPath mname <.> "hs"
-    where
-      moduleNameToPath (S.ModuleName name) = (joinPath . filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))) name
 
   -- | From hsx2hs, but removing Arrows because it makes test case
 -- fold3c and others fail.  Maybe we should parse the headers and then

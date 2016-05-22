@@ -1,22 +1,31 @@
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts, RankNTypes, ScopedTypeVariables #-}
 
 module IO
     ( withTempDirectory
     , withCurrentDirectory
+    , replaceFile
     ) where
 
-import Control.Exception.Lifted as IO (bracket, catch)
+import Control.Exception (SomeException)
+import Control.Exception.Lifted as IO (bracket, catch, throw, try)
+import Control.Monad (when)
+import Control.Monad.Base (MonadBase)
 import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
-import System.Directory (getCurrentDirectory, removeDirectoryRecursive, setCurrentDirectory)
+import Debug.Trace
+import System.Directory (createDirectoryIfMissing, getCurrentDirectory, removeDirectoryRecursive, removeFile, setCurrentDirectory)
+import System.FilePath (splitFileName)
+import System.IO.Error
 import qualified System.IO.Temp as Temp (createTempDirectory)
+import System.Posix.Files
 
-withCurrentDirectory :: (MonadIO m, MonadBaseControl IO m) => FilePath -> m a -> m a
+withCurrentDirectory :: forall m a. (MonadIO m, MonadBaseControl IO m) => FilePath -> m a -> m a
 withCurrentDirectory path action =
     liftIO (putStrLn ("cd " ++ path)) >>
     IO.bracket (liftIO getCurrentDirectory >>= \save -> liftIO (setCurrentDirectory path) >> return save)
-               (\saved -> liftIO $ setCurrentDirectory saved)
-               (const action)
+               (liftIO . setCurrentDirectory)
+               (const (action `IO.catch` (\(e :: SomeException) -> liftIO (putStrLn ("in " ++ path)) >> throw e)) :: String -> m a)
+               -- (const action `catch` (\e -> liftIO (putStrLn ("in " ++ path) >> throw e)))
 
 withTempDirectory :: (MonadIO m, MonadBaseControl IO m) =>
                      Bool
@@ -32,3 +41,15 @@ withTempDirectory cleanup targetDir template callback =
 
 ignoringIOErrors :: IO () -> IO ()
 ignoringIOErrors ioe = ioe `IO.catch` (\e -> const (return ()) (e :: IOError))
+
+replaceFile :: FilePath -> String -> IO ()
+replaceFile path text = do
+  createDirectoryIfMissing True (parentPath path)
+  removeFile path `catch` (\e -> if isDoesNotExistError e then return () else ioError e)
+  writeFile path ({-trace (path ++ " text: " ++ show text)-} text)
+  text' <- readFile path
+  when (text /= text') (error $ "Failed to replace " ++ show path)
+    where
+      -- Return the path of the directory containing a file.
+      parentPath :: FilePath -> FilePath
+      parentPath path = fst (splitFileName path)

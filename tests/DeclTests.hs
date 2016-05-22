@@ -8,28 +8,24 @@
 
 module DeclTests where
 
-import Debug.Trace
-import Control.Exception (SomeException)
 import Data.List hiding (find)
 import Data.Maybe
-import Data.Set as Set (Set, insert, member)
-import Decls (moveDecls, moveDeclsAndClean)
+import Decls (makeMoveSpec, moveDeclsAndClean)
 import IO (withCurrentDirectory, withTempDirectory)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
-import Language.Haskell.Exts.Pretty
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Annotated.Simplify (sName)
 import qualified Language.Haskell.Exts.Syntax as S
-import Symbols (foldDeclared)
 import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
-import System.Process (readProcess, readProcessWithExitCode)
+import System.Process (readProcessWithExitCode)
 import Test.HUnit
 import Types
 import Utils (gitResetSubdir)
 
 declTests :: Test
-declTests = TestList [ decl1 ]
+declTests = TestList [decl1, decl2]
 
+-- Test moving a declaration to a module that currently imports it
 decl1 :: Test
 decl1 =
     TestCase $ do
@@ -38,12 +34,29 @@ decl1 =
         withTempDirectory True "." "scratch" $ \scratch -> do
           paths <- (catMaybes . map (stripPrefix "./")) <$> (find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
           loadModules paths >>= moveDeclsAndClean moveSpec1 scratch
-      (_, diff, _) <- readProcessWithExitCode "diff" ["-ru", expected, input] ""
+      (_, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, input] ""
       gitResetSubdir input
       assertString diff
     where
       input = "tests/input/atp-haskell"
       expected = "tests/expected/decl1"
+
+-- Test moving a declaration to a non-existant module
+-- Test updating import of decl that moved from A to B in module C
+decl2 :: Test
+decl2 =
+    TestCase $ do
+      gitResetSubdir input
+      withCurrentDirectory input $
+        withTempDirectory True "." "scratch" $ \scratch -> do
+          paths <- (catMaybes . map (stripPrefix "./")) <$> (find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
+          loadModules paths >>= moveDeclsAndClean (makeMoveSpec "withCurrentDirectory" "IO" "Tmp") scratch
+      (_, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, input] ""
+      gitResetSubdir input
+      assertString diff
+    where
+      input = "tests/input/decl-mover"
+      expected = "tests/expected/decl2"
 
 moveSpec1 :: ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
 moveSpec1 k (A.TypeSig _ [A.Ident _ s] _)
