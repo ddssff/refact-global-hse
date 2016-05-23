@@ -38,3 +38,5 @@
        its export.
    13. If moving a decl creates a circular import, can we find additional
        decls to move that resolves the situation?
+   14. Comment directly following a decl should stay with that decl
+
