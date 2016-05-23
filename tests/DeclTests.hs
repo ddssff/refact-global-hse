@@ -94,6 +94,14 @@ decl5 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl5" 
                                       makeMoveSpec "fullPathOfModuleKey" "Types" "ModuleKey",
                                       makeMoveSpec "moduleKey" "Types" "ModuleKey"]
 
+decl6 :: Test
+decl6 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl6" spec
+    where
+      spec = foldl1' appendMoveSpecs [makeMoveSpec "MoveSpec" "Decls" "MoveSpec",
+                                      makeMoveSpec "makeMoveSpec" "Decls" "MoveSpec",
+                                      makeMoveSpec "appendMoveSpecs" "Decls" "MoveSpec",
+                                      makeMoveSpec "identityMoveSpec" "Decls" "MoveSpec"]
+
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
 testMoveSpec input expected moveSpec = do
   gitResetSubdir input
