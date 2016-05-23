@@ -12,17 +12,18 @@ import Data.Maybe (catMaybes, mapMaybe, maybeToList)
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set)
 import Data.Tuple (swap)
 import Debug.Trace (trace)
-import Imports (cleanImports)
 import IO (replaceFile)
-import qualified Language.Haskell.Exts.Annotated as A
-import Language.Haskell.Exts.Annotated.Simplify (sCName, {-sImportDecl, sImportSpec,-} sModuleName, sName)
+import Imports (cleanImports)
+import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(TypeSig), ExportSpec(EAbs, EThingAll, EThingWith, EVar), ExportSpecList(ExportSpecList), ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), Module(Module), ModuleHead(ModuleHead), Pretty, QName(Qual, UnQual))
+import Language.Haskell.Exts.Annotated.Simplify (sCName, sModuleName, sName)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
-import qualified Language.Haskell.Exts.Syntax as S
+import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..))
+import ModuleKey (ModuleKey(ModuleKey, _moduleName), fullPathOfModuleKey)
 import SrcLoc (endLoc, spanText, srcLoc, textSpan)
 import Symbols (FoldDeclared(foldDeclared))
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Types (fullPathOfModuleKey, ModuleInfo(..), ModuleKey(ModuleKey, _moduleName), loadModule)
+import Types (loadModule, ModuleInfo(..))
 import Utils (dropWhile2)
 
 -- | Specifies where to move each declaration of each module.  Given a

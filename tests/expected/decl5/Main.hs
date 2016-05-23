@@ -4,19 +4,14 @@
 {-# OPTIONS -Wall #-}
 
 import Control.Exception (SomeException)
-import Control.Exception.Lifted as IO (bracket, catch)
-import Control.Monad.Trans (liftIO, MonadIO)
-import Control.Monad.Trans.Control (MonadBaseControl)
-import Decls ({-moveDecls,-} moveDeclsAndClean)
---import Imports (cleanImports)
-import IO (withTempDirectory, withCurrentDirectory)
-import qualified Language.Haskell.Exts.Annotated.Syntax as A
+import Decls (moveDeclsAndClean)
+import IO (withCurrentDirectory, withTempDirectory)
+import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl(FunBind, TypeSig), Name(Ident), Match(Match))
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
-import qualified Language.Haskell.Exts.Syntax as S
-import System.Directory (getCurrentDirectory, removeDirectoryRecursive, setCurrentDirectory)
+import qualified Language.Haskell.Exts.Syntax as S (ModuleName(ModuleName))
+import ModuleKey (ModuleKey(..))
 import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
-import qualified System.IO.Temp as Temp (createTempDirectory)
-import Types (loadModule, ModuleInfo(..), ModuleKey(..))
+import Types (loadModule, ModuleInfo(..))
 
 main :: IO ()
 -- main = testOn "/home/dsf/git/atp-haskell/src" $ cleanImports

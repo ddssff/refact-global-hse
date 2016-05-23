@@ -1,10 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 
 module Types
-    ( ModuleKey(..)
-    , ModuleInfo(..)
+    ( ModuleInfo(..)
     , fullPathOfModuleInfo
-    , fullPathOfModuleKey
     , hseExtensions
     , hsFlags
     , hsSourceDirs
@@ -16,29 +14,20 @@ module Types
 import qualified CPP (BoolOptions(locations), CpphsOptions(boolopts), defaultCpphsOptions, parseFileWithCommentsAndCPP)
 import Control.Exception (Exception, SomeException)
 import Control.Exception.Lifted as IO (try)
-import Control.Monad (when)
 import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
-import Data.List (groupBy, intercalate)
 import Data.Set as Set (empty, Set, singleton, union, unions)
-import qualified Language.Haskell.Exts.Annotated as A (Decl(DerivDecl), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), QName(Qual, UnQual), Type(..))
+import qualified Language.Haskell.Exts.Annotated as A (Decl(DerivDecl), InstHead(..), InstRule(..), Module, QName(Qual, UnQual), Type(..))
 import Language.Haskell.Exts.Annotated.Simplify as S (sModuleName, sName)
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
 import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensions, parseFilename, fixities), fromParseResult)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Syntax as S (ModuleName(..), Name(..))
+import ModuleKey (ModuleKey(ModuleKey, _moduleTop, _moduleName), moduleKey)
 import SrcLoc (fixSpan, textSpan)
-import System.Directory (canonicalizePath)
-import System.FilePath ((</>), (<.>), joinPath, makeRelative, splitDirectories, splitExtension, splitFileName)
+import System.FilePath ((</>), makeRelative)
 import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
-
--- A module is uniquely identitifed by its path and name
-data ModuleKey =
-    ModuleKey { _moduleTop :: FilePath      -- ^ The <dir> for which ghc -i<dir> finds this module
-              , _moduleName :: Maybe S.ModuleName
-              -- ^ The module name, if it has one.
-              } deriving (Eq, Ord, Show)
 data ModuleInfo =
     ModuleInfo { _moduleKey :: ModuleKey
                , _module :: A.Module SrcSpanInfo
@@ -50,12 +39,6 @@ data ModuleInfo =
 
 fullPathOfModuleInfo :: ModuleInfo -> FilePath
 fullPathOfModuleInfo m = _moduleTop (_moduleKey m) </> _modulePath m
-
-fullPathOfModuleKey :: ModuleKey -> FilePath
-fullPathOfModuleKey (ModuleKey {_moduleTop = top, _moduleName = mname}) =
-    top </> maybe "Main" moduleNameToPath mname <.> "hs"
-    where
-      moduleNameToPath (S.ModuleName name) = (joinPath . filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))) name
 
   -- | From hsx2hs, but removing Arrows because it makes test case
 -- fold3c and others fail.  Maybe we should parse the headers and then
@@ -119,26 +102,6 @@ cpphsOptions =
           { CPP.locations = False
       }
     }
-
--- | Compute the module key from a filepath and the parsed module.
-moduleKey :: FilePath -> A.Module SrcSpanInfo -> IO ModuleKey
-moduleKey _ (A.XmlPage {}) = error "XmlPage"
-moduleKey _ (A.XmlHybrid {}) = error "XmlHybrid"
-moduleKey path (A.Module _ Nothing _ _ _) = do
-  path' <- canonicalizePath path
-  let (top, _sub) = splitFileName path'
-  pure $ ModuleKey top Nothing
-moduleKey path (A.Module _ (Just (A.ModuleHead _ (A.ModuleName _ name) _ _)) _ _ _) = do
-  path' <- canonicalizePath path
-  let name' = splitModuleName name
-      (path'', _ext) = splitExtension path'
-      dirs = splitDirectories path''
-      (dirs', name'') = splitAt (length dirs - length name') dirs
-  when (name'' /= name') (error $ "Module name mismatch - name: " ++ show name' ++ ", path: " ++ show name'')
-  pure $ ModuleKey (joinPath dirs')
-                   (Just (S.ModuleName (intercalate "." name'')))
-      where
-        splitModuleName = filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))
 
 instance Pretty ModuleKey where
     pPrint (ModuleKey {_moduleName = m}) =
