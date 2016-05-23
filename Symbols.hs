@@ -207,3 +207,6 @@ instance EZPrint S.Name where
 instance EZPrint (Maybe S.ModuleName) where
     ezPrint (Just x) = prettyPrint x
     ezPrint Nothing = "Main"
+
+instance EZPrint (A.Decl l) where
+    ezPrint d = ezPrint (foldDeclared (:) [] d)

@@ -62,6 +62,7 @@ data MoveType
     -- import cycle.  Therefore we need to convert the (remaining)
     -- exports of the departure module into imports and add them to
     -- the arrival module.
+    deriving Show
 
 -- A simple MoveSpec builder.
 makeMoveSpec :: String -> String -> String -> MoveSpec
@@ -312,13 +313,20 @@ importsForDepartingDecls moveSpec modules (Just thisModule@(ModuleInfo {_moduleK
     concatMap (\d -> case moveSpec thisKey d of
                        someKey@(ModuleKey {_moduleName = Just someModuleName})
                            | someKey /= thisKey ->
-                               case findModuleByKey modules someKey of
+                               case t2 d thisKey someKey (findModuleByKey modules someKey) of
                                  Just someModule@(ModuleInfo {_module = A.Module _ _ _ someModuleImports _}) ->
                                      case moveType someModuleImports thisModuleName of
                                        Down ->  "\n" ++ prettyPrint' (importSpecFromDecl someModuleName d)
                                        Up -> ""
-                                 Nothing -> ""
+                                 -- Moving a declaration from thisKey to someKey is a "Down"
+                                 -- move if there are any remaining uses of those symbols in
+                                 -- thisKey.  It is an "Up" move if the declarations still
+                                 -- depend on exports of thisKey.  FIXME: I haven't
+                                 -- implemented theses tests yet, so assume Down for now.
+                                 Nothing -> "\n" ++ prettyPrint' (importSpecFromDecl someModuleName d)
                        _ -> "") ds
+    where
+      t2 d k k' x = trace ("departing: " ++ ezPrint d ++ " from " ++ ezPrint k ++ " -> " ++ ezPrint k') x
 importsForDepartingDecls _ _ _ = ""
 
 moveType :: [A.ImportDecl SrcSpanInfo] -> S.ModuleName -> MoveType
