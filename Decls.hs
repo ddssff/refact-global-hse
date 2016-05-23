@@ -15,12 +15,12 @@ import Debug.Trace (trace)
 import Imports (cleanImports)
 import IO (replaceFile)
 import qualified Language.Haskell.Exts.Annotated as A
-import Language.Haskell.Exts.Annotated.Simplify (sCName, {-sImportDecl, sImportSpec,-} sModuleName, sName)
+import Language.Haskell.Exts.Annotated.Simplify (sCName, {-sImportDecl, sImportSpec,-} sExportSpec, sModuleName, sName)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S
 import SrcLoc (endLoc, spanText, srcLoc, textSpan)
-import Symbols (FoldDeclared(foldDeclared))
+import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Types (fullPathOfModuleKey, ModuleInfo(..), ModuleKey(ModuleKey, _moduleName), loadModule)
 import Utils (dropWhile2, EZPrint(ezPrint))
@@ -219,9 +219,9 @@ newExports moveSpec modules thisKey =
       names = nub $ concatMap newExportsFromModule (filter (\x -> _moduleKey x /= thisKey) modules)
       -- Scan a module other than m for declarations moving to m.  If
       -- found, transfer the export from there to here.
-      newExportsFromModule :: ModuleInfo -> [S.Name]
+      newExportsFromModule :: ModuleInfo -> [S.ExportSpec]
       newExportsFromModule (ModuleInfo {_moduleKey = k', _module = A.Module _l _h _ _i ds}) =
-          concatMap (\d -> if (moveSpec k' d == thisKey) then foldDeclared (:) [] d else []) ds
+          concatMap (\d -> if (moveSpec k' d == thisKey) then toExportSpecs d else []) ds
       newExportsFromModule x = error $ "newExports - unexpected module: " ++ show (_module x)
 
 findNewKeyOfExportSpec :: MoveSpec -> ModuleInfo -> A.ExportSpec SrcSpanInfo -> Maybe ModuleKey
@@ -383,20 +383,24 @@ importDeclFromExportSpecs moveSpec
       -- Build ImportSpecs of m corresponding to some export specs.
       importSpecsFromExportSpecs :: [S.ImportSpec]
       importSpecsFromExportSpecs =
-          mapMaybe toImportSpec (filter (\e -> findNewKeyOfExportSpec moveSpec someInfo e == Just (_moduleKey someInfo)) especs)
+          map exportToImport' (filter (\e -> findNewKeyOfExportSpec moveSpec someInfo e == Just (_moduleKey someInfo)) especs)
           where
-            -- These cases probably need work.
-            toImportSpec :: A.ExportSpec SrcSpanInfo -> Maybe S.ImportSpec
-            toImportSpec (A.EVar _ (A.Qual _ _mname name)) = Just $ S.IVar (sName name)
-            toImportSpec (A.EVar _ (A.UnQual _ name)) = Just $ S.IVar (sName name)
-            toImportSpec (A.EAbs _ _space (A.UnQual _ _name)) = Nothing
-            toImportSpec (A.EAbs _ _space (A.Qual _ _mname _name)) = Nothing
-            toImportSpec (A.EThingAll _ (A.UnQual _ name)) = Just $ S.IThingAll (sName name)
-            toImportSpec (A.EThingAll _ (A.Qual _ _mname _name)) = Nothing
-            toImportSpec (A.EThingWith _ (A.UnQual _ name) cnames) = Just $ S.IThingWith (sName name) (map sCName cnames)
-            toImportSpec (A.EThingWith _ (A.Qual _ _mname _name) _cnames) = Nothing
-            toImportSpec _ = Nothing
 importDeclFromExportSpecs _ _ _ = Nothing
+
+-- | These cases probably need work.
+exportToImport' :: A.ExportSpec SrcSpanInfo -> S.ImportSpec
+exportToImport' = exportToImport . sExportSpec
+
+exportToImport :: S.ExportSpec -> S.ImportSpec
+exportToImport (S.EVar (S.Qual _mname name)) = S.IVar name
+exportToImport (S.EVar (S.UnQual name)) = S.IVar name
+exportToImport x@(S.EAbs _space (S.UnQual _name)) = error $ "exportToImport: " ++ prettyPrint x
+exportToImport x@(S.EAbs _space (S.Qual _mname _name)) = error $ "exportToImport: " ++ prettyPrint x
+exportToImport (S.EThingAll (S.UnQual name)) = S.IThingAll name
+exportToImport x@(S.EThingAll (S.Qual _mname _name)) = error $ "exportToImport: " ++ prettyPrint x
+exportToImport (S.EThingWith (S.UnQual name) cnames) = S.IThingWith name cnames
+exportToImport x@(S.EThingWith (S.Qual _mname _name) _cnames) = error $ "exportToImport: " ++ prettyPrint x
+-- exportToImport x = error $ "exportToImport: " ++ prettyPrint x
 
 -- | Does module m import from name?
 importsSymbolsFrom :: [A.ImportDecl SrcSpanInfo] -> S.ModuleName -> Bool
@@ -412,7 +416,7 @@ importSpecFromDecl m d =
                  , S.importSafe = False
                  , S.importPkg = Nothing
                  , S.importAs = Nothing
-                 , S.importSpecs = Just (False, map S.IVar (foldDeclared (:) [] d)) }
+                 , S.importSpecs = Just (False, map exportToImport (toExportSpecs d)) }
 
 -- | Given in import spec and the name of the module it was imported
 -- from, return the name of the new module where it will now be

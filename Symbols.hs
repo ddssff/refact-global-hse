@@ -3,6 +3,7 @@
 module Symbols
     ( FoldDeclared(foldDeclared)
     , FoldMembers(foldMembers)
+    , HasSymbols (toExportSpecs)
     , symbolsDeclaredBy
     , members
     , exports
@@ -13,9 +14,85 @@ import Data.List (foldl')
 import Data.Maybe (fromMaybe)
 import Language.Haskell.Exts.Annotated.Simplify (sName)
 import Language.Haskell.Exts.Pretty (prettyPrint)
-import qualified Language.Haskell.Exts.Annotated.Syntax as A (ClassDecl(..), CName(..), ConDecl(..), Decl(..), DeclHead(..), ExportSpec(..), FieldDecl(..), GadtDecl(..), ImportSpec(..), InstHead(..), InstRule(..), Match(..), Name, Pat(..), PatField(..), QName(..), QualConDecl(..), RPat(..))
-import qualified Language.Haskell.Exts.Syntax as S (CName(..), ExportSpec(..), ImportSpec(..), ModuleName(..), Name(..), QName(..))
+import qualified Language.Haskell.Exts.Annotated.Syntax as A -- (ClassDecl(..), CName(..), ConDecl(..), Decl(..), DeclHead(..), ExportSpec(..), FieldDecl(..), GadtDecl(..), ImportSpec(..), InstHead(..), InstRule(..), Match(..), Name, Pat(..), PatField(..), QName(..), QualConDecl(..), RPat(..))
+import Language.Haskell.Exts.Annotated.Simplify (sDecl)
+import Language.Haskell.Exts.SrcLoc (SrcInfo)
+import Language.Haskell.Exts.Syntax (Decl(..))
+import qualified Language.Haskell.Exts.Syntax as S -- (CName(..), ExportSpec(..), ImportSpec(..), ModuleName(..), Name(..), QName(..))
 import Utils (EZPrint(ezPrint))
+
+class HasSymbols a where
+    toExportSpecs :: a -> [S.ExportSpec]
+
+instance SrcInfo l => HasSymbols (A.Decl l) where
+    toExportSpecs = toExportSpecs . sDecl
+
+class HasCNames a where
+    toCNames :: a -> [S.CName]
+
+{-
+data ExportSpec
+  = EVar QName
+  | EAbs Namespace QName
+  | EThingAll QName  X(..)
+  | EThingWith QName [CName]  X(a,b,c)
+  | EModuleContents ModuleName
+
+data CName = VarName Name | ConName Name
+-}
+
+instance HasSymbols S.Decl where
+    toExportSpecs (TypeDecl _SrcLoc name _TyVarBinds _Type) = [S.EVar (S.UnQual name)]
+    toExportSpecs x@(TypeFamDecl _SrcLoc _Name _TyVarBinds _MaybeKind) = error $ "HasSymbols TypeFamDecl: " ++ prettyPrint x
+    toExportSpecs x@(ClosedTypeFamDecl _SrcLoc _Name __TyVarBind _MaybeKind _TypeEqns) = error $ "HasSymbols ClosedTypeFamDecl: " ++ prettyPrint x
+    toExportSpecs (DataDecl _SrcLoc _DataOrNew _Context name _TyVarBind qualConDecls _Deriving) =
+        case concatMap toCNames qualConDecls of
+          [] -> [S.EVar (S.UnQual name)]
+          xs -> [S.EThingWith (S.UnQual name) xs]
+    toExportSpecs x@(GDataDecl _SrcLoc _DataOrNew _Context _Name _TyVarBind _MaybeKind _GadtDecls _Deriving) = error $ "HasSymbols GDataDecl: " ++ prettyPrint x
+    toExportSpecs x@(DataFamDecl _SrcLoc _Context _Name _TyVarBind _MaybeKind) = error $ "HasSymbols DataFamDecl: " ++ prettyPrint x
+    toExportSpecs x@(TypeInsDecl _SrcLoc _Type1 _Type2) = error $ "HasSymbols TypeInsDecl: " ++ prettyPrint x
+    toExportSpecs x@(DataInsDecl _SrcLoc _DataOrNew _Type _QualConDecls _Derivings) = error $ "HasSymbols DataInsDecl: " ++ prettyPrint x
+    toExportSpecs x@(GDataInsDecl _SrcLoc _DataOrNew _Type _MaybeKind _GadtDecls _Deriving) = error $ "HasSymbols GDataInsDecl: " ++ prettyPrint x
+    toExportSpecs (ClassDecl _SrcLoc _Context name _TyVarBind _FunDeps classDecls) =
+        case concatMap toCNames classDecls of
+          [] -> [S.EVar (S.UnQual name)]
+          xs -> [S.EThingWith (S.UnQual name) xs]
+    toExportSpecs x@(InstDecl _SrcLoc _MaybeOverlap _TyVarBind _Context _QName _Types _InstDecls) = error $ "HasSymbols InstDecl: " ++ prettyPrint x
+    toExportSpecs x@(DerivDecl _SrcLoc _MaybeOverlap _TyVarBind _Context _QName _Types) = error $ "HasSymbols DerivDecl: " ++ prettyPrint x
+    toExportSpecs x@(InfixDecl _SrcLoc _Assoc _Int _Ops) = error $ "HasSymbols InfixDecl: " ++ prettyPrint x
+    toExportSpecs x@(DefaultDecl _SrcLoc _Types) = error $ "HasSymbols DefaultDecl: " ++ prettyPrint x
+    toExportSpecs x@(SpliceDecl _SrcLoc _Exp) = error $ "HasSymbols SpliceDecl: " ++ prettyPrint x
+    toExportSpecs (TypeSig _SrcLoc names _Type) = map (S.EVar . S.UnQual) names
+    toExportSpecs x@(PatSynSig _SrcLoc _Name _MaybeTyVarBind _Context1 _Context2 _Type) = error $ "HasSymbols PatSynSig: " ++ prettyPrint x
+    toExportSpecs (FunBind matches) = concatMap toExportSpecs matches
+    toExportSpecs x@(PatBind _SrcLoc _Pat _Rhs _MaybeBinds) = error $ "HasSymbols PatBind: " ++ prettyPrint x
+    toExportSpecs x@(ForImp _SrcLoc _CallConv _Safety _String _Name _Type) = error $ "HasSymbols ForImp: " ++ prettyPrint x
+    toExportSpecs x@(ForExp _SrcLoc _CallConv _String _Name _Type) = error $ "HasSymbols ForExp: " ++ prettyPrint x
+    toExportSpecs x@(PatSyn _SrcLoc _Pat1 _Pat2 _PatternSynDirection) = error $ "HasSymbols PatSyn: " ++ prettyPrint x
+    toExportSpecs x@(RulePragmaDecl _SrcLoc _Rules) = error $ "HasSymbols RulePragmaDecl: " ++ prettyPrint x
+    toExportSpecs x@(DeprPragmaDecl _SrcLoc _pairs {-[([Name], String)]-}) = error $ "HasSymbols DeprPragmaDecl: " ++ prettyPrint x
+    toExportSpecs x@(WarnPragmaDecl _SrcLoc _pairs {-[([Name], String)]-}) = error $ "HasSymbols WarnPragmaDecl: " ++ prettyPrint x
+    toExportSpecs x@(InlineSig _SrcLoc _Bool _Activation _QName) = error $ "HasSymbols InlineSig: " ++ prettyPrint x
+    toExportSpecs x@(InlineConlikeSig _SrcLoc _Activation _QName) = error $ "HasSymbols InlineConlikeSig: " ++ prettyPrint x
+    toExportSpecs x@(SpecSig _SrcLoc _Activation _QName _Types) = error $ "HasSymbols SpecSig: " ++ prettyPrint x
+    toExportSpecs x@(SpecInlineSig _SrcLoc _Bool _Activation _QName _Types) = error $ "HasSymbols SpecInlineSig: " ++ prettyPrint x
+    toExportSpecs x@(InstSig _SrcLoc _TyVarBind _Context _QName _Types) = error $ "HasSymbols InstSig: " ++ prettyPrint x
+    toExportSpecs x@(AnnPragma _SrcLoc _Annotation) = error $ "HasSymbols AnnPragma: " ++ prettyPrint x
+    toExportSpecs x@(MinimalPragma _SrcLoc _MaybeBooleanFormula) = error $ "HasSymbols MinimalPragma: " ++ prettyPrint x
+    toExportSpecs x@(RoleAnnotDecl _SrcLoc _QName _Roles) = error $ "HasSymbols RoleAnnotDecl: " ++ prettyPrint x
+
+instance HasCNames S.ClassDecl where
+    toCNames (S.ClsDecl decl) =
+        concatMap f (toExportSpecs decl)
+        where
+          f (S.EVar (S.UnQual x)) = [S.ConName x]
+          f (S.EThingWith (S.UnQual x) cnames) = (S.ConName x : cnames)
+          f _ = []
+    toCNames x@(S.ClsDataFam _SrcLoc _Context _name _TyVarBinds _MaybeKind) = error $ "ClsDataFam: " ++ prettyPrint x
+    toCNames x@(S.ClsTyFam _SrcLoc _name _TyVarBinds _MaybeKind) = error $ "ClsTyFam: " ++ prettyPrint x
+    toCNames x@(S.ClsTyDef _SrcLoc _Type1 _Type2) = error $ "ClsTyDef: " ++ prettyPrint x
+    toCNames x@(S.ClsDefSig _SrcLoc _name _type) = error $ "ClsDefSig: " ++ prettyPrint x
 
 -- | Do a fold over the names that are declared in a declaration (not
 -- every name that appears, just the ones that the declaration is
@@ -63,6 +140,9 @@ instance FoldDeclared (A.Decl a) where
     foldDeclared _ _ (A.PatSynSig _ _ _ _ _ _) = error "fixme"
     foldDeclared _ _ (A.PatSyn _ _ _ _) = error "fixme"
     foldDeclared _ _ (A.RoleAnnotDecl _ _ _) = error "fixme"
+
+instance HasSymbols S.Match where
+    toExportSpecs (S.Match _SrcLoc name _pats _MaybeType _Rhs _MaybeBinds) = [S.EVar (S.UnQual name)]
 
 instance FoldDeclared (A.DeclHead a) where
     foldDeclared f r (A.DHead _ x) = foldDeclared f r x
@@ -189,11 +269,19 @@ instance FoldMembers (A.Decl a) where
 instance FoldDeclared (A.QualConDecl l) where
     foldDeclared f r (A.QualConDecl _l _ _ x) = foldDeclared f r x
 
+instance HasCNames S.QualConDecl where
+    toCNames (S.QualConDecl _SrcLoc _TyVarBinds _Context conDecl) = toCNames conDecl
+
 -- Constructors and field names
 instance FoldDeclared (A.ConDecl l) where
     foldDeclared f r (A.ConDecl _ x _ts) = foldDeclared f r x   -- ordinary data constructor
     foldDeclared f r (A.InfixConDecl _ _t1 x _t2) = foldDeclared f r x  -- infix data constructor
     foldDeclared f r0 (A.RecDecl _ x fs) = foldl' (foldDeclared f) (foldDeclared f r0 x) fs   -- record constructor
+
+instance HasCNames S.ConDecl where
+    toCNames (S.ConDecl name _types) = [S.ConName name]
+    toCNames (S.InfixConDecl _type1 name _type2) = [S.ConName name]
+    toCNames (S.RecDecl name fields) = S.ConName name : concatMap (\(fnames, _) -> map S.VarName fnames) fields
 
 instance FoldDeclared (A.FieldDecl l) where
     foldDeclared f r (A.FieldDecl _ xs _) = foldl' (foldDeclared f) r xs
