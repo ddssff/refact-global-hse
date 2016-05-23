@@ -21,20 +21,17 @@ import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
 import Data.List (groupBy, intercalate)
 import Data.Set as Set (empty, Set, singleton, union, unions)
-import Debug.Trace (trace)
 import qualified Language.Haskell.Exts.Annotated as A (Decl(DerivDecl), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), QName(Qual, UnQual), Type(..))
 import Language.Haskell.Exts.Annotated.Simplify as S (sModuleName, sName)
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
 import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensions, parseFilename, fixities), fromParseResult)
-import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Syntax as S (ModuleName(..), Name(..))
 import SrcLoc (fixSpan, textSpan)
 import System.Directory (canonicalizePath)
 import System.FilePath ((</>), (<.>), joinPath, makeRelative, splitDirectories, splitExtension, splitFileName)
 import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
-import Utils (EZPrint(ezPrint))
 
 -- A module is uniquely identitifed by its path and name
 data ModuleKey =
@@ -50,13 +47,6 @@ data ModuleInfo =
                , _moduleText :: String
                , _moduleSpan :: SrcSpanInfo
                }
-
-instance EZPrint ModuleKey where
-    ezPrint (ModuleKey {_moduleName = n}) = maybe "Main" prettyPrint n
-
-instance EZPrint ModuleInfo where
-    ezPrint (ModuleInfo {_module = A.Module _ (Just (A.ModuleHead _ n _ _)) _ _ _}) = prettyPrint n
-    ezPrint (ModuleInfo {_module = A.Module _ Nothing _ _ _}) = "Main"
 
 fullPathOfModuleInfo :: ModuleInfo -> FilePath
 fullPathOfModuleInfo m = _moduleTop (_moduleKey m) </> _modulePath m
@@ -90,10 +80,8 @@ hsSourceDirs :: [FilePath]
 hsSourceDirs = []
 
 loadModules :: [FilePath] -> IO [ModuleInfo]
-loadModules paths = t1 <$> mapM loadModule' paths
+loadModules = mapM loadModule'
     where
-      t1 :: [ModuleInfo] -> [ModuleInfo]
-      t1 modules = trace ("modules loaded: " ++ show (map ezPrint modules)) modules
       loadModule' :: FilePath -> IO ModuleInfo
       loadModule' path = either (error . show) id <$> (loadModule path :: IO (Either SomeException ModuleInfo))
 
@@ -110,7 +98,7 @@ loadModule path =
         -- putStr processed
         -- validateParseResults parsed comments processed -- moduleText
         key <- moduleKey path parsed
-        -- putStrLn ("loaded " ++ prettyShow key)
+        putStrLn ("loaded " ++ prettyShow key)
         pure $ ModuleInfo { _moduleKey = key
                           , _module = parsed
                           , _moduleComments = comments

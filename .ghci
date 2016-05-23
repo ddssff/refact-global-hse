@@ -1,4 +1,5 @@
-:load Main
+:set -itests
+:load tests/Tests
 :m +System.Process
 :m +Test.HUnit
 :m +Decls

@@ -12,10 +12,8 @@ module Symbols
 import Data.List (foldl')
 import Data.Maybe (fromMaybe)
 import Language.Haskell.Exts.Annotated.Simplify (sName)
-import Language.Haskell.Exts.Pretty (prettyPrint)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (ClassDecl(..), CName(..), ConDecl(..), Decl(..), DeclHead(..), ExportSpec(..), FieldDecl(..), GadtDecl(..), ImportSpec(..), InstHead(..), InstRule(..), Match(..), Name, Pat(..), PatField(..), QName(..), QualConDecl(..), RPat(..))
-import qualified Language.Haskell.Exts.Syntax as S (CName(..), ExportSpec(..), ImportSpec(..), ModuleName(..), Name(..), QName(..))
-import Utils (EZPrint(ezPrint))
+import qualified Language.Haskell.Exts.Syntax as S (CName(..), ExportSpec(..), ImportSpec(..), Name(..), QName(..))
 
 -- | Do a fold over the names that are declared in a declaration (not
 -- every name that appears, just the ones that the declaration is
@@ -200,10 +198,3 @@ instance FoldDeclared (A.FieldDecl l) where
 
 instance FoldDeclared (A.GadtDecl l) where
     foldDeclared f r (A.GadtDecl _ x xs _) = let r' = foldDeclared f r x in maybe r' (foldl' (foldDeclared f) r') xs
-
-instance EZPrint S.Name where
-    ezPrint = prettyPrint
-
-instance EZPrint (Maybe S.ModuleName) where
-    ezPrint (Just x) = prettyPrint x
-    ezPrint Nothing = "Main"

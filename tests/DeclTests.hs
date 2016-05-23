@@ -25,7 +25,7 @@ import Types
 import Utils (gitResetSubdir)
 
 declTests :: Test
-declTests = TestList [decl1, decl2, decl3, decl4]
+declTests = TestList [decl1, decl2, decl3, decl4, decl5]
 
 -- Test moving a declaration to a module that currently imports it
 decl1 :: Test
@@ -86,6 +86,13 @@ decl4 :: Test
 decl4 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl4" spec
     where
       spec = appendMoveSpecs (makeMoveSpec "withTempDirectory" "IO" "Utils") (makeMoveSpec "ignoringIOErrors" "IO" "Utils")
+
+decl5 :: Test
+decl5 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl5" spec
+    where
+      spec = foldl1' appendMoveSpecs [makeMoveSpec "ModuleKey" "Types" "ModuleKey",
+                                      makeMoveSpec "fullPathOfModuleKey" "Types" "ModuleKey",
+                                      makeMoveSpec "moduleKey" "Types" "ModuleKey"]
 
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
 testMoveSpec input expected moveSpec = do

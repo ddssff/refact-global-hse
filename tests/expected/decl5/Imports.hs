@@ -35,7 +35,7 @@ import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleTe
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> [ModuleInfo] -> m ()
-cleanImports _ [] = trace ("cleanImports - no modules") (pure ())
+cleanImports scratch [] = trace ("cleanImports - no modules") (pure ())
 cleanImports scratch info =
     dump >> mapM_ (\x -> do newText <- doModule scratch x
                             let path = _moduleTop (_moduleKey x) </> _modulePath x

@@ -6,7 +6,6 @@ import Control.Exception.Lifted as IO (bracket, catch, throw)
 import Control.Monad (MonadPlus, msum)
 import Data.Bool (bool)
 import Data.Generics (Data(gmapM), GenericM, listify, Typeable)
-import Data.List (intercalate)
 import Data.Sequence (Seq, (|>))
 import System.Exit (ExitCode(..))
 import System.IO (hPutStrLn, stderr)
@@ -64,10 +63,3 @@ gitIsClean = do
 
 withCleanRepo :: IO a -> IO a
 withCleanRepo action = gitIsClean >>= bool (error "withCleanRepo: please commit or revert changes") action
-
--- | Print a very short and readable version for trace output.
-class EZPrint a where
-    ezPrint :: a -> String
-
-instance EZPrint a => EZPrint [a] where
-    ezPrint xs = "[" ++ intercalate ", " (map ezPrint xs) ++ "]"
