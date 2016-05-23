@@ -36,3 +36,5 @@
    11. Why does it sometimes insert the same import several times?
    12. Do global tests - is this symbol imported anywhere?  If not remove
        its export.
+   13. If moving a decl creates a circular import, can we find additional
+       decls to move that resolves the situation?
