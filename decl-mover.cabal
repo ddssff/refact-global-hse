@@ -15,7 +15,7 @@ Library
     containers,
     cpphs,
     directory,
-    filemanip,
+    filemanip > 0.3.6.3,
     filemanip-extra,
     filepath,
     haskell-src-exts,
@@ -45,7 +45,7 @@ executable move-decls
   Build-Depends:
     base,
     decl-mover,
-    filemanip,
+    filemanip > 0.3.6.3,
     filepath,
     lens
 
@@ -57,7 +57,7 @@ Test-Suite decl-mover-tests
     base,
     containers,
     decl-mover,
-    filemanip,
+    filemanip > 0.3.6.3,
     haskell-src-exts,
     HUnit,
     lens,
