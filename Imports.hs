@@ -6,6 +6,7 @@
 module Imports (cleanImports) where
 
 import Control.Exception (SomeException)
+import Control.Lens (view)
 import Control.Monad (void)
 import Control.Monad.Trans (liftIO, MonadIO)
 import Data.Char (toLower)
@@ -31,14 +32,14 @@ import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
 import System.FilePath.Extra2 (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
-import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleText), ModuleKey(_moduleTop), DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule)
+import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleText), moduleTop, DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
-cleanImports :: MonadIO m => FilePath -> [ModuleInfo] -> m ()
-cleanImports _ [] = trace ("cleanImports - no modules") (pure ())
-cleanImports scratch info =
+cleanImports :: MonadIO m => FilePath -> [FilePath] -> [ModuleInfo] -> m ()
+cleanImports _ _ [] = trace ("cleanImports - no modules") (pure ())
+cleanImports scratch extraTops info =
     dump >> mapM_ (\x -> do newText <- doModule scratch x
-                            let path = _moduleTop (_moduleKey x) </> _modulePath x
+                            let path = view moduleTop (_moduleKey x) </> _modulePath x
                             liftIO $ case newText of
                                        Nothing -> putStrLn (path ++ ": unable to clean imports")
                                        Just s | _moduleText x /= s ->
@@ -53,7 +54,7 @@ cleanImports scratch info =
         let cmd = "ghc"
             args' = hsFlags ++
                     ["--make", "-c", "-ddump-minimal-imports", "-outputdir", scratch, "-i" ++
-                    intercalate ":" (toList (Set.map _moduleTop keys))] ++
+                    intercalate ":" (nub (extraTops ++ toList (Set.map (view moduleTop) keys)))] ++
                     concatMap ppExtension hseExtensions ++
                     map _modulePath info
         (code, _out, err) <- liftIO $ readProcessWithExitCode cmd args' ""

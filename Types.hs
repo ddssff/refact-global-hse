@@ -1,7 +1,7 @@
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE ScopedTypeVariables, TemplateHaskell #-}
 
 module Types
-    ( ModuleKey(..)
+    ( ModuleKey(ModuleKey, _moduleName), moduleTop, moduleName
     , ModuleInfo(..)
     , fullPathOfModuleInfo
     , fullPathOfModuleKey
@@ -16,6 +16,7 @@ module Types
 import qualified CPP (BoolOptions(locations), CpphsOptions(boolopts), defaultCpphsOptions, parseFileWithCommentsAndCPP)
 import Control.Exception (Exception, SomeException)
 import Control.Exception.Lifted as IO (try)
+import Control.Lens (makeLenses)
 import Control.Monad (when)
 import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
@@ -33,15 +34,16 @@ import Language.Haskell.Exts.Syntax as S (ModuleName(..), Name(..))
 import SrcLoc (fixSpan, textSpan)
 import System.Directory (canonicalizePath)
 import System.FilePath ((</>), (<.>), joinPath, makeRelative, splitDirectories, splitExtension, splitFileName)
-import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), text)
+import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
 import Utils (EZPrint(ezPrint))
 
 -- A module is uniquely identitifed by its path and name
 data ModuleKey =
-    ModuleKey { _moduleTop :: FilePath      -- ^ The <dir> for which ghc -i<dir> finds this module
-              , _moduleName :: Maybe S.ModuleName
-              -- ^ The module name, if it has one.
+    ModuleKey { _moduleTop :: FilePath      -- ^ The Hs-Source-Dirs path for which ghc -i<dir> finds this module
+              , _moduleName :: Maybe S.ModuleName -- ^ The module name, if it has one.
               } deriving (Eq, Ord, Show)
+$(makeLenses ''ModuleKey)
+
 data ModuleInfo =
     ModuleInfo { _moduleKey :: ModuleKey
                , _module :: A.Module SrcSpanInfo
@@ -111,7 +113,7 @@ loadModule path =
         -- putStr processed
         -- validateParseResults parsed comments processed -- moduleText
         key <- moduleKey path parsed
-        -- putStrLn ("loaded " ++ prettyShow key)
+        putStrLn ("loaded " ++ prettyShow key)
         pure $ ModuleInfo { _moduleKey = key
                           , _module = parsed
                           , _moduleComments = comments
@@ -133,7 +135,8 @@ cpphsOptions =
       }
     }
 
--- | Compute the module key from a filepath and the parsed module.
+-- | Compute the module key from a filepath (absolute or relative to
+-- ".") and the parsed module.
 moduleKey :: FilePath -> A.Module SrcSpanInfo -> IO ModuleKey
 moduleKey _ (A.XmlPage {}) = error "XmlPage"
 moduleKey _ (A.XmlHybrid {}) = error "XmlHybrid"
