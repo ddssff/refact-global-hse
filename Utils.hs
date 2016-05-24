@@ -1,12 +1,12 @@
 {-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
 module Utils where
 
-import Control.Exception (catch, SomeException, throw)
-import Control.Exception.Lifted as IO (bracket, catch, throw)
+import Control.Exception (SomeException, throw)
+import Control.Exception.Lifted as IO (catch)
 import Control.Monad (MonadPlus, msum)
 import Data.Bool (bool)
 import Data.Generics (Data(gmapM), GenericM, listify, Typeable)
-import Data.List (intercalate)
+import Data.List (intercalate, stripPrefix)
 import Data.Sequence (Seq, (|>))
 import System.Exit (ExitCode(..))
 import System.IO (hPutStrLn, stderr)
@@ -71,3 +71,6 @@ class EZPrint a where
 
 instance EZPrint a => EZPrint [a] where
     ezPrint xs = "[" ++ intercalate ", " (map ezPrint xs) ++ "]"
+
+maybeStripPrefix :: Eq a => [a] -> [a] -> [a]
+maybeStripPrefix pre lst = maybe lst id (stripPrefix pre lst)

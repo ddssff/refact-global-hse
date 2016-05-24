@@ -21,35 +21,6 @@ data Params
 
 $(makeLenses ''Params)
 
-main = do
-  params <- getArgs >>= buildParams args
-  withCleanRepo $ withTempDirectory True "." "scratch" $ \scratch -> do
-    modules <- loadModules (view moduverse params)
-    moveDeclsAndClean (traceMoveSpec (view moveSpec params)) scratch modules
-  trace ("Adding modules in " ++ show (view topDir params) ++ ": " ++ show paths) (pure ())
-  return $ over moduverse (++ paths) params
-
-traceMoveSpec :: MoveSpec -> MoveSpec
-traceMoveSpec f = \k d -> let k' = f k d in if k /= k' then (trace ("moveSpec " ++ show k ++ " d -> " ++ show k') k') else k'
-
-buildParams args =
-    case getOpt' Permute options args of
-      (fns, [], [], []) -> finalize (foldr ($) params0 fns)
-      _ -> error (usageInfo "specify modules and at least one move spec" options)
-    where
-      -- Search the findDir directories for paths and add them to moduverse.
-      finalize :: Params -> IO Params
-      finalize params = do
-        paths <- concat <$> mapM (\dir ->
-                                      map (makeRelative (view topDir params </> dir))
-                                              <$> (find (depth ==? 0)
-                                                        (extension ==? ".hs" &&? fileType ==? RegularFile)
-                                                        (view topDir params </> dir)))
-                                 (_findDirs params)
-
-maybeStripPrefix :: Eq a => [a] -> [a] -> [a]
-maybeStripPrefix pre lst = maybe lst id (stripPrefix pre lst)
-
 params0 :: Params
 params0 = Params {_moveSpec = identityMoveSpec, _topDir = ".", _findDirs = [], _moduverse = []}
 
@@ -62,3 +33,29 @@ options =
       Option "" ["mod"] (ReqArg (\s -> over moduverse (s :)) "PATH") "Add a module to the moduverse",
       Option "" ["top"] (ReqArg (\s -> over topDir (const s)) "DIR") "Set the top directory, module paths will be relative to this (so do it first)",
       Option "" ["find"] (ReqArg (\s -> over findDirs (s :)) "DIR") "Directory relative to top to search (non-recursively) for .hs files to add to the moduverse" ]
+
+buildParams = do
+  args <- getArgs
+  case getOpt' Permute options args of
+    (fns, [], [], []) -> finalize (foldr ($) params0 fns)
+    _ -> error (usageInfo "specify modules and at least one move spec" options)
+    where
+      -- Search the findDir directories for paths and add them to moduverse.
+      finalize :: Params -> IO Params
+      finalize params = do
+        paths <- concat <$> mapM (\dir ->
+                                      map (makeRelative (view topDir params </> dir))
+                                              <$> (find (depth ==? 0)
+                                                        (extension ==? ".hs" &&? fileType ==? RegularFile)
+                                                        (view topDir params </> dir)))
+                                 (_findDirs params)
+        pure $ over moduverse (++ paths) params
+
+main = do
+  params <- buildParams
+  withCleanRepo $ withTempDirectory True "." "scratch" $ \scratch -> do
+    modules <- loadModules (view moduverse params)
+    moveDeclsAndClean (traceMoveSpec (view moveSpec params)) scratch modules
+
+traceMoveSpec :: MoveSpec -> MoveSpec
+traceMoveSpec f = \k d -> let k' = f k d in if k /= k' then (trace ("moveSpec " ++ show k ++ " d -> " ++ show k') k') else k'

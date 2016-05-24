@@ -13,7 +13,6 @@ import Data.Maybe
 import Decls (appendMoveSpecs, makeMoveSpec, moveDeclsAndClean, MoveSpec)
 import IO (withCurrentDirectory, withTempDirectory)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
-import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Annotated.Simplify (sName)
 import qualified Language.Haskell.Exts.Syntax as S
@@ -116,6 +115,7 @@ testMoveSpec input expected moveSpec = do
 testSpec :: MoveSpec -> ModuleInfo -> IO ModuleInfo
 testSpec moveSpec m@(ModuleInfo {_moduleKey = k, _module = A.Module _ _ _ _ ds}) = do
   putStrLn ("---- module " ++ show (_moduleName k) ++ " ----")
-  mapM (\d -> let k' = moveSpec k d in
-              putStrLn (show (foldDeclared (:) [] d) ++ ": " ++ if k /= k' then show k ++ " " ++  " -> " ++ show k' else "unchanged")) ds
+  mapM_ (\d -> let k' = moveSpec k d in
+               putStrLn (show (foldDeclared (:) [] d) ++ ": " ++ if k /= k' then show k ++ " " ++  " -> " ++ show k' else "unchanged")) ds
   return m
+testSpec _ _ = error "Unexpected module"

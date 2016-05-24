@@ -33,7 +33,7 @@ import Language.Haskell.Exts.Syntax as S (ModuleName(..), Name(..))
 import SrcLoc (fixSpan, textSpan)
 import System.Directory (canonicalizePath)
 import System.FilePath ((</>), (<.>), joinPath, makeRelative, splitDirectories, splitExtension, splitFileName)
-import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
+import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), text)
 import Utils (EZPrint(ezPrint))
 
 -- A module is uniquely identitifed by its path and name
@@ -57,6 +57,7 @@ instance EZPrint ModuleKey where
 instance EZPrint ModuleInfo where
     ezPrint (ModuleInfo {_module = A.Module _ (Just (A.ModuleHead _ n _ _)) _ _ _}) = prettyPrint n
     ezPrint (ModuleInfo {_module = A.Module _ Nothing _ _ _}) = "Main"
+    ezPrint (ModuleInfo {_module = _}) = error "ezPrint: unexpected module"
 
 fullPathOfModuleInfo :: ModuleInfo -> FilePath
 fullPathOfModuleInfo m = _moduleTop (_moduleKey m) </> _modulePath m

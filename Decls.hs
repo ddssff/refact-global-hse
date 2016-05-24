@@ -8,14 +8,14 @@ import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS)
 import Data.Foldable (find)
 import Data.List (foldl', intercalate, nub)
 import Data.Map as Map (insertWith, Map, mapWithKey, singleton, toList)
-import Data.Maybe (catMaybes, mapMaybe, maybeToList)
+import Data.Maybe (catMaybes, maybeToList)
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set)
 import Data.Tuple (swap)
 import Debug.Trace (trace)
 import Imports (cleanImports)
 import IO (replaceFile)
 import qualified Language.Haskell.Exts.Annotated as A
-import Language.Haskell.Exts.Annotated.Simplify (sCName, sDecl, sExportSpec, sModuleName, sName)
+import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S
@@ -42,6 +42,7 @@ appendMoveSpecs f g =
                   then k1
                   else error "Conflicting move specs"
 
+identityMoveSpec :: MoveSpec
 identityMoveSpec = \k _ -> k
 
 -- | Declaration moves can be characterized as one of two types, Down
@@ -186,7 +187,7 @@ updateHeader moveSpec modules m@(ModuleInfo {_moduleKey = k, _module = A.Module 
   keep (case specs of
           (x : _) -> srcLoc (A.ann x)
           [] -> srcLoc l)
-  mapM_ (uncurry doExport) (pairs specs)
+  mapM_ (uncurry doExport) (listPairs specs)
   tell (concat (map (exportSep ++) (newExports moveSpec modules (_moduleKey m))))
   -- mapM_ newExports (filter (\x -> _moduleKey x /= _moduleKey m) modules)
     where
@@ -205,10 +206,10 @@ updateHeader moveSpec modules m@(ModuleInfo {_moduleKey = k, _module = A.Module 
             nextLoc = maybe (endLoc (A.ann spec)) (srcLoc . A.ann) next
 updateHeader _ _ _ = pure ()
 
-pairs :: [a] -> [(a, Maybe a)]
-pairs (x1 : x2 : xs) = (x1, Just x2) : pairs (x2 : xs)
-pairs [x] = [(x, Nothing)]
-pairs [] = []
+listPairs :: [a] -> [(a, Maybe a)]
+listPairs (x1 : x2 : xs) = (x1, Just x2) : listPairs (x2 : xs)
+listPairs [x] = [(x, Nothing)]
+listPairs [] = []
 
 -- | Text of exports added due to arriving declarations
 newExports :: MoveSpec -> [ModuleInfo] -> ModuleKey -> [String]
@@ -249,8 +250,8 @@ skip loc = point .= loc
 -- Find the declaration of the symbols of an import spec.  If that
 -- declaration moved, update the module name.
 updateImports :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> RWS String String St ()
-updateImports moveSpec modules thisModule@(ModuleInfo {_moduleKey = thisKey@(ModuleKey {_moduleName = thisModuleName}),
-                                                       _module = A.Module _ _ _ thisModuleImports _}) = do
+updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey@(ModuleKey {_moduleName = thisModuleName}),
+                                            _module = A.Module _ _ _ thisModuleImports _}) = do
   -- Update the existing imports
   mapM_ doImportDecl thisModuleImports
   mapM_ doNewImports (filter (\m -> _moduleKey m /= thisKey) modules)
@@ -263,9 +264,9 @@ updateImports moveSpec modules thisModule@(ModuleInfo {_moduleKey = thisKey@(Mod
       doImportDecl x@(A.ImportDecl {importSpecs = Nothing}) = (keep . endLoc . A.ann) x
       doImportDecl x@(A.ImportDecl {importModule = name, importSpecs = Just (A.ImportSpecList l hiding specs)}) =
           do keep (case specs of
-                     (x : _) -> srcLoc (A.ann x)
+                     (spec : _) -> srcLoc (A.ann spec)
                      [] -> srcLoc l)
-             mapM_ (uncurry (doImportSpec (sModuleName name) hiding)) (pairs specs)
+             mapM_ (uncurry (doImportSpec (sModuleName name) hiding)) (listPairs specs)
              (keep . endLoc . A.ann) x
              mapM_ (importsForMovingDecls (sModuleName name) hiding) specs
 
@@ -309,12 +310,12 @@ updateImports _ _ x = error $ "updateImports - unexpected module: " ++ show (_mo
 -- thisModule a cycle can appear, because of the code that converts the
 -- exports of someModule into imports in thisModule.
 importsForDepartingDecls :: MoveSpec -> [ModuleInfo] -> Maybe ModuleInfo -> String
-importsForDepartingDecls moveSpec modules (Just thisModule@(ModuleInfo {_moduleKey = thisKey@(ModuleKey {_moduleName = Just thisModuleName}), _module = A.Module _ _ _ _ ds})) =
+importsForDepartingDecls moveSpec modules (Just (ModuleInfo {_moduleKey = thisKey@(ModuleKey {_moduleName = Just thisModuleName}), _module = A.Module _ _ _ _ ds})) =
     concatMap (\d -> case moveSpec thisKey d of
                        someKey@(ModuleKey {_moduleName = Just someModuleName})
                            | someKey /= thisKey ->
                                case t2 d thisKey someKey (findModuleByKey modules someKey) of
-                                 Just someModule@(ModuleInfo {_module = A.Module _ _ _ someModuleImports _}) ->
+                                 Just (ModuleInfo {_module = A.Module _ _ _ someModuleImports _}) ->
                                      case moveType someModuleImports thisModuleName of
                                        Down ->  "\n" ++ prettyPrint' (importSpecFromDecl someModuleName d)
                                        Up -> ""
@@ -323,6 +324,7 @@ importsForDepartingDecls moveSpec modules (Just thisModule@(ModuleInfo {_moduleK
                                  -- thisKey.  It is an "Up" move if the declarations still
                                  -- depend on exports of thisKey.  FIXME: I haven't
                                  -- implemented theses tests yet, so assume Down for now.
+                                 Just _ -> error "Unexpected module"
                                  Nothing -> "\n" ++ prettyPrint' (importSpecFromDecl someModuleName d)
                        _ -> "") ds
     where
@@ -394,12 +396,17 @@ exportToImport' = exportToImport . sExportSpec
 exportToImport :: S.ExportSpec -> S.ImportSpec
 exportToImport (S.EVar (S.Qual _mname name)) = S.IVar name
 exportToImport (S.EVar (S.UnQual name)) = S.IVar name
+exportToImport x@(S.EVar (S.Special _)) = error $ "exportToImport: " ++ prettyPrint x
 exportToImport x@(S.EAbs _space (S.UnQual _name)) = error $ "exportToImport: " ++ prettyPrint x
 exportToImport x@(S.EAbs _space (S.Qual _mname _name)) = error $ "exportToImport: " ++ prettyPrint x
+exportToImport x@(S.EAbs _space (S.Special _)) = error $ "exportToImport: " ++ prettyPrint x
 exportToImport (S.EThingAll (S.UnQual name)) = S.IThingAll name
 exportToImport x@(S.EThingAll (S.Qual _mname _name)) = error $ "exportToImport: " ++ prettyPrint x
+exportToImport x@(S.EThingAll (S.Special _)) = error $ "exportToImport: " ++ prettyPrint x
 exportToImport (S.EThingWith (S.UnQual name) cnames) = S.IThingWith name cnames
 exportToImport x@(S.EThingWith (S.Qual _mname _name) _cnames) = error $ "exportToImport: " ++ prettyPrint x
+exportToImport x@(S.EThingWith (S.Special _) _cnames) = error $ "exportToImport: " ++ prettyPrint x
+exportToImport x@(S.EModuleContents _) = error $ "exportToImport: " ++ prettyPrint x
 -- exportToImport x = error $ "exportToImport: " ++ prettyPrint x
 
 -- | Does module m import from name?
