@@ -6,7 +6,6 @@
 module Imports (cleanImports) where
 
 import Control.Exception (SomeException)
-import Control.Lens (view)
 import Control.Monad (void)
 import Control.Monad.Trans (liftIO, MonadIO)
 import Data.Char (toLower)
@@ -26,20 +25,21 @@ import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Pretty (defaultMode, PPHsMode(layout), PPLayout(PPInLine), prettyPrintWithMode)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(importLoc, importModule, importSpecs), ModuleName(..), Name(..))
+import ModuleKey (moduleFullPath, moduleTop)
 import SrcLoc (srcLoc)
 import Symbols (symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
 import System.FilePath.Extra2 (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
-import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleText), moduleTop, DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule)
+import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleText), DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> [FilePath] -> [ModuleInfo] -> m ()
 cleanImports _ _ [] = trace ("cleanImports - no modules") (pure ())
 cleanImports scratch extraTops info =
     dump >> mapM_ (\x -> do newText <- doModule scratch x
-                            let path = view moduleTop (_moduleKey x) </> _modulePath x
+                            let path = moduleFullPath (_moduleKey x)
                             liftIO $ case newText of
                                        Nothing -> putStrLn (path ++ ": unable to clean imports")
                                        Just s | _moduleText x /= s ->
@@ -54,7 +54,7 @@ cleanImports scratch extraTops info =
         let cmd = "ghc"
             args' = hsFlags ++
                     ["--make", "-c", "-ddump-minimal-imports", "-outputdir", scratch, "-i" ++
-                    intercalate ":" (nub (extraTops ++ toList (Set.map (view moduleTop) keys)))] ++
+                    intercalate ":" (nub (extraTops ++ catMaybes (toList (Set.map moduleTop keys))))] ++
                     concatMap ppExtension hseExtensions ++
                     map _modulePath info
         (code, _out, err) <- liftIO $ readProcessWithExitCode cmd args' ""

@@ -33,6 +33,7 @@ Library
     FoldM
     Imports
     IO
+    ModuleKey
     SrcLoc
     Symbols
     Types

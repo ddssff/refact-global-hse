@@ -19,11 +19,15 @@ import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S
+import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
 import SrcLoc (endLoc, spanText, srcLoc, textSpan)
 import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Types (fullPathOfModuleInfo, fullPathOfModuleKey, ModuleInfo(..), ModuleKey(..), moduleName, loadModule)
+import Types (fullPathOfModuleInfo, ModuleInfo(..), loadModule)
 import Utils (dropWhile2, EZPrint(ezPrint), gFind)
+
+instance EZPrint S.ModuleName where
+    ezPrint (S.ModuleName s) = s
 
 -- | Specifies where to move each declaration of each module.  Given a
 -- departure module key and a declaration, return an arrival module key.
@@ -70,11 +74,11 @@ makeMoveSpec :: String -> String -> String -> MoveSpec
 makeMoveSpec fname mname mname' =
     \mkey decl ->
         let syms = foldDeclared Set.insert mempty decl in
-        if view moduleName mkey == Just (S.ModuleName mname) && (Set.member (S.Ident fname) syms || Set.member (S.Symbol fname) syms)
-        then {-t1 mkey decl-} (set moduleName (Just (S.ModuleName mname')) mkey)
-        else mkey
-    -- where
-      -- t1 mkey decl x = trace ("moveSpec " ++ show mkey ++ " " ++ show (foldDeclared (:) [] decl) ++ " -> " ++ show x) x
+        case mkey of
+          ModuleKey {_moduleName = S.ModuleName aname}
+              | aname == mname && (Set.member (S.Ident fname) syms || Set.member (S.Symbol fname) syms) ->
+                  mkey {_moduleName = S.ModuleName mname'}
+          _ -> mkey
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
@@ -94,7 +98,7 @@ moveDeclsAndClean moveSpec scratch modules = do
                 False -> replaceFile p s >> return (Just p))
            (zip modules (moveDecls moveSpec modules))
   newPaths <- mapM (\(k, s) -> do
-                      let path = fullPathOfModuleKey k
+                      let path = moduleFullPath k
                       void $ replaceFile (trace ("New file: " ++ show path) path) s
                       pure path)
                    (Map.toList (newModuleMap moveSpec modules))
@@ -147,7 +151,7 @@ newModuleMap moveSpec modules =
             doModule :: ModuleKey -> [(ModuleKey, A.Decl SrcSpanInfo)] -> String
             -- Build module thiskey from the list of (fromkey, decl) pairs
             doModule thisKey pairs =
-                "module " ++ maybe "Main" prettyPrint (view moduleName thisKey) ++ "(" ++
+                "module " ++ maybe "Main" prettyPrint (moduleName thisKey) ++ "(" ++
                 intercalate exportSep (newExports moveSpec modules thisKey) ++ "\n    ) where\n" ++
                 concatMap (\(someKey, ds) -> importsForArrivingDecls moveSpec thisKey [] (findModuleByKeyUnsafe modules someKey)) pairs ++
                 -- importsForDepartingDecls moveSpec modules thisKey ++  new module, no decls can depart
@@ -250,7 +254,7 @@ skip loc = point .= loc
 -- Find the declaration of the symbols of an import spec.  If that
 -- declaration moved, update the module name.
 updateImports :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> RWS String String St ()
-updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey@(ModuleKey {_moduleName = thisModuleName}), _module = A.Module _ _ _ thisModuleImports _}) = do
+updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = A.Module _ _ _ thisModuleImports _}) = do
   -- Update the existing imports
   mapM_ doImportDecl thisModuleImports
   mapM_ doNewImports (filter (\m -> _moduleKey m /= thisKey) modules)
@@ -286,10 +290,13 @@ updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey@(ModuleKey {_mo
                 | -- has import module name changed?
                   name' /= name &&
                   -- don't generate self imports
-                  Just name' /= thisModuleName ->
+                  name' /= thisModuleName ->
                     tell ("\nimport " ++ prettyPrint' name' ++ " (" ++ prettyPrint' spec ++ ")")
             _ -> pure ()
 
+      thisModuleName = case thisKey of
+                         ModuleKey {_moduleName = x} -> x
+                         _ -> S.ModuleName "Main"
       -- Add new imports due to declarations moving from someKey to
       -- thisKey.  All of the imports in someKey must be duplicated in
       -- thisKey (except for imports of thisKey).  Also, all of the
@@ -309,9 +316,9 @@ updateImports _ _ x = error $ "updateImports - unexpected module: " ++ show (_mo
 -- thisModule a cycle can appear, because of the code that converts the
 -- exports of someModule into imports in thisModule.
 importsForDepartingDecls :: MoveSpec -> [ModuleInfo] -> Maybe ModuleInfo -> String
-importsForDepartingDecls moveSpec modules (Just (ModuleInfo {_moduleKey = thisKey@(ModuleKey {_moduleName = Just thisModuleName}), _module = A.Module _ _ _ _ ds})) =
+importsForDepartingDecls moveSpec modules (Just (ModuleInfo {_moduleKey = thisKey@(ModuleKey {_moduleName = thisModuleName}), _module = A.Module _ _ _ _ ds})) =
     concatMap (\d -> case moveSpec thisKey d of
-                       someKey@(ModuleKey {_moduleName = Just someModuleName})
+                       someKey@(ModuleKey {_moduleName = someModuleName})
                            | someKey /= thisKey ->
                                case t2 d thisKey someKey (findModuleByKey modules someKey) of
                                  Just (ModuleInfo {_module = A.Module _ _ _ someModuleImports _}) ->
@@ -349,7 +356,7 @@ importsForArrivingDecls moveSpec thisKey thisModuleImports someModule@(ModuleInf
     if any (\d -> moveSpec someKey d == thisKey) ds
     then concatMap
              (\i -> "\n" ++ prettyPrint' i)
-             (filter (\i -> view moduleName thisKey /= Just (sModuleName (A.importModule i))) is) ++
+             (filter (\i -> moduleName thisKey /= Just (sModuleName (A.importModule i))) is) ++
          concatMap
              (\i -> "\n" ++ prettyPrint' i)
              (maybeToList (importDeclFromExportSpecs moveSpec thisModuleImports someModule))
@@ -363,7 +370,7 @@ importDeclFromExportSpecs :: MoveSpec -> [A.ImportDecl SrcSpanInfo] -> ModuleInf
 importDeclFromExportSpecs moveSpec
                           thisModuleImports
                           someInfo@(ModuleInfo
-                                    {_moduleKey = someKey@(ModuleKey {_moduleName = Just someModuleName}),
+                                    {_moduleKey = someKey@(ModuleKey {_moduleName = someModuleName}),
                                      _module = someModule@(A.Module _ (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList _ especs@(_ : _))))) _ _ _)}) =
     -- Do we need to import the remaining exports from the departure
     -- module into the arrival module?  Only if we are moving the
@@ -371,7 +378,7 @@ importDeclFromExportSpecs moveSpec
     -- the departure module.
     case moveType thisModuleImports someModuleName of
       Up -> Just (S.ImportDecl { S.importLoc = srcLoc someModule
-                               , S.importModule = maybe (S.ModuleName "Main") id (_moduleName someKey)
+                               , S.importModule = maybe (S.ModuleName "Main") id (moduleName someKey)
                                , S.importQualified = False
                                , S.importSrc = False
                                , S.importSafe = False
@@ -430,7 +437,7 @@ newModuleOfImportSpec :: MoveSpec -> [ModuleInfo] -> S.ModuleName -> A.ImportSpe
 newModuleOfImportSpec moveSpec modules oldModname spec =
     case findModuleByName modules oldModname of
       Just info -> case findDeclOfImportSpec info spec of
-                     Just d -> view moduleName (moveSpec (_moduleKey info) d)
+                     Just d -> moduleName (moveSpec (_moduleKey info) d)
                      -- Everything else we can leave alone - even if we can't
                      -- find a declaration, they might be re-exported.
                      Nothing {- | isReexport info spec -} -> Just oldModname
@@ -505,7 +512,7 @@ updateDecls moveSpec modules info@(ModuleInfo {_module = A.Module _ _ _ _ decls}
   -- Declarations that were already here and are to remain
   mapM_ (\d -> case moveSpec (_moduleKey info) d of
                  k | k /= _moduleKey info -> do
-                   trace ("Moving " ++ ezPrint (foldDeclared (:) [] d) ++ " to " ++ ezPrint (view moduleName k) ++ " from " ++ ezPrint (_moduleName (_moduleKey info))) (pure ())
+                   trace ("Moving " ++ ezPrint (foldDeclared (:) [] d) ++ " to " ++ ezPrint (moduleName k) ++ " from " ++ ezPrint (_moduleName (_moduleKey info))) (pure ())
                    point .= endLoc d
                  _ -> keep (endLoc d)) decls
   tell $ newDecls moveSpec modules (_moduleKey info)

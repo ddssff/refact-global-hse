@@ -1,10 +1,8 @@
 {-# LANGUAGE ScopedTypeVariables, TemplateHaskell #-}
 
 module Types
-    ( ModuleKey(ModuleKey, _moduleName), moduleTop, moduleName
-    , ModuleInfo(..)
+    ( ModuleInfo(..)
     , fullPathOfModuleInfo
-    , fullPathOfModuleKey
     , hseExtensions
     , hsFlags
     , hsSourceDirs
@@ -31,18 +29,12 @@ import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensi
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Syntax as S (ModuleName(..), Name(..))
+import ModuleKey
 import SrcLoc (fixSpan, textSpan)
 import System.Directory (canonicalizePath)
-import System.FilePath ((</>), (<.>), joinPath, makeRelative, splitDirectories, splitExtension, splitFileName)
+import System.FilePath ((</>), (<.>), joinPath, makeRelative, splitDirectories, splitExtension, splitFileName, takeDirectory)
 import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
 import Utils (EZPrint(ezPrint))
-
--- A module is uniquely identitifed by its path and name
-data ModuleKey =
-    ModuleKey { _moduleTop :: FilePath      -- ^ The Hs-Source-Dirs path for which ghc -i<dir> finds this module
-              , _moduleName :: Maybe S.ModuleName -- ^ The module name, if it has one.
-              } deriving (Eq, Ord, Show)
-$(makeLenses ''ModuleKey)
 
 data ModuleInfo =
     ModuleInfo { _moduleKey :: ModuleKey
@@ -53,22 +45,13 @@ data ModuleInfo =
                , _moduleSpan :: SrcSpanInfo
                }
 
-instance EZPrint ModuleKey where
-    ezPrint (ModuleKey {_moduleName = n}) = maybe "Main" prettyPrint n
-
 instance EZPrint ModuleInfo where
     ezPrint (ModuleInfo {_module = A.Module _ (Just (A.ModuleHead _ n _ _)) _ _ _}) = prettyPrint n
     ezPrint (ModuleInfo {_module = A.Module _ Nothing _ _ _}) = "Main"
     ezPrint (ModuleInfo {_module = _}) = error "ezPrint: unexpected module"
 
 fullPathOfModuleInfo :: ModuleInfo -> FilePath
-fullPathOfModuleInfo m = _moduleTop (_moduleKey m) </> _modulePath m
-
-fullPathOfModuleKey :: ModuleKey -> FilePath
-fullPathOfModuleKey (ModuleKey {_moduleTop = top, _moduleName = mname}) =
-    top </> maybe "Main" moduleNameToPath mname <.> "hs"
-    where
-      moduleNameToPath (S.ModuleName name) = (joinPath . filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))) name
+fullPathOfModuleInfo = moduleFullPath . _moduleKey
 
   -- | From hsx2hs, but removing Arrows because it makes test case
 -- fold3c and others fail.  Maybe we should parse the headers and then
@@ -117,7 +100,9 @@ loadModule path =
         pure $ ModuleInfo { _moduleKey = key
                           , _module = parsed
                           , _moduleComments = comments
-                          , _modulePath = makeRelative (_moduleTop key) path
+                          , _modulePath = makeRelative (case key of
+                                                          ModuleKey {_moduleTop = top} -> top
+                                                          ModuleFullPath p -> takeDirectory p) path
                           , _moduleText = moduleText
                           , _moduleSpan = textSpan path moduleText }
       mode = Exts.defaultParseMode {Exts.extensions = hseExtensions, Exts.parseFilename = path, Exts.fixities = Nothing }
@@ -141,24 +126,19 @@ moduleKey :: FilePath -> A.Module SrcSpanInfo -> IO ModuleKey
 moduleKey _ (A.XmlPage {}) = error "XmlPage"
 moduleKey _ (A.XmlHybrid {}) = error "XmlHybrid"
 moduleKey path (A.Module _ Nothing _ _ _) = do
-  path' <- canonicalizePath path
-  let (top, _sub) = splitFileName path'
-  pure $ ModuleKey top Nothing
+  ModuleFullPath <$> canonicalizePath path
 moduleKey path (A.Module _ (Just (A.ModuleHead _ (A.ModuleName _ name) _ _)) _ _ _) = do
   path' <- canonicalizePath path
   let name' = splitModuleName name
-      (path'', _ext) = splitExtension path'
+      (path'', ext) = splitExtension path'
       dirs = splitDirectories path''
       (dirs', name'') = splitAt (length dirs - length name') dirs
   when (name'' /= name') (error $ "Module name mismatch - name: " ++ show name' ++ ", path: " ++ show name'')
   pure $ ModuleKey (joinPath dirs')
-                   (Just (S.ModuleName (intercalate "." name'')))
+                   (S.ModuleName (intercalate "." name''))
+                   ext
       where
         splitModuleName = filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))
-
-instance Pretty ModuleKey where
-    pPrint (ModuleKey {_moduleName = m}) =
-        text (maybe "Main" (\(S.ModuleName n) -> n) m)
 
 -- | Collect the declared types of a standalone deriving declaration.
 class DerivDeclTypes a where

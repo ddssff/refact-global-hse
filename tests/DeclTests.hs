@@ -17,6 +17,7 @@ import qualified Language.Haskell.Exts.Annotated.Syntax as A
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Annotated.Simplify (sName)
 import qualified Language.Haskell.Exts.Syntax as S
+import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
 import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import System.Process (readProcessWithExitCode)
 import Symbols (foldDeclared)
@@ -42,15 +43,15 @@ decl1 = TestCase $ testMoveSpec "tests/input/atp-haskell" "tests/expected/decl1"
 -- import of Tableaux from Lib.
 
 moveSpec1 :: ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
-moveSpec1 k (A.TypeSig _ [A.Ident _ s] _)
+moveSpec1 k@(ModuleKey {_moduleName = n}) (A.TypeSig _ [A.Ident _ s] _)
     | s == "tryfindM" {-|| s == "failing"-} =
-        set moduleName (Just (S.ModuleName "Data.Logic.ATP.Tableaux")) k
-moveSpec1 k (A.FunBind _ ms)
+        k {_moduleName = S.ModuleName "Data.Logic.ATP.Tableaux"}
+moveSpec1 k@(ModuleKey {_moduleName = n}) (A.FunBind _ ms)
     | any (`elem` [S.Ident "tryfindM" {-, S.Ident "failing"-}])
           (map (\match -> case match of
                             A.Match _ name _ _ _ -> sName name
                             A.InfixMatch _ _ name _ _ _ -> sName name) ms) =
-                                     set moduleName (Just (S.ModuleName "Data.Logic.ATP.Tableaux")) k
+        k {_moduleName = S.ModuleName "Data.Logic.ATP.Tableaux"}
 {-
 moveSpec1 k d | Set.member (S.Ident "tryfindM") (foldDeclared Set.insert mempty d) =
                   trace ("Expected TypeSig or FunBind: " ++ show d)
@@ -115,7 +116,7 @@ testMoveSpec input expected moveSpec = do
 
 testSpec :: MoveSpec -> ModuleInfo -> IO ModuleInfo
 testSpec moveSpec m@(ModuleInfo {_moduleKey = k, _module = A.Module _ _ _ _ ds}) = do
-  putStrLn ("---- module " ++ show (view moduleName k) ++ " ----")
+  putStrLn ("---- module " ++ show (moduleName k) ++ " ----")
   mapM_ (\d -> let k' = moveSpec k d in
                putStrLn (show (foldDeclared (:) [] d) ++ ": " ++ if k /= k' then show k ++ " " ++  " -> " ++ show k' else "unchanged")) ds
   return m
