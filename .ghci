@@ -1,4 +1,5 @@
 :set -itests
+:set -XScopedTypeVariables
 :load tests/Tests
 :m +System.Process
 :m +Language.Haskell.Exts.Annotated
