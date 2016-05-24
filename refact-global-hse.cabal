@@ -1,8 +1,8 @@
-Name: decl-mover
+Name: refact-global-hse
 Version: 1.0
 Synopsis: Move declarations between modules, clean up import lists
 Description: Move declarations between modules, clean up import lists
-Homepage: https://github.com/ddssff/decl-mover
+Homepage: https://github.com/ddssff/refact-global-hse
 License: BSD3
 Author: David Fox
 Maintainer: David Fox
@@ -44,19 +44,19 @@ executable move-decls
   Main-Is: Move.hs
   Build-Depends:
     base,
-    decl-mover,
+    refact-global-hse,
     filemanip > 0.3.6.3,
     filepath,
     lens
 
-Test-Suite decl-mover-tests
+Test-Suite refact-global-hse-tests
   Type: exitcode-stdio-1.0
   Hs-Source-Dirs: tests
   Main-Is: Tests.hs
   Build-Depends:
     base,
     containers,
-    decl-mover,
+    refact-global-hse,
     filemanip > 0.3.6.3,
     haskell-src-exts,
     HUnit,

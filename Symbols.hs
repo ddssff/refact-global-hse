@@ -21,6 +21,8 @@ import Language.Haskell.Exts.Syntax (Decl(..))
 import qualified Language.Haskell.Exts.Syntax as S -- (CName(..), ExportSpec(..), ImportSpec(..), ModuleName(..), Name(..), QName(..))
 import Utils (EZPrint(ezPrint))
 
+-- | Return an ExportSpec which would export all the symbols created
+-- by a, which is typically a Decl.
 class HasSymbols a where
     toExportSpecs :: a -> [S.ExportSpec]
 
@@ -42,31 +44,33 @@ data CName = VarName Name | ConName Name
 -}
 
 instance HasSymbols S.Decl where
+    toExportSpecs (TypeSig _SrcLoc names _Type) = map (S.EVar . S.UnQual) names
     toExportSpecs (TypeDecl _SrcLoc name _TyVarBinds _Type) = [S.EVar (S.UnQual name)]
-    toExportSpecs x@(TypeFamDecl _SrcLoc _Name _TyVarBinds _MaybeKind) = error $ "HasSymbols TypeFamDecl: " ++ show x ++ "\n" ++ prettyPrint x
-    toExportSpecs x@(ClosedTypeFamDecl _SrcLoc _Name __TyVarBind _MaybeKind _TypeEqns) = error $ "HasSymbols ClosedTypeFamDecl: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs (DataDecl _SrcLoc _DataOrNew _Context name _TyVarBind qualConDecls _Deriving) =
         case concatMap toCNames qualConDecls of
           [] -> [S.EVar (S.UnQual name)]
           xs -> [S.EThingWith (S.UnQual name) xs]
+    toExportSpecs (ClassDecl _SrcLoc _Context name _TyVarBind _FunDeps classDecls) =
+        case concatMap toCNames classDecls of
+          [] -> [S.EVar (S.UnQual name)]
+          xs -> [S.EThingWith (S.UnQual name) xs]
+    toExportSpecs (FunBind matches) = concatMap toExportSpecs matches
+    toExportSpecs (PatBind _SrcLoc pat _Rhs _MaybeBinds) = toExportSpecs pat
+    toExportSpecs (InstDecl _SrcLoc _MaybeOverlap _TyVarBind _Context _QName _Types _InstDecls) = []
+    toExportSpecs (DerivDecl _SrcLoc _MaybeOverlap _TyVarBind _Context _QName _Types) = []
+
+    -- Things I haven't encountered yet.
+    toExportSpecs x@(TypeFamDecl _SrcLoc _Name _TyVarBinds _MaybeKind) = error $ "HasSymbols TypeFamDecl: " ++ show x ++ "\n" ++ prettyPrint x
+    toExportSpecs x@(ClosedTypeFamDecl _SrcLoc _Name __TyVarBind _MaybeKind _TypeEqns) = error $ "HasSymbols ClosedTypeFamDecl: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(GDataDecl _SrcLoc _DataOrNew _Context _Name _TyVarBind _MaybeKind _GadtDecls _Deriving) = error $ "HasSymbols GDataDecl: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(DataFamDecl _SrcLoc _Context _Name _TyVarBind _MaybeKind) = error $ "HasSymbols DataFamDecl: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(TypeInsDecl _SrcLoc _Type1 _Type2) = error $ "HasSymbols TypeInsDecl: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(DataInsDecl _SrcLoc _DataOrNew _Type _QualConDecls _Derivings) = error $ "HasSymbols DataInsDecl: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(GDataInsDecl _SrcLoc _DataOrNew _Type _MaybeKind _GadtDecls _Deriving) = error $ "HasSymbols GDataInsDecl: " ++ show x ++ "\n" ++ prettyPrint x
-    toExportSpecs (ClassDecl _SrcLoc _Context name _TyVarBind _FunDeps classDecls) =
-        case concatMap toCNames classDecls of
-          [] -> [S.EVar (S.UnQual name)]
-          xs -> [S.EThingWith (S.UnQual name) xs]
-    toExportSpecs x@(InstDecl _SrcLoc _MaybeOverlap _TyVarBind _Context _QName _Types _InstDecls) = error $ "HasSymbols InstDecl: " ++ show x ++ "\n" ++ prettyPrint x
-    toExportSpecs x@(DerivDecl _SrcLoc _MaybeOverlap _TyVarBind _Context _QName _Types) = error $ "HasSymbols DerivDecl: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(InfixDecl _SrcLoc _Assoc _Int _Ops) = error $ "HasSymbols InfixDecl: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(DefaultDecl _SrcLoc _Types) = error $ "HasSymbols DefaultDecl: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(SpliceDecl _SrcLoc _Exp) = error $ "HasSymbols SpliceDecl: " ++ show x ++ "\n" ++ prettyPrint x
-    toExportSpecs (TypeSig _SrcLoc names _Type) = map (S.EVar . S.UnQual) names
     toExportSpecs x@(PatSynSig _SrcLoc _Name _MaybeTyVarBind _Context1 _Context2 _Type) = error $ "HasSymbols PatSynSig: " ++ show x ++ "\n" ++ prettyPrint x
-    toExportSpecs (FunBind matches) = concatMap toExportSpecs matches
-    toExportSpecs (PatBind _SrcLoc pat _Rhs _MaybeBinds) = toExportSpecs pat
     toExportSpecs x@(ForImp _SrcLoc _CallConv _Safety _String _Name _Type) = error $ "HasSymbols ForImp: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(ForExp _SrcLoc _CallConv _String _Name _Type) = error $ "HasSymbols ForExp: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(PatSyn _SrcLoc _Pat1 _Pat2 _PatternSynDirection) = error $ "HasSymbols PatSyn: " ++ show x ++ "\n" ++ prettyPrint x
@@ -89,8 +93,8 @@ instance HasCNames S.ClassDecl where
           f (S.EVar (S.UnQual x)) = [S.ConName x]
           f (S.EThingWith (S.UnQual x) cnames) = (S.ConName x : cnames)
           f _ = []
+    toCNames (S.ClsTyFam _SrcLoc name _TyVarBinds _MaybeKind) = [S.ConName name]
     toCNames x@(S.ClsDataFam _SrcLoc _Context _name _TyVarBinds _MaybeKind) = error $ "ClsDataFam: " ++ show x ++ "\n" ++ prettyPrint x
-    toCNames x@(S.ClsTyFam _SrcLoc _name _TyVarBinds _MaybeKind) = error $ "ClsTyFam: " ++ show x ++ "\n" ++ prettyPrint x
     toCNames x@(S.ClsTyDef _SrcLoc _Type1 _Type2) = error $ "ClsTyDef: " ++ show x ++ "\n" ++ prettyPrint x
     toCNames x@(S.ClsDefSig _SrcLoc _name _type) = error $ "ClsDefSig: " ++ show x ++ "\n" ++ prettyPrint x
 

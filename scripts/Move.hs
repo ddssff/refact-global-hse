@@ -22,23 +22,30 @@ data Params
 $(makeLenses ''Params)
 
 main = do
-  args <- getArgs
-  params <- case getOpt' Permute options args of
-              (fns, [], [], []) -> finalize (foldr ($) params0 fns)
-              _ -> error (usageInfo "specify modules and at least one move spec" options)
-  withCleanRepo $ withTempDirectory True "." "scratch" $ \scratch ->
-      loadModules (view moduverse params) >>= moveDeclsAndClean (traceMoveSpec (view moveSpec params)) scratch
+  params <- getArgs >>= buildParams args
+  withCleanRepo $ withTempDirectory True "." "scratch" $ \scratch -> do
+    modules <- loadModules (view moduverse params)
+    moveDeclsAndClean (traceMoveSpec (view moveSpec params)) scratch modules
+  trace ("Adding modules in " ++ show (view topDir params) ++ ": " ++ show paths) (pure ())
+  return $ over moduverse (++ paths) params
 
 traceMoveSpec :: MoveSpec -> MoveSpec
 traceMoveSpec f = \k d -> let k' = f k d in if k /= k' then (trace ("moveSpec " ++ show k ++ " d -> " ++ show k') k') else k'
 
--- | Search the findDir directories for paths and add them to moduverse.
-finalize :: Params -> IO Params
-finalize params = do
-  paths <- concat <$> mapM (\dir -> map (makeRelative (view topDir params </> dir)) <$> (find (depth ==? 0) (extension ==? ".hs" &&? fileType ==? RegularFile) (view topDir params </> dir)))
-                           (_findDirs params)
-  trace ("Adding modules in " ++ show (view topDir params) ++ ": " ++ show paths) (pure ())
-  return $ over moduverse (++ paths) params
+buildParams args =
+    case getOpt' Permute options args of
+      (fns, [], [], []) -> finalize (foldr ($) params0 fns)
+      _ -> error (usageInfo "specify modules and at least one move spec" options)
+    where
+      -- Search the findDir directories for paths and add them to moduverse.
+      finalize :: Params -> IO Params
+      finalize params = do
+        paths <- concat <$> mapM (\dir ->
+                                      map (makeRelative (view topDir params </> dir))
+                                              <$> (find (depth ==? 0)
+                                                        (extension ==? ".hs" &&? fileType ==? RegularFile)
+                                                        (view topDir params </> dir)))
+                                 (_findDirs params)
 
 maybeStripPrefix :: Eq a => [a] -> [a] -> [a]
 maybeStripPrefix pre lst = maybe lst id (stripPrefix pre lst)

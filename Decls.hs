@@ -15,7 +15,7 @@ import Debug.Trace (trace)
 import Imports (cleanImports)
 import IO (replaceFile)
 import qualified Language.Haskell.Exts.Annotated as A
-import Language.Haskell.Exts.Annotated.Simplify (sCName, {-sImportDecl, sImportSpec,-} sExportSpec, sModuleName, sName)
+import Language.Haskell.Exts.Annotated.Simplify (sCName, sDecl, sExportSpec, sModuleName, sName)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S
@@ -23,7 +23,7 @@ import SrcLoc (endLoc, spanText, srcLoc, textSpan)
 import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Types (fullPathOfModuleKey, ModuleInfo(..), ModuleKey(ModuleKey, _moduleName), loadModule)
-import Utils (dropWhile2, EZPrint(ezPrint))
+import Utils (dropWhile2, EZPrint(ezPrint), gFind)
 
 -- | Specifies where to move each declaration of each module.  Given a
 -- departure module key and a declaration, return an arrival module key.
@@ -529,3 +529,15 @@ declText (ModuleInfo {_module = m@(A.Module _ mh ps is ds), _moduleText = mtext}
                      [] -> srcLoc (A.ann m) in
     spanText (mkSrcSpan p (endLoc d)) mtext
 declText x _ = error $ "declText - unexpected module: " ++ show (_module x)
+
+-- | Declaration predicates
+testDeclaredNameString :: (String -> Bool) -> A.Decl SrcSpanInfo -> Bool
+testDeclaredNameString p d = any p (gFind (toExportSpecs (sDecl d)) :: [String])
+{-
+testInstanceClass :: (String -> Bool) -> A.Decl SrcSpanInfo -> Bool
+testInstanceClass p d@(A.InstDecl _mo _ir (Just idecls)) = testInstance
+
+testInstance :: (A.InstDecl SrcSpanInfo -> Bool) -> A.Decl SrcSpanInfo -> Bool
+testInstance p (A.InstDecl _mo _ir (Just idecls)) = any p idecls
+testInstance _ _ _ = False
+-}

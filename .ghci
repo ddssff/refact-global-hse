@@ -1,7 +1,9 @@
 :set -itests
 :load tests/Tests
 :m +System.Process
+:m +Language.Haskell.Exts.Annotated
 :m +Test.HUnit
 :m +Decls
 :m +Types
 :m +Utils
+:set prompt "λ "
