@@ -1,3 +1,6 @@
+-- Example:
+-- runhaskell scripts/Move.hs --move=FoldDeclared,Symbols,Tmp --unsafe
+
 {-# LANGUAGE RankNTypes, TemplateHaskell #-}
 import Control.Lens
 import Control.Monad (foldM)
@@ -17,12 +20,13 @@ data Params
     = Params { _moveSpec :: MoveSpec
              , _topDir :: FilePath
              , _findDirs :: [FilePath]
-             , _moduverse :: [FilePath] }
+             , _moduverse :: [FilePath]
+             , _unsafe :: Bool }
 
 $(makeLenses ''Params)
 
 params0 :: Params
-params0 = Params {_moveSpec = identityMoveSpec, _topDir = ".", _findDirs = [], _moduverse = []}
+params0 = Params {_moveSpec = identityMoveSpec, _topDir = ".", _findDirs = [], _moduverse = [], _unsafe = False}
 
 options :: [OptDescr (Params -> Params)]
 options =
@@ -32,13 +36,14 @@ options =
              "Move the declaration of a symbol",
       Option "" ["mod"] (ReqArg (\s -> over moduverse (s :)) "PATH") "Add a module to the moduverse",
       Option "" ["top"] (ReqArg (\s -> over topDir (const s)) "DIR") "Set the top directory, module paths will be relative to this (so do it first)",
-      Option "" ["find"] (ReqArg (\s -> over findDirs (s :)) "DIR") "Directory relative to top to search (non-recursively) for .hs files to add to the moduverse" ]
+      Option "" ["find"] (ReqArg (\s -> over findDirs (s :)) "DIR") "Directory relative to top to search (non-recursively) for .hs files to add to the moduverse"
+    , Option "" ["unsafe"] (NoArg (set unsafe True)) "Skip the safety check - allow uncommitted edits in repo where clean is performed" ]
 
-buildParams = do
-  args <- getArgs
+buildParams :: [String] -> IO Params
+buildParams args = do
   case getOpt' Permute options args of
     (fns, [], [], []) -> finalize (foldr ($) params0 fns)
-    _ -> error (usageInfo "specify modules and at least one move spec" options)
+    (x, y, z, w) -> error (usageInfo ("error: " ++ show (y, z, w) ++ "\nspecify modules and at least one move spec") options)
     where
       -- Search the findDir directories for paths and add them to moduverse.
       finalize :: Params -> IO Params
@@ -51,9 +56,13 @@ buildParams = do
                                  (_findDirs params)
         pure $ over moduverse (++ paths) params
 
-main = do
-  params <- buildParams
-  withCleanRepo $ withTempDirectory True "." "scratch" $ \scratch -> do
+main :: IO ()
+main = getArgs >>= run
+
+run :: [String] -> IO ()
+run args = do
+  params <- buildParams args
+  (if _unsafe params then id else withCleanRepo) $ withTempDirectory True "." "scratch" $ \scratch -> do
     modules <- loadModules (view moduverse params)
     moveDeclsAndClean (traceMoveSpec (view moveSpec params)) scratch modules
 
