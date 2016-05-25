@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
-module Decls (moveDeclsByName, moveDeclsAndClean, moveDecls,
+module Decls (moveDeclsByName, moveInstDecls,
+              moveDeclsAndClean, moveDecls,
               MoveSpec(MoveSpec), applyMoveSpec, traceMoveSpec) where
 
 import Control.Exception (SomeException)
@@ -77,14 +78,36 @@ data MoveType
 
 -- A simple MoveSpec builder.
 moveDeclsByName :: String -> String -> String -> MoveSpec
-moveDeclsByName fname mname mname' = MoveSpec $
+moveDeclsByName symname modname modname' = MoveSpec $
     \mkey decl ->
+        let syms = foldDeclared Set.insert mempty decl in
+        case mkey of
+          ModuleKey {_moduleName = S.ModuleName name}
+              | name == modname && (Set.member (S.Ident symname) syms || Set.member (S.Symbol symname) syms) ->
+                  mkey {_moduleName = S.ModuleName modname'}
+          _ -> mkey
+
+moveInstDecls :: (ModuleKey -> A.QName SrcSpanInfo -> [A.Type SrcSpanInfo] -> ModuleKey) -> MoveSpec
+moveInstDecls instpred =
+    MoveSpec f
+    where
+      f mkey decl@(A.InstDecl _ _ irule _) = g mkey irule
+      f mkey decl = mkey
+      g mkey (A.IParen _ irule) = g mkey irule
+      g mkey (A.IRule _ _ _ ihead) = uncurry (instpred mkey) (h [] ihead)
+      h :: [A.Type SrcSpanInfo] -> A.InstHead SrcSpanInfo -> (A.QName SrcSpanInfo, [A.Type SrcSpanInfo])
+      h types (A.IHParen _ ihead) = h types ihead
+      h types (A.IHApp _ ihead typ) = h (typ : types) ihead
+      h types (A.IHCon _ name) = (name, types)
+      h types (A.IHInfix _ typ name) = (name, typ : types)
+{-
         let syms = foldDeclared Set.insert mempty decl in
         case mkey of
           ModuleKey {_moduleName = S.ModuleName aname}
               | aname == mname && (Set.member (S.Ident fname) syms || Set.member (S.Symbol fname) syms) ->
                   mkey {_moduleName = S.ModuleName mname'}
           _ -> mkey
+-}
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode

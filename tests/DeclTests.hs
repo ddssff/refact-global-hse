@@ -11,10 +11,10 @@ module DeclTests where
 import Data.List hiding (find)
 import Data.Maybe
 import Data.Monoid ((<>))
-import Decls (applyMoveSpec, moveDeclsByName, moveDeclsAndClean, MoveSpec(MoveSpec))
+import Decls (applyMoveSpec, moveDeclsByName, moveInstDecls, moveDeclsAndClean, MoveSpec(MoveSpec))
 import IO (withCurrentDirectory, withTempDirectory)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
-import Language.Haskell.Exts.Annotated.Simplify (sName)
+import Language.Haskell.Exts.Annotated.Simplify (sName, sQName)
 import qualified Language.Haskell.Exts.Syntax as S
 import ModuleKey (ModuleKey(_moduleName), moduleName)
 import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
@@ -22,7 +22,7 @@ import System.Process (readProcessWithExitCode)
 import Symbols (foldDeclared)
 import Test.HUnit
 import Types
-import Utils (gitResetSubdir)
+import Utils (gFind, gitResetSubdir)
 
 declTests :: Test
 declTests = TestList [decl1, decl2, decl3, decl4, decl5]
@@ -87,8 +87,14 @@ decl3 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl3" 
 decl4 :: Test
 decl4 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl4" spec
     where
-      spec = moveDeclsByName "withTempDirectory" "IO" "Utils" <>
-             moveDeclsByName "ignoringIOErrors" "IO" "Utils"
+      spec = foldl1' (<>) [moveDeclsByName "withTempDirectory" "IO" "Utils",
+                           moveDeclsByName "ignoringIOErrors" "IO" "Utils",
+                           moveDeclsByName "FoldDeclared" "Symbols" "Tmp",
+                           moveInstDecls instpred]
+      instpred key name _types
+          | (gFind (sQName name) :: [S.Name]) == [S.Ident "FoldDeclared"] =
+              key {_moduleName = S.ModuleName "Tmp"}
+      instpred key _ _ = key
 
 decl5 :: Test
 decl5 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl5" spec
