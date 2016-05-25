@@ -32,7 +32,6 @@ Library
     Decls
     FoldM
     Imports
-    IO
     ModuleKey
     SrcLoc
     Symbols

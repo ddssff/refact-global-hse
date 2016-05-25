@@ -3,7 +3,7 @@ module Utils where
 
 import Control.Exception (SomeException, throw)
 import Control.Exception.Lifted as IO (bracket, catch)
-import Control.Monad (MonadPlus, msum)
+import Control.Monad (MonadPlus, msum, when)
 import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Bool (bool)
@@ -11,9 +11,11 @@ import Data.Generics (Data(gmapM), GenericM, listify, Typeable)
 import Data.List (intercalate, stripPrefix)
 import Data.Sequence (Seq, (|>))
 import qualified Language.Haskell.Exts.Syntax as S (ModuleName(..))
-import System.Directory (getCurrentDirectory, removeDirectoryRecursive, setCurrentDirectory)
+import System.Directory (createDirectoryIfMissing, getCurrentDirectory, removeDirectoryRecursive, removeFile, setCurrentDirectory)
 import System.Exit (ExitCode(..))
+import System.FilePath (splitFileName)
 import System.IO (hPutStrLn, stderr)
+import System.IO.Error (isDoesNotExistError)
 import qualified System.IO.Temp as Temp (createTempDirectory)
 import System.Process (readProcess, readProcessWithExitCode)
 
@@ -105,3 +107,11 @@ withTempDirectory cleanup targetDir template callback =
 
 ignoringIOErrors :: IO () -> IO ()
 ignoringIOErrors ioe = ioe `IO.catch` (\e -> const (return ()) (e :: IOError))
+
+replaceFile :: FilePath -> String -> IO ()
+replaceFile path text = do
+  createDirectoryIfMissing True (fst (splitFileName path))
+  removeFile path `IO.catch` (\e -> if isDoesNotExistError e then return () else ioError e)
+  writeFile path ({-trace (path ++ " text: " ++ show text)-} text)
+  text' <- readFile path
+  when (text /= text') (error $ "Failed to replace " ++ show path)

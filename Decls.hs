@@ -14,22 +14,20 @@ import Data.Maybe (catMaybes, maybeToList)
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set)
 import Data.Tuple (swap)
 import Debug.Trace (trace)
+import IO ()
 import Imports (cleanImports)
-import IO (replaceFile, )
-import Utils (withCurrentDirectory)
-import Utils (withTempDirectory)
-import qualified Language.Haskell.Exts.Annotated as A
+import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(InstDecl, TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), InstHead(..), InstRule(IParen, IRule), Module(Module), ModuleHead(ModuleHead), Pretty, QName, Type)
 import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
-import qualified Language.Haskell.Exts.Syntax as S
+import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..), QName(Qual, Special, UnQual))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
 import SrcLoc (endLoc, spanText, srcLoc, textSpan)
 import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Types (ModuleInfo(..), loadModule, loadModules)
-import Utils (dropWhile2, EZPrint(ezPrint), gFind, withCleanRepo)
+import Types (loadModule, loadModules, ModuleInfo(..))
+import Utils (dropWhile2, EZPrint(ezPrint), gFind, replaceFile, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 data St = St { _point :: SrcLoc, _newmods :: Map ModuleKey [A.Decl SrcSpanInfo] }
 
