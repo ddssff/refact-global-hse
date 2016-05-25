@@ -49,3 +49,15 @@ The tool will find it for you the next time it runs.
      instances.  However, by default the import cleaner does remove import
      lists in this case, because the move operations create a lot of these.
      However, it never removes an import lists that starts out empty.
+
+# To Do
+
+  1. Add ways to break circular imports.  For example, find additional decls
+     so that moving the whole group does not leave dangling references.
+  2. Remove modules that become empty
+  3. Distinguish what exactly each test case tests
+  4. Specify where in the module a moved declaration should appear
+  5. Global tests for symbols exported but never imported
+  6. Global tests for minimizing LANGUAGE directives (by trial and error)
+  7. Whitespace issues - e.g. a comment directly following a decl should stay with
+     that decl.

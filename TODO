@@ -1,7 +1,4 @@
- * 1. Create new modules
    2. Convert tests in tests/Tests.hs into real tests
- * 3. Make a nice executable for moving decls, including instances
-   4. Add ways to break circular imports
    5. Intra-decl transformations - (collect ideas)
           * Move a condition into the called function:
 
@@ -23,7 +20,6 @@
               action a b
    	   action a b = when (f a b) foo
 
-   6. Remove modules that become empty
    7. Test cases:
          test moving a decl to a new module
          move a decl to a module that imported it (decl1)
@@ -31,14 +27,7 @@
          move a decl that is referenced
          move a decl that is unreferenced
    8. Merge IO into Utils
-   9. For an IDE we will need to be able to specify where to put the
-      declaration, it can't always go at the end.
    11. Why does it sometimes insert the same import several times?
-   12. Do global tests - is this symbol imported anywhere?  If not remove
-       its export.
-   13. If moving a decl creates a circular import, can we find additional
-       decls to move that resolves the situation?
-   14. Comment directly following a decl should stay with that decl
    15. New modules need to inherit the LANGUAGE parameters of all the
        departure modules.
    16. Arrival modules also need new LANGUAGE pragmas from departure modules.
@@ -47,3 +36,9 @@
    18. Fix bad ModuleKey values in this:
 
           runhaskell scripts/Clean --move=withCurrentDirectory,IO,Utils --move=replaceFile,IO,Utils --find=. --find=scripts --find=tests
+
+
+DONE
+
+ * 1. Create new modules
+ * 3. Make a nice executable for moving decls, including instances
