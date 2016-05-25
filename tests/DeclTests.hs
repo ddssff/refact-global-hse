@@ -10,7 +10,7 @@ module DeclTests where
 
 import Data.List hiding (find)
 import Data.Monoid ((<>))
-import Decls (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec), runSimpleMove)
+import Decls (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec), runSimpleMoveUnsafe)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
 import Language.Haskell.Exts.Annotated.Simplify (sName, sQName)
 import qualified Language.Haskell.Exts.Syntax as S
@@ -79,7 +79,12 @@ decl2 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl2" 
 -- if we are moving it to the place where it is used (which could be
 -- called "moving up".)
 decl3 :: Test
-decl3 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl3" (moveDeclsByName "lines'" "SrcLoc" "Utils")
+decl3 = TestCase $ do
+          testMoveSpec "tests/input/decl-mover" "tests/expected/decl3" spec1
+          testMoveSpec "tests/input/decl-mover" "tests/expected/decl3" spec2
+    where
+      spec1 = moveDeclsByName "lines'" "SrcLoc" "Tmp"
+      spec2 = moveDeclsByName "lines'" "Tmp" "Utils"
 
 decl4 :: Test
 decl4 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl4" spec
@@ -111,7 +116,7 @@ decl6 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl6" 
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
 testMoveSpec input expected moveSpec = do
   gitResetSubdir input
-  runSimpleMove input moveSpec
+  runSimpleMoveUnsafe input moveSpec
   (_, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, input] ""
   gitResetSubdir input
   assertString diff

@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
 module Decls (moveDeclsByName, moveInstDecls,
-              runSimpleMove, moveDeclsAndClean, moveDecls,
+              runSimpleMove, runSimpleMoveUnsafe, moveDeclsAndClean, moveDecls,
               MoveSpec(MoveSpec), applyMoveSpec, traceMoveSpec) where
 
 import Control.Exception (SomeException)
@@ -119,8 +119,10 @@ prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
 -- | Run moveDeclsAndClean on all the .hs files in the given
 -- directory.
 runSimpleMove :: FilePath -> MoveSpec -> IO ()
-runSimpleMove top moveSpec =
-    withCleanRepo $
+runSimpleMove top moveSpec = withCleanRepo $ runSimpleMoveUnsafe top moveSpec
+
+runSimpleMoveUnsafe :: FilePath -> MoveSpec -> IO ()
+runSimpleMoveUnsafe top moveSpec =
     withCurrentDirectory top $
     withTempDirectory True "." "scratch" $ \scratch -> do
       paths <- (catMaybes . map (stripPrefix "./"))
