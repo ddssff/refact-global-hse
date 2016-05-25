@@ -22,7 +22,7 @@ import Types
 import Utils (gFind, gitResetSubdir)
 
 declTests :: Test
-declTests = TestList [decl1, decl2, decl3, decl4, decl5]
+declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, simple1]
 
 -- Test moving a declaration to a module that currently imports it
 decl1 :: Test
@@ -113,8 +113,8 @@ decl6 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl6" 
                            moveDeclsByName "appendMoveSpecs" "Decls" "MoveSpec",
                            moveDeclsByName "identityMoveSpec" "Decls" "MoveSpec"]
 
-decl7 :: Test
-decl7 = TestCase $ testMoveSpec "tests/input/simple" "tests/expected/simple1" spec
+simple1 :: Test
+simple1 = TestCase $ testMoveSpec "tests/input/simple" "tests/expected/simple1" spec
     where
       spec = moveDeclsByName "listPairs" "A" "B"
 
