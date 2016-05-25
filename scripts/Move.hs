@@ -48,7 +48,7 @@ buildParams args = do
       finalize :: Params -> IO Params
       finalize params = do
         paths <- concat <$> mapM (\dir ->
-                                      map (makeRelative (view topDir params </> dir))
+                                      map (makeRelative (view topDir params))
                                               <$> (find (depth ==? 0)
                                                         (extension ==? ".hs" &&? fileType ==? RegularFile)
                                                         (view topDir params </> dir)))
