@@ -10,8 +10,7 @@ import Debug.Trace
 -- import Decls (appendMoveSpecs, identityMoveSpec, moveDeclsByName, moveDeclsAndClean, MoveSpec)
 import Imports (cleanImports)
 import Types (loadModules)
-import IO (withCurrentDirectory, withTempDirectory)
-import Utils (withCleanRepo)
+import Utils (withCleanRepo, withCurrentDirectory, withTempDirectory)
 import System.Directory
 import System.Environment
 import System.FilePath ((</>), makeRelative)

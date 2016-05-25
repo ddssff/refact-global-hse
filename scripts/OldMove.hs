@@ -9,7 +9,9 @@ import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Decls ({-moveDecls,-} moveDeclsAndClean)
 --import Imports (cleanImports)
-import IO (withTempDirectory, withCurrentDirectory)
+import IO ()
+import Utils (withTempDirectory)
+import Utils (withCurrentDirectory)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import qualified Language.Haskell.Exts.Syntax as S

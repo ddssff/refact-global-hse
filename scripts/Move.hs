@@ -9,8 +9,7 @@ import Data.Monoid ((<>), mempty)
 import Debug.Trace
 import Decls (moveDeclsByName, moveDeclsAndClean, MoveSpec, traceMoveSpec)
 import Types (loadModules)
-import IO (withCurrentDirectory, withTempDirectory)
-import Utils (withCleanRepo)
+import Utils (withCleanRepo, withCurrentDirectory, withTempDirectory)
 import System.Environment
 import System.FilePath ((</>), makeRelative)
 import System.FilePath.Find ((&&?), (==?), always, depth, extension, fileType, FileType(RegularFile), find)

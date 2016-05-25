@@ -44,4 +44,6 @@
    16. Arrival modules also need new LANGUAGE pragmas from departure modules.
    17. Make sure there is at least a newline after the last import, and afer
        the end of the exports.
+   18. Fix bad ModuleKey values in this:
 
+          runhaskell scripts/Clean --move=withCurrentDirectory,IO,Utils --move=replaceFile,IO,Utils --find=. --find=scripts --find=tests

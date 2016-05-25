@@ -41,3 +41,11 @@ This makes locating symbols very easy, and lets you know if you need to
 insert a new one.  If you need a symbol that isn't imported and know what
 module it is in, just delete the symbol list and start using the symbol.
 The tool will find it for you the next time it runs.
+
+# Answers to unasked questions
+
+  1. EMPTY IMPORT LISTS - when an import list becomes empty it is not
+     necessarily safe to remove it - it may be importing necessary
+     instances.  However, by default the import cleaner does remove import
+     lists in this case, because the move operations create a lot of these.
+     However, it never removes an import lists that starts out empty.
