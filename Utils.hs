@@ -8,7 +8,7 @@ import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Bool (bool)
 import Data.Generics (Data(gmapM), GenericM, listify, Typeable)
-import Data.List (intercalate, stripPrefix)
+import Data.List (groupBy, intercalate, stripPrefix)
 import Data.Sequence (Seq, (|>))
 import qualified Language.Haskell.Exts.Syntax as S (ModuleName(..))
 import System.Directory (createDirectoryIfMissing, getCurrentDirectory, removeDirectoryRecursive, removeFile, setCurrentDirectory)
@@ -115,3 +115,23 @@ replaceFile path text = do
   writeFile path ({-trace (path ++ " text: " ++ show text)-} text)
   text' <- readFile path
   when (text /= text') (error $ "Failed to replace " ++ show path)
+
+-- | A version of lines that preserves the presence or absence of a
+-- terminating newline
+lines' :: String -> [String]
+lines' s =
+    -- Group characters into strings containing either only newlines or no newlines,
+    -- and then transform the newline only strings into empty lines.
+    bol (groupBy (\ a b -> a /= '\n' && b /= '\n') s)
+    where
+      -- If we are at beginning of line and see a newline, insert an empty
+      bol ("\n" : xs) = "" : bol xs
+      -- If we are at beginning of line and see something else, call end of line
+      bol (x : xs) = x : eol xs
+      -- If we see EOF at bol insert a trailing empty
+      bol [] = [""]
+      -- If we are seeking end of line and see a newline, go to beginning of line
+      eol ("\n" : xs) = bol xs
+      -- This shouldn't happen
+      eol (x : xs) = x : eol xs
+      eol [] = []
