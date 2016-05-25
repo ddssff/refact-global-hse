@@ -8,16 +8,15 @@
 
 module DeclTests where
 
-import Control.Lens (set, view)
 import Data.List hiding (find)
 import Data.Maybe
-import Decls (appendMoveSpecs, makeMoveSpec, moveDeclsAndClean, MoveSpec)
+import Data.Monoid ((<>))
+import Decls (applyMoveSpec, moveDeclsByName, moveDeclsAndClean, MoveSpec(MoveSpec))
 import IO (withCurrentDirectory, withTempDirectory)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
-import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Annotated.Simplify (sName)
 import qualified Language.Haskell.Exts.Syntax as S
-import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
+import ModuleKey (ModuleKey(_moduleName), moduleName)
 import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import System.Process (readProcessWithExitCode)
 import Symbols (foldDeclared)
@@ -42,16 +41,19 @@ decl1 = TestCase $ testMoveSpec "tests/input/atp-haskell" "tests/expected/decl1"
 -- The fact that Tableaux already imports Lib forces us to omit any
 -- import of Tableaux from Lib.
 
-moveSpec1 :: ModuleKey -> A.Decl SrcSpanInfo -> ModuleKey
-moveSpec1 k@(ModuleKey {_moduleName = n}) (A.TypeSig _ [A.Ident _ s] _)
-    | s == "tryfindM" {-|| s == "failing"-} =
-        k {_moduleName = S.ModuleName "Data.Logic.ATP.Tableaux"}
-moveSpec1 k@(ModuleKey {_moduleName = n}) (A.FunBind _ ms)
-    | any (`elem` [S.Ident "tryfindM" {-, S.Ident "failing"-}])
-          (map (\match -> case match of
-                            A.Match _ name _ _ _ -> sName name
-                            A.InfixMatch _ _ name _ _ _ -> sName name) ms) =
-        k {_moduleName = S.ModuleName "Data.Logic.ATP.Tableaux"}
+moveSpec1 :: MoveSpec
+moveSpec1 = MoveSpec f
+    where
+      f key (A.TypeSig _ [A.Ident _ s] _)
+          | s == "tryfindM" {-|| s == "failing"-} =
+              key {_moduleName = S.ModuleName "Data.Logic.ATP.Tableaux"}
+      f key (A.FunBind _ ms)
+          | any (`elem` [S.Ident "tryfindM" {-, S.Ident "failing"-}])
+                (map (\match -> case match of
+                                  A.Match _ name _ _ _ -> sName name
+                                  A.InfixMatch _ _ name _ _ _ -> sName name) ms) =
+              key {_moduleName = S.ModuleName "Data.Logic.ATP.Tableaux"}
+      f key __ = key
 {-
 moveSpec1 k d | Set.member (S.Ident "tryfindM") (foldDeclared Set.insert mempty d) =
                   trace ("Expected TypeSig or FunBind: " ++ show d)
@@ -68,12 +70,11 @@ moveSpec1 k (A.InfixDecl _ _assoc _mi _ops) = k
 moveSpec1 k (A.DerivDecl {}) = k
 moveSpec1 k d = error $ "Unexpected decl: " ++ take 120 (show d) ++ ".."
 -}
-moveSpec1 k _ = k
 
 -- Test moving a declaration to a non-existant module
 -- Test updating import of decl that moved from A to B in module C
 decl2 :: Test
-decl2 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl2" (makeMoveSpec "withCurrentDirectory" "IO" "Tmp")
+decl2 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl2" (moveDeclsByName "withCurrentDirectory" "IO" "Tmp")
 
 -- Test moving a declaration to a module that does *not* currently
 -- import it.  Now we don't know whether it leaves behind uses for
@@ -81,27 +82,28 @@ decl2 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl2" 
 -- if we are moving it to the place where it is used (which could be
 -- called "moving up".)
 decl3 :: Test
-decl3 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl3" (makeMoveSpec "lines'" "SrcLoc" "Utils")
+decl3 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl3" (moveDeclsByName "lines'" "SrcLoc" "Utils")
 
 decl4 :: Test
 decl4 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl4" spec
     where
-      spec = appendMoveSpecs (makeMoveSpec "withTempDirectory" "IO" "Utils") (makeMoveSpec "ignoringIOErrors" "IO" "Utils")
+      spec = moveDeclsByName "withTempDirectory" "IO" "Utils" <>
+             moveDeclsByName "ignoringIOErrors" "IO" "Utils"
 
 decl5 :: Test
 decl5 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl5" spec
     where
-      spec = foldl1' appendMoveSpecs [makeMoveSpec "ModuleKey" "Types" "ModuleKey",
-                                      makeMoveSpec "fullPathOfModuleKey" "Types" "ModuleKey",
-                                      makeMoveSpec "moduleKey" "Types" "ModuleKey"]
+      spec = foldl1' (<>) [moveDeclsByName "ModuleKey" "Types" "ModuleKey",
+                           moveDeclsByName "fullPathOfModuleKey" "Types" "ModuleKey",
+                           moveDeclsByName "moduleKey" "Types" "ModuleKey"]
 
 decl6 :: Test
 decl6 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl6" spec
     where
-      spec = foldl1' appendMoveSpecs [makeMoveSpec "MoveSpec" "Decls" "MoveSpec",
-                                      makeMoveSpec "makeMoveSpec" "Decls" "MoveSpec",
-                                      makeMoveSpec "appendMoveSpecs" "Decls" "MoveSpec",
-                                      makeMoveSpec "identityMoveSpec" "Decls" "MoveSpec"]
+      spec = foldl1' (<>) [moveDeclsByName "MoveSpec" "Decls" "MoveSpec",
+                           moveDeclsByName "moveDeclsByName" "Decls" "MoveSpec",
+                           moveDeclsByName "appendMoveSpecs" "Decls" "MoveSpec",
+                           moveDeclsByName "identityMoveSpec" "Decls" "MoveSpec"]
 
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
 testMoveSpec input expected moveSpec = do
@@ -117,7 +119,7 @@ testMoveSpec input expected moveSpec = do
 testSpec :: MoveSpec -> ModuleInfo -> IO ModuleInfo
 testSpec moveSpec m@(ModuleInfo {_moduleKey = k, _module = A.Module _ _ _ _ ds}) = do
   putStrLn ("---- module " ++ show (moduleName k) ++ " ----")
-  mapM_ (\d -> let k' = moveSpec k d in
+  mapM_ (\d -> let k' = applyMoveSpec moveSpec k d in
                putStrLn (show (foldDeclared (:) [] d) ++ ": " ++ if k /= k' then show k ++ " " ++  " -> " ++ show k' else "unchanged")) ds
   return m
 testSpec _ _ = error "Unexpected module"

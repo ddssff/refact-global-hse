@@ -7,10 +7,9 @@ module ModuleKey
     , moduleTop
     ) where
 
-import Data.List (groupBy)
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.Syntax as S (ModuleName(..))
-import System.FilePath ((<.>), (</>), joinPath)
+import System.FilePath ((<.>), (</>))
 import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), text)
 import Utils (EZPrint(ezPrint))
 
@@ -40,8 +39,6 @@ moduleFullPath :: ModuleKey -> FilePath
 moduleFullPath (ModuleFullPath {_moduleFullPath = x}) = x
 moduleFullPath (ModuleKey {_moduleTop = top, _moduleName = S.ModuleName mname}) =
     top </> mname <.> "hs"
-    where
-      moduleNameToPath (S.ModuleName name) = (joinPath . filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))) name
 
 moduleName :: ModuleKey -> Maybe S.ModuleName
 moduleName (ModuleKey {_moduleName = name}) = Just name

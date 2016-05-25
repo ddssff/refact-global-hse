@@ -8,6 +8,7 @@ import Data.Bool (bool)
 import Data.Generics (Data(gmapM), GenericM, listify, Typeable)
 import Data.List (intercalate, stripPrefix)
 import Data.Sequence (Seq, (|>))
+import qualified Language.Haskell.Exts.Syntax as S
 import System.Exit (ExitCode(..))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcess, readProcessWithExitCode)
@@ -71,6 +72,9 @@ class EZPrint a where
 
 instance EZPrint a => EZPrint [a] where
     ezPrint xs = "[" ++ intercalate ", " (map ezPrint xs) ++ "]"
+
+instance EZPrint S.ModuleName where
+    ezPrint (S.ModuleName s) = s
 
 maybeStripPrefix :: Eq a => [a] -> [a] -> [a]
 maybeStripPrefix pre lst = maybe lst id (stripPrefix pre lst)

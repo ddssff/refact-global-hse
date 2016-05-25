@@ -5,9 +5,9 @@
 import Control.Lens
 import Control.Monad (foldM)
 import Data.List (groupBy, stripPrefix)
-import Data.Monoid ((<>))
+import Data.Monoid ((<>), mempty)
 import Debug.Trace
-import Decls (appendMoveSpecs, identityMoveSpec, makeMoveSpec, moveDeclsAndClean, MoveSpec)
+import Decls (moveDeclsByName, moveDeclsAndClean, MoveSpec, traceMoveSpec)
 import Types (loadModules)
 import IO (withCurrentDirectory, withTempDirectory)
 import Utils (withCleanRepo)
@@ -26,12 +26,12 @@ data Params
 $(makeLenses ''Params)
 
 params0 :: Params
-params0 = Params {_moveSpec = identityMoveSpec, _topDir = ".", _findDirs = [], _moduverse = [], _unsafe = False}
+params0 = Params {_moveSpec = mempty, _topDir = ".", _findDirs = [], _moduverse = [], _unsafe = False}
 
 options :: [OptDescr (Params -> Params)]
 options =
     [ Option "" ["move"] (ReqArg (\s -> case filter (not . elem ',') (groupBy (\a b -> (a == ',') == (b == ',')) s) of
-                                          [name, depart, arrive] -> over moveSpec (appendMoveSpecs (makeMoveSpec name depart arrive))
+                                          [name, depart, arrive] -> over moveSpec ((<>) (moveDeclsByName name depart arrive))
                                           _ -> error s) "SYMNAME,DEPARTMOD,ARRIVEMOD")
              "Move the declaration of a symbol",
       Option "" ["mod"] (ReqArg (\s -> over moduverse (s :)) "PATH") "Add a module to the moduverse",
@@ -65,6 +65,3 @@ run args = do
   (if _unsafe params then id else withCleanRepo) $ withTempDirectory True "." "scratch" $ \scratch -> do
     modules <- loadModules (view moduverse params)
     moveDeclsAndClean (traceMoveSpec (view moveSpec params)) scratch modules
-
-traceMoveSpec :: MoveSpec -> MoveSpec
-traceMoveSpec f = \k d -> let k' = f k d in if k /= k' then (trace ("moveSpec " ++ show k ++ " d -> " ++ show k') k') else k'

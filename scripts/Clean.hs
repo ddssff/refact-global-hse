@@ -7,7 +7,7 @@ import Control.Monad (foldM)
 import Data.List (groupBy, stripPrefix)
 import Data.Monoid ((<>))
 import Debug.Trace
--- import Decls (appendMoveSpecs, identityMoveSpec, makeMoveSpec, moveDeclsAndClean, MoveSpec)
+-- import Decls (appendMoveSpecs, identityMoveSpec, moveDeclsByName, moveDeclsAndClean, MoveSpec)
 import Imports (cleanImports)
 import Types (loadModules)
 import IO (withCurrentDirectory, withTempDirectory)
