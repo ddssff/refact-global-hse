@@ -39,4 +39,6 @@
    13. If moving a decl creates a circular import, can we find additional
        decls to move that resolves the situation?
    14. Comment directly following a decl should stay with that decl
-
+   15. New modules need to inherit the LANGUAGE parameters of all the
+       departure modules.
+   16. Arrival modules also need new LANGUAGE pragmas from departure modules.
