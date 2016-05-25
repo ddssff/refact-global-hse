@@ -13,10 +13,11 @@ import IO (withTempDirectory, withCurrentDirectory)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import qualified Language.Haskell.Exts.Syntax as S
+import ModuleKey (ModuleKey(..))
 import System.Directory (getCurrentDirectory, removeDirectoryRecursive, setCurrentDirectory)
 import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import qualified System.IO.Temp as Temp (createTempDirectory)
-import Types (loadModule, ModuleInfo(..), ModuleKey(..))
+import Types (loadModule, ModuleInfo(..))
 
 main :: IO ()
 -- main = testOn "/home/dsf/git/atp-haskell/src" $ cleanImports
