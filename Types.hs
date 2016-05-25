@@ -14,7 +14,6 @@ module Types
 import qualified CPP (BoolOptions(locations), CpphsOptions(boolopts), defaultCpphsOptions, parseFileWithCommentsAndCPP)
 import Control.Exception (Exception, SomeException)
 import Control.Exception.Lifted as IO (try)
-import Control.Lens (makeLenses)
 import Control.Monad (when)
 import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
@@ -29,11 +28,11 @@ import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensi
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Syntax as S (ModuleName(..), Name(..))
-import ModuleKey
+import ModuleKey (ModuleKey(ModuleFullPath, ModuleKey, _moduleTop), moduleFullPath)
 import SrcLoc (fixSpan, textSpan)
 import System.Directory (canonicalizePath)
-import System.FilePath ((</>), (<.>), joinPath, makeRelative, splitDirectories, splitExtension, splitFileName, takeDirectory)
-import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
+import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
+import Text.PrettyPrint.HughesPJClass as PP (prettyShow)
 import Utils (EZPrint(ezPrint))
 
 data ModuleInfo =

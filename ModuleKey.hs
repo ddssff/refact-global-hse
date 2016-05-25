@@ -7,28 +7,11 @@ module ModuleKey
     , moduleTop
     ) where
 
-import qualified CPP (BoolOptions(locations), CpphsOptions(boolopts), defaultCpphsOptions, parseFileWithCommentsAndCPP)
-import Control.Exception (Exception, SomeException)
-import Control.Exception.Lifted as IO (try)
-import Control.Lens (makeLenses)
-import Control.Monad (when)
-import Control.Monad.Trans (MonadIO(liftIO))
-import Data.Generics (everywhere, mkT)
-import Data.List (groupBy, intercalate)
-import Data.Set as Set (empty, Set, singleton, union, unions)
-import Debug.Trace (trace)
-import qualified Language.Haskell.Exts.Annotated as A (Decl(DerivDecl), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), QName(Qual, UnQual), Type(..))
-import Language.Haskell.Exts.Annotated.Simplify as S (sModuleName, sName)
-import Language.Haskell.Exts.Comments (Comment(..))
-import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
-import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensions, parseFilename, fixities), fromParseResult)
+import Data.List (groupBy)
 import Language.Haskell.Exts.Pretty (prettyPrint)
-import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
-import Language.Haskell.Exts.Syntax as S (ModuleName(..), Name(..))
-import SrcLoc (fixSpan, textSpan)
-import System.Directory (canonicalizePath)
-import System.FilePath ((</>), (<.>), joinPath, makeRelative, splitDirectories, splitExtension, splitFileName)
-import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
+import Language.Haskell.Exts.Syntax as S (ModuleName(..))
+import System.FilePath ((<.>), (</>), joinPath)
+import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), text)
 import Utils (EZPrint(ezPrint))
 
 -- A unique identifier of a module.  This can be done in two ways.  If
