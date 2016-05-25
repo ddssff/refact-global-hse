@@ -39,8 +39,11 @@ data MoveType
     -- which means we probably need to add imports of the symbols of
     -- the declaration to the departure module.
     | Up
-    -- where
-      -- t1 mkey decl x = trace ("moveSpec " ++ show mkey ++ " " ++ show (foldDeclared (:) [] decl) ++ " -> " ++ show x) x
+    -- ^ An Up move moves a declaration towards where it is used.  In
+    -- this case leaving behind an import will probably create an
+    -- import cycle.  Therefore we need to convert the (remaining)
+    -- exports of the departure module into imports and add them to
+    -- the arrival module.
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode

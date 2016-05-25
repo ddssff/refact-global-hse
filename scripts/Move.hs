@@ -18,6 +18,7 @@ import System.Console.GetOpt
 data Params
     = Params { _moveSpec :: MoveSpec
              , _topDir :: FilePath
+             , _lsDirs :: [FilePath]
              , _findDirs :: [FilePath]
              , _moduverse :: [FilePath]
              , _unsafe :: Bool }
@@ -25,17 +26,18 @@ data Params
 $(makeLenses ''Params)
 
 params0 :: Params
-params0 = Params {_moveSpec = mempty, _topDir = ".", _findDirs = [], _moduverse = [], _unsafe = False}
+params0 = Params {_moveSpec = mempty, _topDir = ".", _findDirs = [], _lsDirs = [], _moduverse = [], _unsafe = False}
 
 options :: [OptDescr (Params -> Params)]
 options =
     [ Option "" ["move"] (ReqArg (\s -> case filter (not . elem ',') (groupBy (\a b -> (a == ',') == (b == ',')) s) of
                                           [name, depart, arrive] -> over moveSpec ((<>) (moveDeclsByName name depart arrive))
                                           _ -> error s) "SYMNAME,DEPARTMOD,ARRIVEMOD")
-             "Move the declaration of a symbol",
-      Option "" ["mod"] (ReqArg (\s -> over moduverse (s :)) "PATH") "Add a module to the moduverse",
-      Option "" ["top"] (ReqArg (\s -> over topDir (const s)) "DIR") "Set the top directory, module paths will be relative to this (so do it first)",
-      Option "" ["find"] (ReqArg (\s -> over findDirs (s :)) "DIR") "Directory relative to top to search (non-recursively) for .hs files to add to the moduverse"
+             "Move the declaration of a symbol"
+    , Option "" ["mod"] (ReqArg (\s -> over moduverse (s :)) "PATH") "Add a module to the moduverse"
+    , Option "" ["top"] (ReqArg (\s -> over topDir (const s)) "DIR") "Set the top directory, module paths will be relative to this (so do it first)"
+    , Option "" ["ls"] (ReqArg (\s -> over lsDirs (s :)) "DIR") "Directory relative to top to search (non-recursively) for .hs files to add to the moduverse"
+    , Option "" ["find"] (ReqArg (\s -> over findDirs (s :)) "DIR") "Directory relative to top to search (recursively) for .hs files to add to the moduverse"
     , Option "" ["unsafe"] (NoArg (set unsafe True)) "Skip the safety check - allow uncommitted edits in repo where clean is performed" ]
 
 buildParams :: [String] -> IO Params
@@ -47,13 +49,17 @@ buildParams args = do
       -- Search the findDir directories for paths and add them to moduverse.
       finalize :: Params -> IO Params
       finalize params = do
-        paths <- concat <$> mapM (\dir ->
-                                      map (makeRelative (view topDir params))
+        paths1 <- mapM (\dir -> map (makeRelative (view topDir params))
                                               <$> (find (depth ==? 0)
                                                         (extension ==? ".hs" &&? fileType ==? RegularFile)
                                                         (view topDir params </> dir)))
-                                 (_findDirs params)
-        pure $ over moduverse (++ paths) params
+                       (_lsDirs params)
+        paths2 <- mapM (\dir -> map (makeRelative (view topDir params))
+                                              <$> (find (depth ==? 0)
+                                                        (extension ==? ".hs" &&? fileType ==? RegularFile)
+                                                        (view topDir params </> dir)))
+                       (_findDirs params)
+        pure $ over moduverse (++ (concat (paths1 ++ paths2))) params
 
 main :: IO ()
 main = getArgs >>= run

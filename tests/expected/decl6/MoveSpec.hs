@@ -25,11 +25,6 @@ appendMoveSpecs f g =
           _ -> k0
 
 identityMoveSpec = \k _ -> k
-    -- ^ An Up move moves a declaration towards where it is used.  In
-    -- this case leaving behind an import will probably create an
-    -- import cycle.  Therefore we need to convert the (remaining)
-    -- exports of the departure module into imports and add them to
-    -- the arrival module.
 
 -- A simple MoveSpec builder.
 makeMoveSpec :: String -> String -> String -> MoveSpec
@@ -39,3 +34,5 @@ makeMoveSpec fname mname mname' =
         if _moduleName mkey == Just (S.ModuleName mname) && (Set.member (S.Ident fname) syms || Set.member (S.Symbol fname) syms)
         then {-t1 mkey decl-} (mkey {_moduleName = Just (S.ModuleName mname')})
         else mkey
+    -- where
+      -- t1 mkey decl x = trace ("moveSpec " ++ show mkey ++ " " ++ show (foldDeclared (:) [] decl) ++ " -> " ++ show x) x
