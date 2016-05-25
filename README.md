@@ -50,6 +50,9 @@ The tool will find it for you the next time it runs.
      lists in this case, because the move operations create a lot of these.
      However, it never removes an import lists that starts out empty.
 
+  2. Sometimes you can avoid circular imports by moving a declaration to
+     a temporary module and then to where you actually wanted it.
+
 # To Do
 
   1. Add ways to break circular imports.  For example, find additional decls
