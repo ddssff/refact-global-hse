@@ -16,18 +16,18 @@
 
  1. There are scripts to do simple import cleaning and declaration moving:
 
-    $ runhaskell scripts/Clean.hs --top=/path/to/somerepo --find=Foo
-    $ runhaskell scripts/Move.hs --help
+      $ runhaskell scripts/Clean.hs --top=/path/to/somerepo --find=Foo
+      $ runhaskell scripts/Move.hs --help
 
  (Does not handle instances.)
 
  2. Use the interpreter.  Best examples are in the test suite.  Make sure
     your file permissions are set up so you can read the .ghci script:
 
-    $ chmod g-w . .ghci
-    $ ghci
-    λ runSimpleMove "/path/to/somerepo" (moveDeclsByName "funcname1" "Foo.OldMod" "Foo.NewMod" <>
-      		    			 moveDeclsByName "funcname2" "Foo.OldMod" "Foo.NewMod")
+      $ chmod g-w . .ghci
+      $ ghci
+      λ runSimpleMove "/path/to/somerepo" (moveDeclsByName "funcname1" "Foo.OldMod" "Foo.NewMod" <>
+                                           moveDeclsByName "funcname2" "Foo.OldMod" "Foo.NewMod")
 
 # Reformatted import lists
 
