@@ -1,21 +1,21 @@
 {-# LANGUAGE CPP, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
 module Decls (moveDeclsByName, moveInstDecls,
-              moveDeclsAndClean, moveDecls,
+              runSimpleMove, moveDeclsAndClean, moveDecls,
               MoveSpec(MoveSpec), applyMoveSpec, traceMoveSpec) where
 
 import Control.Exception (SomeException)
 import Control.Lens ((.=), makeLenses, use, view)
 import Control.Monad (void)
 import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS)
-import Data.Foldable (find)
-import Data.List (foldl', intercalate, nub)
+import Data.Foldable as Foldable (find)
+import Data.List (foldl', intercalate, nub, stripPrefix)
 import Data.Map as Map (insertWith, Map, mapWithKey, singleton, toList)
 import Data.Maybe (catMaybes, maybeToList)
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set)
 import Data.Tuple (swap)
 import Debug.Trace (trace)
 import Imports (cleanImports)
-import IO (replaceFile)
+import IO (replaceFile, withCurrentDirectory, withTempDirectory)
 import qualified Language.Haskell.Exts.Annotated as A
 import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
@@ -24,9 +24,14 @@ import qualified Language.Haskell.Exts.Syntax as S
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
 import SrcLoc (endLoc, spanText, srcLoc, textSpan)
 import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
+import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Types (ModuleInfo(..), loadModule)
-import Utils (dropWhile2, EZPrint(ezPrint), gFind)
+import Types (ModuleInfo(..), loadModule, loadModules)
+import Utils (dropWhile2, EZPrint(ezPrint), gFind, withCleanRepo)
+
+data St = St { _point :: SrcLoc, _newmods :: Map ModuleKey [A.Decl SrcSpanInfo] }
+
+$(makeLenses ''St)
 
 -- | Specifies where to move each declaration of each module.  Given a
 -- departure module key and a declaration, return an arrival module key.
@@ -112,9 +117,16 @@ moveInstDecls instpred =
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
 
-data St = St { _point :: SrcLoc, _newmods :: Map ModuleKey [A.Decl SrcSpanInfo] }
-
-$(makeLenses ''St)
+-- | Run moveDeclsAndClean on all the .hs files in the given
+-- directory.
+runSimpleMove :: FilePath -> MoveSpec -> IO ()
+runSimpleMove top moveSpec =
+    withCleanRepo $
+    withCurrentDirectory top $
+    withTempDirectory True "." "scratch" $ \scratch -> do
+      paths <- (catMaybes . map (stripPrefix "./"))
+               <$> (FilePath.find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
+      loadModules paths >>= moveDeclsAndClean moveSpec scratch
 
 moveDeclsAndClean :: MoveSpec -> FilePath -> [ModuleInfo] -> IO ()
 moveDeclsAndClean moveSpec scratch modules = do
@@ -161,7 +173,7 @@ moveDeclsOfModule _ _ x = error $ "moveDeclsOfModule - unexpected module: " ++ s
 
 -- | Unsafe ModuleInfo lookup
 findModuleByKey :: [ModuleInfo] -> ModuleKey -> Maybe ModuleInfo
-findModuleByKey modules thisKey = find (\m -> _moduleKey m == thisKey) modules
+findModuleByKey modules thisKey = Foldable.find (\m -> _moduleKey m == thisKey) modules
 
 findModuleByKeyUnsafe :: [ModuleInfo] -> ModuleKey -> ModuleInfo
 findModuleByKeyUnsafe modules thisKey = maybe (error $ "Module not found: " ++ show thisKey) id $ findModuleByKey modules thisKey

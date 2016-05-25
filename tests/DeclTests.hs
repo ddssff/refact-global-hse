@@ -9,15 +9,12 @@
 module DeclTests where
 
 import Data.List hiding (find)
-import Data.Maybe
 import Data.Monoid ((<>))
-import Decls (applyMoveSpec, moveDeclsByName, moveInstDecls, moveDeclsAndClean, MoveSpec(MoveSpec))
-import IO (withCurrentDirectory, withTempDirectory)
+import Decls (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec), runSimpleMove)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
 import Language.Haskell.Exts.Annotated.Simplify (sName, sQName)
 import qualified Language.Haskell.Exts.Syntax as S
 import ModuleKey (ModuleKey(_moduleName), moduleName)
-import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import System.Process (readProcessWithExitCode)
 import Symbols (foldDeclared)
 import Test.HUnit
@@ -114,10 +111,7 @@ decl6 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl6" 
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
 testMoveSpec input expected moveSpec = do
   gitResetSubdir input
-  withCurrentDirectory input $
-    withTempDirectory True "." "scratch" $ \scratch -> do
-      paths <- (catMaybes . map (stripPrefix "./")) <$> (find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
-      loadModules paths >>= {-mapM (testSpec moveSpec) >>=-} moveDeclsAndClean moveSpec scratch
+  runSimpleMove input moveSpec
   (_, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, input] ""
   gitResetSubdir input
   assertString diff
