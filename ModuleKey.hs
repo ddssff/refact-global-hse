@@ -7,6 +7,7 @@ module ModuleKey
     , moduleTop
     ) where
 
+import Data.List (groupBy, intercalate)
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.Syntax as S (ModuleName(..))
 import System.FilePath ((<.>), (</>))
@@ -38,7 +39,9 @@ data ModuleKey
 moduleFullPath :: ModuleKey -> FilePath
 moduleFullPath (ModuleFullPath {_moduleFullPath = x}) = x
 moduleFullPath (ModuleKey {_moduleTop = top, _moduleName = S.ModuleName mname}) =
-    top </> mname <.> "hs"
+    top </>
+    (intercalate "/" . filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))) mname <.>
+    "hs"
 
 moduleName :: ModuleKey -> Maybe S.ModuleName
 moduleName (ModuleKey {_moduleName = name}) = Just name
