@@ -26,7 +26,7 @@ import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Types (loadModule, loadModules, ModuleInfo(..))
-import Utils (dropWhile2, EZPrint(ezPrint), gFind, replaceFile, withCleanRepo, withCurrentDirectory, withTempDirectory)
+import Utils (dropWhile2, EZPrint(ezPrint), gFind, listPairs, listTriples, replaceFile, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 data St = St { _point :: SrcLoc, _newmods :: Map ModuleKey [A.Decl SrcSpanInfo] }
 
@@ -251,11 +251,6 @@ updateHeader moveSpec modules m@(ModuleInfo {_moduleKey = k, _module = A.Module 
           where
             nextLoc = maybe (endLoc (A.ann spec)) (srcLoc . A.ann) next
 updateHeader _ _ _ = pure ()
-
-listPairs :: [a] -> [(a, Maybe a)]
-listPairs (x1 : x2 : xs) = (x1, Just x2) : listPairs (x2 : xs)
-listPairs [x] = [(x, Nothing)]
-listPairs [] = []
 
 -- | Text of exports added due to arriving declarations
 newExports :: MoveSpec -> [ModuleInfo] -> ModuleKey -> [String]
