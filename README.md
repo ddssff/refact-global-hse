@@ -61,3 +61,6 @@ The tool will find it for you the next time it runs.
   6. Global tests for minimizing LANGUAGE directives (by trial and error)
   7. Whitespace issues - e.g. a comment directly following a decl should stay with
      that decl.
+  8. Finish the HasSymbols and HasCNames instances in Symbols.hs.  Retire FoldDeclared.
+  9. Port from haskell-src-exts to ghc-exactprint.
+ 10. Retire FoldM
