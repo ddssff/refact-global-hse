@@ -113,6 +113,11 @@ decl6 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl6" 
                            moveDeclsByName "appendMoveSpecs" "Decls" "MoveSpec",
                            moveDeclsByName "identityMoveSpec" "Decls" "MoveSpec"]
 
+decl7 :: Test
+decl7 = TestCase $ testMoveSpec "tests/input/simple" "tests/expected/simple1" spec
+    where
+      spec = moveDeclsByName "listPairs" "A" "B"
+
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
 testMoveSpec input expected moveSpec = do
   gitResetSubdir input
