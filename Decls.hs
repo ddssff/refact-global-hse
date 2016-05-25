@@ -4,9 +4,9 @@ module Decls (moveDeclsByName, moveInstDecls,
               MoveSpec(MoveSpec), applyMoveSpec, traceMoveSpec) where
 
 import Control.Exception (SomeException)
-import Control.Lens ((.=), makeLenses, use, view)
+import Control.Lens (view)
 import Control.Monad (void)
-import Control.Monad.RWS (evalRWS, get, MonadWriter(tell), put, RWS)
+import Control.Monad.RWS (evalRWS, MonadState(put), MonadWriter(tell), RWS)
 import Data.Foldable as Foldable (find)
 import Data.List (foldl', intercalate, nub, stripPrefix)
 import Data.Map as Map (insertWith, Map, mapWithKey, singleton, toList)
@@ -21,12 +21,12 @@ import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleM
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..), QName(Qual, Special, UnQual))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
-import SrcLoc (endLoc, spanText, srcLoc, textSpan)
+import SrcLoc (endLoc, keep, skip, spanText, srcLoc, textSpan)
 import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Types (loadModule, loadModules, ModuleInfo(..))
-import Utils (dropWhile2, EZPrint(ezPrint), gFind, listPairs, listTriples, replaceFile, withCleanRepo, withCurrentDirectory, withTempDirectory)
+import Utils (dropWhile2, EZPrint(ezPrint), gFind, listPairs, replaceFile, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 -- | Specifies where to move each declaration of each module.  Given a
 -- departure module key and a declaration, return an arrival module key.
@@ -213,13 +213,6 @@ defaultHsSourceDir modules =
                           (map _modulePath modules) in
     snd (maximum (map swap (Map.toList countMap)))
 
-keep :: SrcLoc -> RWS String String SrcLoc ()
-keep l = do
-  t <- view id
-  p <- get
-  tell (spanText (p, l) t)
-  put l
-
 -- | Write the new export list.  Exports of symbols that have moved
 -- out are removed.  Exports of symbols that have moved in are added
 -- *if* the symbol is imported anywhere else.
@@ -281,9 +274,6 @@ findDeclOfExportSpec info spec =
             [] -> Nothing
             ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (map srcLoc ds)
       findDeclOfSymbols x _ = error $ "findDeclOfExportSpec - unexpected module: " ++ show (_module x)
-
-skip :: SrcLoc -> RWS String String SrcLoc ()
-skip loc = put loc
 
 -- Find the declaration of the symbols of an import spec.  If that
 -- declaration moved, update the module name.

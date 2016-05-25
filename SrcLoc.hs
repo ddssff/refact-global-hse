@@ -16,9 +16,12 @@ module SrcLoc
     , validateParseResults
 #endif
     , fixSpan
+    , keep
+    , skip
     ) where
 
 import Control.Lens (_2, view)
+import Control.Monad.RWS (MonadWriter(tell), RWS)
 import Control.Monad.State (get, put, runState, State)
 import Data.List (partition, sort)
 import Data.Monoid ((<>))
@@ -195,3 +198,13 @@ fixSpan sp =
     else sp
     where
       t1 sp' = {-trace ("fixSpan " ++ show (srcInfoSpan sp) ++ " -> " ++ show (srcInfoSpan sp'))-} sp'
+
+keep :: SrcLoc -> RWS String String SrcLoc ()
+keep l = do
+  t <- view id
+  p <- get
+  tell (spanText (p, l) t)
+  put l
+
+skip :: SrcLoc -> RWS String String SrcLoc ()
+skip loc = put loc
