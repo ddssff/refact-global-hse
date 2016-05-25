@@ -228,13 +228,14 @@ keep l = do
 -- out are removed.  Exports of symbols that have moved in are added
 -- *if* the symbol is imported anywhere else.
 updateHeader :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> RWS String String St ()
-updateHeader moveSpec modules m@(ModuleInfo {_moduleKey = k, _module = A.Module _ (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList l specs)))) _ _ _}) = do
+updateHeader moveSpec modules m@(ModuleInfo {_moduleKey = k, _module = A.Module _ (Just h@(A.ModuleHead _ _ _ (Just (A.ExportSpecList l specs)))) _ _ _}) = do
   -- write everything to beginning of first export spec
   keep (case specs of
           (x : _) -> srcLoc (A.ann x)
           [] -> srcLoc l)
   mapM_ (uncurry doExport) (listPairs specs)
-  tell (concat (map (exportSep ++) (newExports moveSpec modules (_moduleKey m))))
+  tell (concat (map (exportSep ++) (newExports moveSpec modules k)))
+  keep (endLoc (A.ann h))
   -- mapM_ newExports (filter (\x -> _moduleKey x /= _moduleKey m) modules)
     where
       -- exportSpecText :: A.Decl SrcSpanInfo -> String
