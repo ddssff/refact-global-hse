@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
-module Decls (moveDeclsByName, moveInstDecls,
+module Decls (moveDeclsByName, moveInstDecls, instClassPred,
               runSimpleMove, runSimpleMoveUnsafe, moveDeclsAndClean, moveDecls,
               MoveSpec(MoveSpec), applyMoveSpec, traceMoveSpec) where
 
@@ -16,7 +16,7 @@ import Data.Tuple (swap)
 import Debug.Trace (trace)
 import Imports (cleanImports)
 import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(InstDecl, TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), InstHead(..), InstRule(IParen, IRule), Module(Module), ModuleHead(ModuleHead), Pretty, QName, Type)
-import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName)
+import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName, sQName)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..), QName(Qual, Special, UnQual))
@@ -108,6 +108,15 @@ moveInstDecls instpred =
                   mkey {_moduleName = S.ModuleName mname'}
           _ -> mkey
 -}
+
+-- | Build the argument to moveInstDecls
+instClassPred :: String -> String -> String ->
+                 ModuleKey -> A.QName SrcSpanInfo -> [A.Type SrcSpanInfo] -> ModuleKey
+instClassPred classname depart arrive key@(ModuleKey {_moduleName = mname}) qname _ts
+    | mname == S.ModuleName depart &&
+      (gFind (sQName qname) :: [S.Name]) == [S.Ident classname] =
+        key {_moduleName = S.ModuleName arrive}
+instClassPred _ _ _ key _ _ = key
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode

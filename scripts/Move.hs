@@ -7,7 +7,7 @@ import Control.Monad (foldM)
 import Data.List (groupBy, stripPrefix)
 import Data.Monoid ((<>), mempty)
 import Debug.Trace
-import Decls (moveDeclsByName, moveDeclsAndClean, MoveSpec, traceMoveSpec)
+import Decls (instClassPred, moveDeclsByName, moveDeclsAndClean, moveInstDecls, MoveSpec, traceMoveSpec)
 import Types (loadModules)
 import Utils (withCleanRepo, withCurrentDirectory, withTempDirectory)
 import System.Environment
@@ -30,10 +30,15 @@ params0 = Params {_moveSpec = mempty, _topDir = ".", _findDirs = [], _lsDirs = [
 
 options :: [OptDescr (Params -> Params)]
 options =
-    [ Option "" ["move"] (ReqArg (\s -> case filter (not . elem ',') (groupBy (\a b -> (a == ',') == (b == ',')) s) of
+    [ Option "" ["decl"] (ReqArg (\s -> case filter (not . elem ',') (groupBy (\a b -> (a == ',') == (b == ',')) s) of
                                           [name, depart, arrive] -> over moveSpec ((<>) (moveDeclsByName name depart arrive))
                                           _ -> error s) "SYMNAME,DEPARTMOD,ARRIVEMOD")
              "Move the declaration of a symbol"
+    , Option "" ["inst"] (ReqArg (\s -> case filter (not . elem ',') (groupBy (\a b -> (a == ',') == (b == ',')) s) of
+                                          [classname, depart, arrive] ->
+                                              over moveSpec ((<>) (moveInstDecls (instClassPred classname depart arrive)))
+                                          _ -> error s) "CLASSNAME,DEPARTMOD,ARRIVEMOD")
+             "Move all instances of a class"
     , Option "" ["mod"] (ReqArg (\s -> over moduverse (s :)) "PATH") "Add a module to the moduverse"
     , Option "" ["top"] (ReqArg (\s -> over topDir (const s)) "DIR") "Set the top directory, module paths will be relative to this (so do it first)"
     , Option "" ["ls"] (ReqArg (\s -> over lsDirs (s :)) "DIR") "Directory relative to top to search (non-recursively) for .hs files to add to the moduverse"
