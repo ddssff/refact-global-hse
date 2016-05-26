@@ -13,24 +13,25 @@ import Data.Char (toLower)
 import Data.Function (on)
 import Data.List (find, groupBy, intercalate, nub, sortBy)
 import Data.Maybe (catMaybes)
-import Data.Set as Set (fromList, member, Set, toList, unions)
+import Data.Set as Set (empty, fromList, member, Set, singleton, toList, union, unions)
 import qualified Data.Set as Set (map)
 import Debug.Trace (trace)
-import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Pretty, SrcLoc(SrcLoc))
+import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Pretty, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
 import Language.Haskell.Exts.Annotated.Simplify as S (sImportDecl, sImportSpec, sModuleName, sName)
 import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrintStyleMode)
-import Language.Haskell.Exts.SrcLoc
+import Language.Haskell.Exts.SrcLoc (SrcLoc(srcColumn, srcFilename, srcLine), SrcSpanInfo)
 import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(importLoc, importModule, importSpecs), ModuleName(..), Name(..))
 import ModuleKey (moduleFullPath, moduleTop)
-import SrcLoc (endLoc, keep, skip, spanText, srcLoc, textSpan)
+import SrcLoc (endLoc, keep, skip, srcLoc, textSpan)
 import Symbols (symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
 import System.FilePath.Extra2 (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleText), DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule)
+import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleText), hseExtensions, hsFlags, loadModule)
+
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> [FilePath] -> [ModuleInfo] -> m ()
@@ -231,3 +232,42 @@ standaloneDerivingTypes (ModuleInfo {_module = A.Module _ _ _ _ decls}) =
 nameString :: S.Name -> String
 nameString (S.Ident s) = s
 nameString (S.Symbol s) = s
+
+-- | Collect the declared types of a standalone deriving declaration.
+class DerivDeclTypes a where
+    derivDeclTypes :: a -> Set (Maybe S.ModuleName, S.Name)
+
+instance DerivDeclTypes (A.Decl l) where
+    derivDeclTypes (A.DerivDecl _ _ x) = derivDeclTypes x
+    derivDeclTypes _ = empty
+
+instance DerivDeclTypes (A.InstRule l) where
+    derivDeclTypes (A.IRule _ _ _ x)  = derivDeclTypes x
+    derivDeclTypes (A.IParen _ x) = derivDeclTypes x
+
+instance DerivDeclTypes (A.InstHead l) where
+    derivDeclTypes (A.IHCon _ _) = empty
+    derivDeclTypes (A.IHParen _ x) = derivDeclTypes x
+    derivDeclTypes (A.IHInfix _ x _op) = derivDeclTypes x
+    derivDeclTypes (A.IHApp _ x y) = union (derivDeclTypes x) (derivDeclTypes y)
+
+instance DerivDeclTypes (A.Type l) where
+    derivDeclTypes (A.TyForall _ _ _ x) = derivDeclTypes x -- qualified type
+    derivDeclTypes (A.TyFun _ x y) = union (derivDeclTypes x) (derivDeclTypes y) -- function type
+    derivDeclTypes (A.TyTuple _ _ xs) = unions (Prelude.map derivDeclTypes xs) -- tuple type, possibly boxed
+    derivDeclTypes (A.TyList _ x) =  derivDeclTypes x -- list syntax, e.g. [a], as opposed to [] a
+    derivDeclTypes (A.TyApp _ x y) = union (derivDeclTypes x) (derivDeclTypes y) -- application of a type constructor
+    derivDeclTypes (A.TyVar _ _) = empty -- type variable
+    derivDeclTypes (A.TyCon _ (A.Qual _ m n)) = singleton (Just (sModuleName m), sName n) -- named type or type constructor
+       -- Unqualified names refer to imports without "qualified" or "as" values.
+    derivDeclTypes (A.TyCon _ (A.UnQual _ n)) = singleton (Nothing, sName n)
+    derivDeclTypes (A.TyCon _ _) = empty
+    derivDeclTypes (A.TyParen _ x) = derivDeclTypes x -- type surrounded by parentheses
+    derivDeclTypes (A.TyInfix _ x _op y) = union (derivDeclTypes x) (derivDeclTypes y) -- infix type constructor
+    derivDeclTypes (A.TyKind _ x _) = derivDeclTypes x -- type with explicit kind signature
+    derivDeclTypes (A.TyParArray _ x) = derivDeclTypes x
+    derivDeclTypes (A.TyPromoted _ _) = empty
+    derivDeclTypes (A.TyEquals _ _ _) = empty -- a ~ b, not clear how this related to standalone deriving
+    derivDeclTypes (A.TySplice _ _) = empty
+    derivDeclTypes (A.TyBang _ _ x) = derivDeclTypes x
+    derivDeclTypes (A.TyWildCard _ _) = empty
