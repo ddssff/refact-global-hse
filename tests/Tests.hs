@@ -3,6 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 
+import Data.List (intercalate)
 import DeclTests
 import SrcLoc (debugRender)
 import System.Exit (ExitCode(..), exitWith)
