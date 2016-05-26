@@ -3,7 +3,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 
-import DeclTests (declTests)
+import DeclTests
 import System.Exit (ExitCode(..), exitWith)
 import Test.HUnit (errors, failures, runTestTT, Test(TestList))
 

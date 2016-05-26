@@ -5,7 +5,7 @@ import Data.List (foldl')
 import Data.Maybe (fromMaybe)
 import Language.Haskell.Exts.Annotated.Simplify (sName)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (ClassDecl(..), CName(..), ConDecl(..), Decl(..), DeclHead(..), ExportSpec(..), FieldDecl(..), GadtDecl(..), ImportSpec(..), InstHead(..), InstRule(..), Match(..), Name, Pat(..), PatField(..), QName(..), QualConDecl(..), RPat(..))
-import qualified Language.Haskell.Exts.Syntax as S (Name) -- arriving
+import qualified Language.Haskell.Exts.Syntax as S (Name)
 
 
 -- | Do a fold over the names that are declared in a declaration (not

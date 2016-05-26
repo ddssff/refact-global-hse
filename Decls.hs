@@ -91,8 +91,8 @@ moveInstDecls :: (ModuleKey -> A.QName SrcSpanInfo -> [A.Type SrcSpanInfo] -> Mo
 moveInstDecls instpred =
     MoveSpec f
     where
-      f mkey decl@(A.InstDecl _ _ irule _) = g mkey irule
-      f mkey decl = mkey
+      f mkey (A.InstDecl _ _ irule _) = g mkey irule
+      f mkey _ = mkey
       g mkey (A.IParen _ irule) = g mkey irule
       g mkey (A.IRule _ _ _ ihead) = uncurry (instpred mkey) (h [] ihead)
       h :: [A.Type SrcSpanInfo] -> A.InstHead SrcSpanInfo -> (A.QName SrcSpanInfo, [A.Type SrcSpanInfo])
@@ -315,7 +315,7 @@ updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = A.Mo
                   name' /= name &&
                   -- don't generate self imports
                   name' /= thisModuleName ->
-                    tell ("\nimport " ++ prettyPrint' name' ++ " (" ++ prettyPrint' spec ++ ")")
+                    tell ("\nimport " ++ prettyPrint' name' ++ " (" ++ prettyPrint' spec ++ ")" ++ "\n")
             _ -> pure ()
 
       thisModuleName = case thisKey of
@@ -347,7 +347,7 @@ importsForDepartingDecls moveSpec modules (Just (ModuleInfo {_moduleKey = thisKe
                                case t2 d thisKey someKey (findModuleByKey modules someKey) of
                                  Just (ModuleInfo {_module = A.Module _ _ _ someModuleImports _}) ->
                                      case moveType someModuleImports thisModuleName of
-                                       Down ->  "\n" ++ prettyPrint' (importSpecFromDecl someModuleName d)
+                                       Down ->  "\n" ++ prettyPrint' (importSpecFromDecl someModuleName d) ++ "\n"
                                        Up -> ""
                                  -- Moving a declaration from thisKey to someKey is a "Down"
                                  -- move if there are any remaining uses of those symbols in
@@ -355,7 +355,7 @@ importsForDepartingDecls moveSpec modules (Just (ModuleInfo {_moduleKey = thisKe
                                  -- depend on exports of thisKey.  FIXME: I haven't
                                  -- implemented theses tests yet, so assume Down for now.
                                  Just _ -> error "Unexpected module"
-                                 Nothing -> "\n" ++ prettyPrint' (importSpecFromDecl someModuleName d)
+                                 Nothing -> "\n" ++ prettyPrint' (importSpecFromDecl someModuleName d) ++ "\n"
                        _ -> "") ds
     where
       t2 d k k' x = trace ("departing: " ++ ezPrint d ++ " from " ++ ezPrint k ++ " -> " ++ ezPrint k') x
@@ -383,7 +383,8 @@ importsForArrivingDecls moveSpec thisKey thisModuleImports someModule@(ModuleInf
              (filter (\i -> moduleName thisKey /= Just (sModuleName (A.importModule i))) is) ++
          concatMap
              (\i -> "\n" ++ prettyPrint' i)
-             (maybeToList (importDeclFromExportSpecs moveSpec thisModuleImports someModule))
+             (maybeToList (importDeclFromExportSpecs moveSpec thisModuleImports someModule)) ++
+         "\n"
     else ""
 importsForArrivingDecls _ _ _ _ = ""
 

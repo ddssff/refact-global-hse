@@ -8,6 +8,7 @@
 
 module DeclTests where
 
+import Control.Monad (when)
 import Data.List hiding (find)
 import Data.Monoid ((<>))
 import Decls (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec), runSimpleMoveUnsafe)
@@ -15,6 +16,7 @@ import qualified Language.Haskell.Exts.Annotated.Syntax as A
 import Language.Haskell.Exts.Annotated.Simplify (sName, sQName)
 import qualified Language.Haskell.Exts.Syntax as S
 import ModuleKey (ModuleKey(_moduleName), moduleName)
+import System.Exit (ExitCode(ExitSuccess))
 import System.Process (readProcessWithExitCode)
 import Symbols (foldDeclared)
 import Test.HUnit
@@ -26,7 +28,7 @@ declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, simple1]
 
 -- Test moving a declaration to a module that currently imports it
 decl1 :: Test
-decl1 = TestCase $ testMoveSpec "tests/input/atp-haskell" "tests/expected/decl1" moveSpec1
+decl1 = TestCase $ testMoveSpec "tests/expected/decl1" "tests/input/atp-haskell" moveSpec1
 
 -- Move tryfindM from Lib to Tableaux.  Tableaux already imports
 -- tryfindM, so that import should be removed.  The question is, now
@@ -71,7 +73,10 @@ moveSpec1 k d = error $ "Unexpected decl: " ++ take 120 (show d) ++ ".."
 -- Test moving a declaration to a non-existant module
 -- Test updating import of decl that moved from A to B in module C
 decl2 :: Test
-decl2 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl2" (moveDeclsByName "withCurrentDirectory" "IO" "Tmp")
+decl2 = TestCase $ do
+          let input = "tests/input/decl-mover"
+          testMoveSpec' "tests/expected/decl2" input
+            (runSimpleMoveUnsafe input (moveDeclsByName "withCurrentDirectory" "IO" "Tmp"))
 
 -- Test moving a declaration to a module that does *not* currently
 -- import it.  Now we don't know whether it leaves behind uses for
@@ -81,13 +86,14 @@ decl2 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl2" 
 decl3 :: Test
 decl3 = TestCase $ do
           let input = "tests/input/decl-mover"
-          gitResetSubdir input
-          testMoveSpec' input "tests/expected/decl3"
+          testMoveSpec' "tests/expected/decl3" input
             (runSimpleMoveUnsafe input (moveDeclsByName "lines'" "SrcLoc" "Tmp") >>
              runSimpleMoveUnsafe input (moveDeclsByName "lines'" "Tmp" "Utils"))
 
 decl4 :: Test
-decl4 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl4" spec
+decl4 = TestCase $ do
+          let input = "tests/input/decl-mover"
+          testMoveSpec' "tests/expected/decl4" input (runSimpleMoveUnsafe input spec)
     where
       spec = foldl1' (<>) [moveDeclsByName "withTempDirectory" "IO" "Utils",
                            moveDeclsByName "ignoringIOErrors" "IO" "Utils",
@@ -99,14 +105,14 @@ decl4 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl4" 
       instpred key _ _ = key
 
 decl5 :: Test
-decl5 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl5" spec
+decl5 = TestCase $ testMoveSpec "tests/expected/decl5" "tests/input/decl-mover" spec
     where
       spec = foldl1' (<>) [moveDeclsByName "ModuleKey" "Types" "ModuleKey",
                            moveDeclsByName "fullPathOfModuleKey" "Types" "ModuleKey",
                            moveDeclsByName "moduleKey" "Types" "ModuleKey"]
 
 decl6 :: Test
-decl6 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl6" spec
+decl6 = TestCase $ testMoveSpec "tests/expected/decl6" "tests/input/decl-mover" spec
     where
       spec = foldl1' (<>) [moveDeclsByName "MoveSpec" "Decls" "MoveSpec",
                            moveDeclsByName "moveDeclsByName" "Decls" "MoveSpec",
@@ -120,19 +126,15 @@ simple1 =
         runSimpleMoveUnsafe "tests/input/simple" (moveDeclsByName "listPairs" "A" "B")
 
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
-testMoveSpec actual expected moveSpec = do
-  gitResetSubdir actual
-  runSimpleMoveUnsafe actual moveSpec
-  (_, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
-  gitResetSubdir actual
-  assertString diff
+testMoveSpec expected actual moveSpec =
+    testMoveSpec' expected actual $ runSimpleMoveUnsafe actual moveSpec
 
 testMoveSpec' :: FilePath -> FilePath -> IO () -> IO ()
 testMoveSpec' expected actual action = do
   gitResetSubdir actual
   action
-  (_, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
-  gitResetSubdir actual
+  (code, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
+  when (code == ExitSuccess) (gitResetSubdir actual)
   assertString diff
 
 testSpec :: MoveSpec -> ModuleInfo -> IO ModuleInfo

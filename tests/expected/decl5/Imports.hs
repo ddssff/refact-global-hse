@@ -34,6 +34,7 @@ import System.FilePath.Extra2 (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
 import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleText), DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule)
 
+
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> [ModuleInfo] -> m ()
 cleanImports scratch [] = trace ("cleanImports - no modules") (pure ())

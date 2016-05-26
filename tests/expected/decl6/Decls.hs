@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
-module Decls (moveDeclsAndClean, moveDecls) where
+module Decls (makeMoveSpec, moveDeclsAndClean, moveDecls, ) where
 
 import Control.Exception (SomeException)
 import Control.Lens ((.=), makeLenses, use, view)
@@ -18,13 +18,14 @@ import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(Type
 import Language.Haskell.Exts.Annotated.Simplify (sCName, sModuleName, sName)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
-import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name)
+import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..))
 import MoveSpec (MoveSpec)
 import SrcLoc (endLoc, spanText, srcLoc, textSpan)
 import Symbols (FoldDeclared(foldDeclared))
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Types (ModuleKey(ModuleKey, _moduleName), fullPathOfModuleKey, loadModule, ModuleInfo(..))
 import Utils (dropWhile2)
+
 
 -- | Declaration moves can be characterized as one of two types, Down
 -- or Up.  This must be computed by scanning the parsed code of the
@@ -44,6 +45,17 @@ data MoveType
     -- import cycle.  Therefore we need to convert the (remaining)
     -- exports of the departure module into imports and add them to
     -- the arrival module.
+
+-- A simple MoveSpec builder.
+makeMoveSpec :: String -> String -> String -> MoveSpec
+makeMoveSpec fname mname mname' =
+    \mkey decl ->
+        let syms = foldDeclared Set.insert mempty decl in
+        if _moduleName mkey == Just (S.ModuleName mname) && (Set.member (S.Ident fname) syms || Set.member (S.Symbol fname) syms)
+        then {-t1 mkey decl-} (mkey {_moduleName = Just (S.ModuleName mname')})
+        else mkey
+    -- where
+      -- t1 mkey decl x = trace ("moveSpec " ++ show mkey ++ " " ++ show (foldDeclared (:) [] decl) ++ " -> " ++ show x) x
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode

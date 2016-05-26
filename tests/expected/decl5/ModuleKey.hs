@@ -11,6 +11,7 @@ import Language.Haskell.Exts.Syntax as S (ModuleName(..))
 import System.Directory (canonicalizePath)
 import System.FilePath ((<.>), (</>), joinPath, splitDirectories, splitExtension, splitFileName)
 
+
 -- A module is uniquely identitifed by its path and name
 data ModuleKey =
     ModuleKey { _moduleTop :: FilePath      -- ^ The <dir> for which ghc -i<dir> finds this module

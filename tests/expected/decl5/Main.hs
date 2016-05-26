@@ -13,6 +13,7 @@ import ModuleKey (ModuleKey(..))
 import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Types (loadModule, ModuleInfo(..))
 
+
 main :: IO ()
 -- main = testOn "/home/dsf/git/atp-haskell/src" $ cleanImports
 main = testOn "/home/dsf/git/atp-haskell/src" (moveDeclsAndClean moveSpec)

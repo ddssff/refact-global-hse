@@ -14,6 +14,7 @@ import System.Directory (createDirectoryIfMissing, getCurrentDirectory, removeFi
 import System.FilePath (splitFileName)
 import System.IO.Error (isDoesNotExistError)
 
+
 withCurrentDirectory :: forall m a. (MonadIO m, MonadBaseControl IO m) => FilePath -> m a -> m a
 withCurrentDirectory path action =
     liftIO (putStrLn ("cd " ++ path)) >>

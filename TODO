@@ -13,6 +13,7 @@
        the end of the exports.
    18. Fix bad ModuleKey values in this:
    19. Get rid of adjustSpans, FoldM module
+   20. In decl3 a Tmp.hs file with no declarations ought to exist after the test
 
           runhaskell scripts/Clean --move=withCurrentDirectory,IO,Utils --move=replaceFile,IO,Utils --find=. --find=scripts --find=tests
 

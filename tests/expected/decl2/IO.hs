@@ -13,6 +13,7 @@ import System.Directory (createDirectoryIfMissing, removeDirectoryRecursive, rem
 import System.FilePath (splitFileName)
 import System.IO.Error (isDoesNotExistError)
 import qualified System.IO.Temp as Temp (createTempDirectory)
+
                -- (const action `catch` (\e -> liftIO (putStrLn ("in " ++ path) >> throw e)))
 
 withTempDirectory :: (MonadIO m, MonadBaseControl IO m) =>

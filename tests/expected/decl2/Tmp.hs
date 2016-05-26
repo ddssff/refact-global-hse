@@ -7,6 +7,7 @@ import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import System.Directory (getCurrentDirectory, setCurrentDirectory)
 
+
 withCurrentDirectory :: forall m a. (MonadIO m, MonadBaseControl IO m) => FilePath -> m a -> m a
 withCurrentDirectory path action =
     liftIO (putStrLn ("cd " ++ path)) >>
