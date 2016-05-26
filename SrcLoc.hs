@@ -14,16 +14,17 @@ module SrcLoc
     -- RWS monad to scan a text file
     , keep
     , skip
+    , debugRender
     ) where
 
 import Control.Lens (_2, view)
-import Control.Monad.RWS (MonadWriter(tell), RWS)
+import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS)
 import Control.Monad.State (get, put, runState, State)
 import Data.List (partition, sort)
 import Data.Monoid ((<>))
 import Data.Set (Set, toList)
 import Data.Tree (Tree, unfoldTree)
-import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann))
+import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann), Module(..))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), text)
 import Utils (lines')
@@ -198,3 +199,20 @@ keep l = do
 
 skip :: SrcLoc -> RWS String String SrcLoc ()
 skip loc = put loc
+
+debugRender :: A.Module SrcSpanInfo -> String -> String
+debugRender m@(A.Module l mh ps is ds) s =
+    (snd $ evalRWS render s ((srcLoc (A.ann m)) {srcLine = 1, srcColumn = 1}))
+    where
+      -- Put [] around the spans (and eventually | at the divisions of the point list)
+      render :: RWS String String SrcLoc ()
+      render = do
+        tell "["
+        mapM (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") ps
+        maybe void (\h -> keep (srcLoc (A.ann h)) >> tell "[" >> keep (endLoc (A.ann h)) >> tell "]") mh
+        mapM (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") is
+        mapM (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") ds
+        keep (endLoc (A.ann m))
+        tell "]"
+
+void = pure ()

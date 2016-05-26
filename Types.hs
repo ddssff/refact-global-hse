@@ -7,6 +7,7 @@ module Types
     , hsFlags
     , hsSourceDirs
     , loadModule
+    , loadModule'
     , loadModules
     ) where
 
@@ -76,8 +77,9 @@ loadModules paths = t1 <$> mapM loadModule' paths
     where
       t1 :: [ModuleInfo] -> [ModuleInfo]
       t1 modules = trace ("modules loaded: " ++ show (map ezPrint modules)) modules
-      loadModule' :: FilePath -> IO ModuleInfo
-      loadModule' path = either (error . show) id <$> (loadModule path :: IO (Either SomeException ModuleInfo))
+
+loadModule' :: FilePath -> IO ModuleInfo
+loadModule' path = either (error . show) id <$> (loadModule path :: IO (Either SomeException ModuleInfo))
 
 loadModule :: Exception e => FilePath -> IO (Either e ModuleInfo)
 loadModule path =
