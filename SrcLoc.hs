@@ -1,20 +1,13 @@
 {-# LANGUAGE BangPatterns, CPP, FlexibleInstances, ScopedTypeVariables, UndecidableInstances #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 module SrcLoc
-    ( SpanInfo(srcSpan)
-    , srcLoc
+    ( -- * SpanInfo queries
+      srcLoc
     , endLoc
-    , textEndLoc
     , increaseSrcLoc
     , textSpan
-    , splitText
-    , splitSpan
     , spanText
     , srcPairText
-    , makeTree
-#if 0
-    , validateParseResults
-#endif
     , fixSpan
     , keep
     , skip

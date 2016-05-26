@@ -20,35 +20,15 @@ module SrcLoc
 
 import Control.Lens (_2, view)
 import Control.Monad.State (get, put, runState, State)
-import Data.List (groupBy, partition, sort)
+import Data.List (partition, sort)
 import Data.Monoid ((<>))
 import Data.Set (Set, toList)
 import Data.Tree (Tree, unfoldTree)
--- import Debug.Trace (trace)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), text)
--- import Utils (gFind)
-
--- | A version of lines that preserves the presence or absence of a
--- terminating newline
-lines' :: String -> [String]
-lines' s =
-    -- Group characters into strings containing either only newlines or no newlines,
-    -- and then transform the newline only strings into empty lines.
-    bol (groupBy (\ a b -> a /= '\n' && b /= '\n') s)
-    where
-      -- If we are at beginning of line and see a newline, insert an empty
-      bol ("\n" : xs) = "" : bol xs
-      -- If we are at beginning of line and see something else, call end of line
-      bol (x : xs) = x : eol xs
-      -- If we see EOF at bol insert a trailing empty
-      bol [] = [""]
-      -- If we are seeking end of line and see a newline, go to beginning of line
-      eol ("\n" : xs) = bol xs
-      -- This shouldn't happen
-      eol (x : xs) = x : eol xs
-      eol [] = []
+import Tmp ()
+import Utils (lines')
 
 class SpanInfo a where
     srcSpan :: a -> SrcSpan

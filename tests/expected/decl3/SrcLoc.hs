@@ -27,6 +27,7 @@ import Data.Tree (Tree, unfoldTree)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), text)
+import Tmp ()
 import Utils (lines')
 
 class SpanInfo a where

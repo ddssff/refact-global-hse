@@ -80,11 +80,11 @@ decl2 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl2" 
 -- called "moving up".)
 decl3 :: Test
 decl3 = TestCase $ do
-          testMoveSpec "tests/input/decl-mover" "tests/expected/decl3" spec1
-          testMoveSpec "tests/input/decl-mover" "tests/expected/decl3" spec2
-    where
-      spec1 = moveDeclsByName "lines'" "SrcLoc" "Tmp"
-      spec2 = moveDeclsByName "lines'" "Tmp" "Utils"
+          let input = "tests/input/decl-mover"
+          gitResetSubdir input
+          testMoveSpec' input "tests/expected/decl3"
+            (runSimpleMoveUnsafe input (moveDeclsByName "lines'" "SrcLoc" "Tmp") >>
+             runSimpleMoveUnsafe input (moveDeclsByName "lines'" "Tmp" "Utils"))
 
 decl4 :: Test
 decl4 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl4" spec
@@ -114,16 +114,25 @@ decl6 = TestCase $ testMoveSpec "tests/input/decl-mover" "tests/expected/decl6" 
                            moveDeclsByName "identityMoveSpec" "Decls" "MoveSpec"]
 
 simple1 :: Test
-simple1 = TestCase $ testMoveSpec "tests/input/simple" "tests/expected/simple1" spec
-    where
-      spec = moveDeclsByName "listPairs" "A" "B"
+simple1 =
+    TestCase $
+      testMoveSpec' "tests/expected/simple1" "tests/input/simple" $
+        runSimpleMoveUnsafe "tests/input/simple" (moveDeclsByName "listPairs" "A" "B")
 
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
-testMoveSpec input expected moveSpec = do
-  gitResetSubdir input
-  runSimpleMoveUnsafe input moveSpec
-  (_, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, input] ""
-  gitResetSubdir input
+testMoveSpec actual expected moveSpec = do
+  gitResetSubdir actual
+  runSimpleMoveUnsafe actual moveSpec
+  (_, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
+  gitResetSubdir actual
+  assertString diff
+
+testMoveSpec' :: FilePath -> FilePath -> IO () -> IO ()
+testMoveSpec' expected actual action = do
+  gitResetSubdir actual
+  action
+  (_, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
+  gitResetSubdir actual
   assertString diff
 
 testSpec :: MoveSpec -> ModuleInfo -> IO ModuleInfo
