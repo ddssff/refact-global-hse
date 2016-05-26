@@ -8,15 +8,14 @@ import Control.Monad.State
 import Data.Generics
 import Data.Set as Set (insert)
 import Debug.Trace
-import IO (withCurrentDirectory)
 import Language.Haskell.Exts.Annotated
 import Types (loadModule, ModuleInfo(..))
--- import Text.PrettyPrint.HughesPJClass (prettyShow)
 import SrcLoc
 import Symbols (foldDeclared)
 import System.Exit (ExitCode(..), exitWith)
 import DeclTests
 import Test.HUnit (errors, failures, runTestTT, Test(TestList))
+import Utils (withCurrentDirectory)
 
 main :: IO ()
 main = runTestTT (TestList [declTests]) >>= doCounts
@@ -30,22 +29,6 @@ data St
 
 $(makeLenses ''St)
 
--- | Return the text before, within, and after a span
-{-
-splitSpan :: SrcLoc -> SrcLoc -> String -> (String, String, String)
-splitSpan b e s =
-    let (pref, s') = splitText b s in
-    let (s'', suff) = srcPairText (b, e) s' in
-    (pref, s'', suff)
--}
-
--- | Return the text before and after a location
-{-
-splitText :: SrcLoc -> String -> (String, String)
-splitText l s =
-    srcPairText (l {srcLine = 1, srcColumn = 1}) l s
--}
-
 data Info
     = Info
       { _srcSpanInfo :: SrcSpanInfo
@@ -55,11 +38,6 @@ data Info
       , _suffix :: String
       } deriving Show
 
-{-
-foo :: A.Annotated ast => ast SrcSpanInfo -> String -> ast Info
-foo x s = mapM (\y -> everywhere fmap 
--}
-
 test1 = do
   Right info <- loadModule "CPP.hs" :: IO (Either SomeException ModuleInfo)
   let m = _module info
@@ -67,7 +45,7 @@ test1 = do
   putStrLn (show m')
       where
         f :: ModuleInfo -> SrcSpanInfo -> Info
-        f info x = let (p, i, s) = splitSpan (srcLoc x, endLoc x) (_moduleText info) in Info x (getPointLoc x) p i s
+        f info x = let (p, i, s) = spanTextTriple (srcLoc x, endLoc x) (_moduleText info) in Info x (getPointLoc x) p i s
 
 test2 :: IO (Module Info)
 test2 = do
@@ -76,7 +54,7 @@ test2 = do
   traverse (f info) m
     where
       f :: ModuleInfo -> SrcSpanInfo -> IO Info
-      f info x = let (p, i, s) = splitSpan (srcLoc x, endLoc x) (_moduleText info) in pure (Info x (getPointLoc x) p i s)
+      f info x = let (p, i, s) = spanTextTriple (srcLoc x, endLoc x) (_moduleText info) in pure (Info x (getPointLoc x) p i s)
 
 test3 :: IO (Module Int)
 test3 = do
@@ -87,7 +65,7 @@ test3 = do
       f info x@(SrcSpanInfo {srcInfoSpan = sp, srcInfoPoints = pts}) = do
           n <- get
           modify succ
-          -- let (p, i, s) = splitSpan (srcLoc x) (endLoc x) (_moduleText info) in
+          -- let (p, i, s) = spanTextTriple (srcLoc x) (endLoc x) (_moduleText info) in
           pure ({-x,-} n)
 
 test4 :: IO (Module (SrcSpan, Int))
@@ -111,8 +89,7 @@ newStack :: SrcSpanInfo -> [SrcSpanInfo] -> [SrcSpanInfo]
 newStack x stk =
     case stk of
       [] -> [x]
-      (top : _) | end x <= end top -> (x : stk)
-      -- (top : _) | start x < end top -> error "newStack"
+      (top : _) | endLoc x <= endLoc top -> (x : stk)
       (_ : more) -> newStack x more
 
 data Ann5
@@ -121,6 +98,7 @@ data Ann5
            , _mid :: String
            , _post :: String } deriving Show
 
+{-
 test5 :: IO (Module Ann5)
 test5 = do
   Right info <- loadModule "CPP.hs" :: IO (Either SomeException ModuleInfo)
@@ -185,12 +163,12 @@ popStack x stk =
       (top : more) | end x > end top -> popStack x more
       _ -> stk
 
-
 start :: SrcSpanInfo -> (Int, Int)
 start = srcSpanStart . srcInfoSpan
 
 end :: SrcSpanInfo -> (Int, Int)
 end = srcSpanEnd . srcInfoSpan
+-}
 
 test6 :: IO (Module SrcSpanInfo)
 test6 =  do

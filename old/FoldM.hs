@@ -314,3 +314,9 @@ ignoreM _ _ _ _ r = pure r
 -- | Similar to 'ignore', but used for the two argument separator functions
 ignore2M :: forall s m r. Monad m => s -> r -> m r
 ignore2M _ r = pure r
+
+-- | Update a SrcLoc to move it from l past the string argument.
+increaseSrcLoc :: String -> SrcLoc -> SrcLoc
+increaseSrcLoc "" l = l
+increaseSrcLoc ('\n' : s) (SrcLoc f y _) = increaseSrcLoc s (SrcLoc f (y + 1) 1)
+increaseSrcLoc (_ : s) (SrcLoc f y x) = increaseSrcLoc s (SrcLoc f y (x + 1))

@@ -7,31 +7,29 @@ module Imports (cleanImports) where
 
 import Control.Exception (SomeException)
 import Control.Monad (void)
+import Control.Monad.RWS (ask, evalRWS, MonadWriter(tell))
 import Control.Monad.Trans (liftIO, MonadIO)
 import Data.Char (toLower)
-import Data.Foldable (fold)
 import Data.Function (on)
 import Data.List (find, groupBy, intercalate, nub, sortBy)
-import Data.Maybe (catMaybes, fromMaybe)
-import Data.Monoid ((<>))
-import Data.Sequence ((|>))
+import Data.Maybe (catMaybes)
 import Data.Set as Set (fromList, member, Set, toList, unions)
 import qualified Data.Set as Set (map)
 import Debug.Trace (trace)
-import FoldM (foldDeclsM, foldExportsM, foldHeaderM, foldImportsM)
-import qualified Language.Haskell.Exts.Annotated as A (ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), SrcLoc(SrcLoc))
+import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Pretty, SrcLoc(SrcLoc))
 import Language.Haskell.Exts.Annotated.Simplify as S (sImportDecl, sImportSpec, sModuleName, sName)
 import Language.Haskell.Exts.Extension (Extension(EnableExtension))
-import Language.Haskell.Exts.Pretty (defaultMode, PPHsMode(layout), PPLayout(PPInLine), prettyPrintWithMode)
-import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
+import Language.Haskell.Exts.Pretty (defaultMode, prettyPrintStyleMode)
+import Language.Haskell.Exts.SrcLoc
 import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(importLoc, importModule, importSpecs), ModuleName(..), Name(..))
 import ModuleKey (moduleFullPath, moduleTop)
-import SrcLoc (srcLoc)
+import SrcLoc (endLoc, keep, skip, spanText, srcLoc, textSpan)
 import Symbols (symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
 import System.FilePath.Extra2 (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
+import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleText), DerivDeclTypes(derivDeclTypes), hseExtensions, hsFlags, loadModule)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
@@ -81,7 +79,7 @@ doModule scratch info@(ModuleInfo {_module = A.Module _ mh _ oldImports _}) =
        liftIO (loadModule importsPath) >>=
               either (\(e :: SomeException) -> error $ "Could not load generated imports: " ++ show e)
                      (\(ModuleInfo {_module = newImports}) ->
-                          updateSource True info newImports extraImports)
+                          pure (updateSource True info newImports extraImports))
     where
       extraImports = filter isHiddenImport oldImports
       isHiddenImport (A.ImportDecl {A.importSpecs = Just (A.ImportSpecList _ True _)}) = True
@@ -90,35 +88,28 @@ doModule _ _ = error "Unsupported module type"
 
 -- | If all the parsing went well and the new imports differ from the
 -- old, update the source file with the new imports.
-updateSource :: MonadIO m => Bool -> ModuleInfo -> A.Module SrcSpanInfo -> [A.ImportDecl SrcSpanInfo] -> m (Maybe String)
+updateSource :: Bool -> ModuleInfo -> A.Module SrcSpanInfo -> [A.ImportDecl SrcSpanInfo] -> Maybe String
 updateSource removeEmptyImports info@(ModuleInfo {_module = A.Module _ _ _ oldImports _, _moduleKey = _key}) (A.Module _ _ _ newImports _) extraImports =
     replaceImports (fixNewImports removeEmptyImports info oldImports (newImports ++ extraImports)) info
 updateSource _ _ _ _ = error "updateSource"
 
 -- | Compare the old and new import sets and if they differ clip out
 -- the imports from the sourceText and insert the new ones.
-replaceImports :: MonadIO m => [A.ImportDecl SrcSpanInfo] -> ModuleInfo -> m (Maybe String)
-replaceImports newImports info = do
-  oldPretty <- fold <$> (foldImportsM (\ _ pref s suff r -> pure $ r |> (pref <> s <> suff)) info mempty)
-        -- Surround newPretty with the same prefix and suffix as oldPretty
-  importPref <- foldImportsM (\ _ pref _ _ r -> pure $ maybe (Just pref) Just r) info Nothing
-  importSuff <- foldImportsM (\ _ _ _ suff _ -> pure suff) info mempty
-  let newPretty = fromMaybe "" importPref <>
-                  intercalate "\n" (Prelude.map (prettyPrintWithMode (defaultMode {layout = PPInLine})) newImports) <>
-                  importSuff
-  case oldPretty == newPretty of
-    True -> pure Nothing
-    False -> do
-      h <- foldHeaderM (\ s r -> pure $ r |> s)
-                      (\ _ pref s suff r -> pure $ r |> (pref <> s <> suff))
-                      (\ _ pref s suff r -> pure $ r |> pref <> s <> suff)
-                      (\ _ pref s suff r -> pure $ r |> pref <> s <> suff) info mempty
-      e <- foldExportsM (\ s r -> pure $ r |> s)
-                       (\ _ pref s suff r -> pure $ r |> pref <> s <> suff)
-                       (\ s r -> pure $ r |> s) info mempty
-      d <- foldDeclsM  (\ _ pref s suff r -> pure $ r |> pref <> s <> suff)
-                      (\ r s -> pure $ s |> r) info mempty
-      pure $ Just (fold h ++ fold e ++ newPretty <> fold d)
+replaceImports :: [A.ImportDecl SrcSpanInfo] -> ModuleInfo -> Maybe String
+replaceImports newImports info@(ModuleInfo {_module = A.Module l mh ps is ds})
+    | map sImportDecl is == map sImportDecl newImports =
+        Nothing
+replaceImports newImports info@(ModuleInfo {_module = A.Module l mh ps is@(i : _) ds}) =
+    (Just . snd) $ evalRWS (do keep (srcLoc (A.ann i))
+                               tell (intercalate "\n" (map prettyPrint' newImports))
+                               skip (endLoc (A.ann (last is)))
+                               fulltext <- ask
+                               keep (endLoc (textSpan (srcFilename (endLoc l)) fulltext)))
+                           (_moduleText info)
+                           ((srcLoc l) {srcLine = 1, srcColumn = 1})
+
+prettyPrint' :: A.Pretty a => a -> String
+prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
 
 -- | Final touch-ups - sort and merge similar imports.
 fixNewImports :: Bool         -- ^ If true, imports that turn into empty lists will be removed

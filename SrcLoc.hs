@@ -4,11 +4,14 @@ module SrcLoc
     ( -- * SpanInfo queries
       srcLoc
     , endLoc
-    , increaseSrcLoc
+    -- * Location and span info for a piece of text
     , textSpan
+    -- * Use span info to extract text
+    , spanTextTriple
     , spanText
-    , srcPairText
+    -- * Repair spans that have column set to 0
     , fixSpan
+    -- RWS monad to scan a text file
     , keep
     , skip
     ) where
@@ -51,12 +54,6 @@ textEndLoc path x =
     SrcLoc {srcFilename = path, srcLine = length ls, srcColumn = length (last ls) + 1}
     where ls = lines' x
 
--- | Update a SrcLoc to move it from l past the string argument.
-increaseSrcLoc :: String -> SrcLoc -> SrcLoc
-increaseSrcLoc "" l = l
-increaseSrcLoc ('\n' : s) (SrcLoc f y _) = increaseSrcLoc s (SrcLoc f (y + 1) 1)
-increaseSrcLoc (_ : s) (SrcLoc f y x) = increaseSrcLoc s (SrcLoc f y (x + 1))
-
 -- | Return a span that exactly covers the string s
 textSpan :: FilePath -> String -> SrcSpanInfo
 textSpan path s =
@@ -70,17 +67,17 @@ splitText l s =
     srcPairText (l {srcLine = 1, srcColumn = 1}, l) s
 
 -- | Return the text before, within, and after a span
-splitSpan :: SpanInfo a => a -> String -> (String, String, String)
-splitSpan sp s =
+spanTextTriple :: SpanInfo a => a -> String -> (String, String, String)
+spanTextTriple sp s =
     let (pref, s') = splitText (srcLoc sp) s in
     let (s'', suff) = srcPairText sp s' in
     (pref, s'', suff)
 
 spanText :: SpanInfo a => a -> String -> String
-spanText sp t = view _2 (splitSpan sp t)
+spanText sp t = view _2 (spanTextTriple sp t)
 
 -- spanText :: A.Annotated ast => ast SrcSpanInfo -> String -> String
--- spanText sp t = (\(_, x, _) -> x) (splitSpan (srcLoc sp) (endLoc sp) t) -- t
+-- spanText sp t = (\(_, x, _) -> x) (spanTextTriple (srcLoc sp) (endLoc sp) t) -- t
 
 
 -- | Given a beginning and end location, and a string which starts at

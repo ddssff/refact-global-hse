@@ -30,7 +30,6 @@ Library
   Exposed-Modules:
     CPP
     Decls
-    FoldM
     Imports
     ModuleKey
     SrcLoc
