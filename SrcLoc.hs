@@ -14,6 +14,7 @@ module SrcLoc
     , spanText
     -- * Repair spans that have column set to 0
     , fixSpan
+    , testSpan
     -- RWS monad to scan a text file
     , SpanM
     , keep
@@ -33,6 +34,10 @@ import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann), Mo
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), text)
 import Utils (lines')
+
+data St = St {_point :: SrcLoc}
+
+$(makeLenses ''St)
 
 class SpanInfo a where
     srcSpan :: a -> SrcSpan
@@ -55,6 +60,15 @@ srcLoc x = let (SrcSpan f b e _ _) = srcSpan x in SrcLoc f b e
 endLoc :: SpanInfo a => a -> SrcLoc
 endLoc x = let (SrcSpan f _ _ b e) = srcSpan x in SrcLoc f b e
 
+spanDiff :: SpanInfo a => a -> SrcLoc
+spanDiff sp =
+    if l1 == l2
+    then SrcLoc f 1 (c2 - c1 + 1)
+    else SrcLoc f (l2 - l1 + 1) c2
+    where
+      SrcLoc f l1 c1 = srcLoc sp
+      SrcLoc _ l2 c2 = endLoc sp
+
 textEndLoc :: FilePath -> String -> SrcLoc
 textEndLoc path x =
     SrcLoc {srcFilename = path, srcLine = length ls, srcColumn = length (last ls) + 1}
@@ -67,11 +81,6 @@ textSpan path s =
     SrcSpanInfo {srcInfoSpan = mkSrcSpan (SrcLoc path 1 1) (SrcLoc path (srcLine end) (srcColumn end)),
                  srcInfoPoints = []}
 
--- | Return the text before and after a location
-splitText :: SrcLoc -> String -> (String, String)
-splitText l s =
-    srcPairText (l {srcLine = 1, srcColumn = 1}, l) s
-
 -- | Return the text before, within, and after a span
 spanTextTriple :: SpanInfo a => a -> String -> (String, String, String)
 spanTextTriple sp s =
@@ -82,6 +91,12 @@ spanTextTriple sp s =
 spanText :: SpanInfo a => a -> String -> String
 spanText sp t = view _2 (spanTextTriple sp t)
 
+testSpan :: SpanInfo a => String -> a -> a
+testSpan msg sp =
+    case (srcLoc sp, endLoc sp) of
+      (SrcLoc _ _ c1, SrcLoc _ _ c2) | c1 < 1 || c2 < 1 -> error ("testSpan - " ++ msg)
+      _ -> sp
+
 -- spanText :: A.Annotated ast => ast SrcSpanInfo -> String -> String
 -- spanText sp t = (\(_, x, _) -> x) (spanTextTriple (srcLoc sp) (endLoc sp) t) -- t
 
@@ -89,37 +104,39 @@ spanText sp t = view _2 (spanTextTriple sp t)
 -- | Given a beginning and end location, and a string which starts at
 -- the beginning location, return a (beforeend,afterend) pair.
 srcPairText :: SpanInfo a => a -> String -> (String, String)
-srcPairText sp s0 =
-    fst $ runState f (b0, "", s0)
+srcPairText sp s0 = splitText (spanDiff sp) s0
+
+splitText :: SrcLoc -> String -> (String, String)
+splitText loc@(SrcLoc _ l0 c0) s0 =
+    fst $ runState f (1, 1, "", s0)
     where
-      b0 = srcLoc sp
-      e = endLoc sp
-      f :: State (SrcLoc, String, String) (String, String)
-      f = do (b, r, s) <- get
-             case (srcLine b < srcLine e, srcColumn b < srcColumn e) of
-               -- We have not reached the last line
-               (True, _) ->
+      f :: State (Int, Int, String, String) (String, String)
+      f = do (l, c, r, s) <- get
+             case (compare l l0, compare c c0) of
+               (LT, _) ->
                    case span (/= '\n') s of
                      (r', '\n' : s') ->
-                         -- We see a newline, move it and everything
-                         -- before it from s to r, and move point to
-                         -- next line.
-                         put (b {srcLine = srcLine b + 1, srcColumn = 1}, r ++ r' ++ "\n", s') >> f
-                     (_, "") ->
-                        -- This should not happen, but if the last line
-                        -- lacks a newline terminator, haskell-src-exts
-                        -- will set the end location as if the terminator
-                        -- was present.
-                        case s of
-                          "" -> return (r, s)
-                          (c : s') -> put (b {srcColumn = srcColumn b + 1}, r ++ [c], s') >> f
-                     _ -> error "Impossible: span stopped at the wrong character"
-               (_, True) ->
+                         put (l + 1, 1, r ++ r' ++ "\n", s') >> f
+                     (_, "") -> case s of
+                                  -- This should not happen, but if the last line
+                                  -- lacks a newline terminator, haskell-src-exts
+                                  -- will set the end location as if the terminator
+                                  -- was present.
+                                  "" -> pure (r, s)
+                                  (ch : s') -> put (l, c + 1, r ++ [ch], s') >> f
+               (_, LT) ->
                    case s of
-                     [] -> error $ "srcPairText - short line! expected " ++ show (srcColumn e - srcColumn b) ++ " more characters.\n" ++ show (b0, e, s0)
-                     (c : s') -> put (b {srcColumn = srcColumn b + 1}, r ++ [c], s') >> f
-               _ ->
-                   return (r, s)
+                     [] -> error "splitText"
+                     (ch : s') -> put (l, c + 1, r ++ [ch], s') >> f
+               (EQ, EQ) -> pure (r, s)
+               _ -> error ("splitText - invalid arguments: loc=" ++ show loc ++ ", s=" ++ show s0)
+
+-- | Return the text before and after a location
+{-
+splitText :: SrcLoc -> String -> (String, String)
+splitText l s =
+    srcPairText (l {srcLine = 1, srcColumn = 1}, l) s
+-}
 
 -- | Build a tree of SrcSpanInfo
 makeTree :: (A.Annotated ast, Show (ast SrcSpanInfo), Eq (ast SrcSpanInfo), Ord (ast SrcSpanInfo)) => Set (ast SrcSpanInfo) -> Tree (ast SrcSpanInfo)
@@ -195,12 +212,8 @@ fixSpan sp =
     where
       t1 sp' = {-trace ("fixSpan " ++ show (srcInfoSpan sp) ++ " -> " ++ show (srcInfoSpan sp'))-} sp'
 
-data St = St {_point :: SrcLoc}
-
 origin :: FilePath -> St
 origin path = St {_point = SrcLoc path 1 1}
-
-$(makeLenses ''St)
 
 type SpanM = RWS String String St
 
@@ -214,18 +227,20 @@ keep loc = do
 skip :: SrcLoc -> SpanM ()
 skip loc = point .= loc
 
+-- | Given the next SpanInfo after the point, return the trailing
+-- whitespace. Assumes the point is at the end of a span.
 trailingWhitespace :: SpanInfo a => Maybe a -> SpanM String
 trailingWhitespace next = do
-  loc@(SrcLoc f _ _) <- use point
   fullText <- ask
-  let (_, currText) = splitText loc fullText
-  return $ maybe currText (\n -> fst (srcPairText n currText)) next
-{-
-  let (white, currText') = case span (/= '\n') currText of
-                             (pre, '\n' : suf) -> (pre ++ ['\n'], suf)
-                             _ -> ("", currText)
-  pure $ srcLocSum loc (textEndLoc f white)
--}
+  loc@(SrcLoc f _ _) <- use point
+  let loc' :: SrcLoc
+      loc' = maybe (textEndLoc f fullText) srcLoc next
+  case loc' >= loc of
+    False -> error "trailingWhitespace"
+    True -> let s = spanText (loc, loc') fullText in
+            case span (/= '\n') s of
+              (pre, '\n' : suf) -> pure (pre ++ ['\n'])
+              _ -> pure ""
 
 debugRender :: A.Module SrcSpanInfo -> String -> String
 debugRender m@(A.Module l mh ps is ds) s =
