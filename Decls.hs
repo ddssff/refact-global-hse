@@ -6,7 +6,7 @@ module Decls (moveDeclsByName, moveInstDecls, instClassPred,
 import Control.Exception (SomeException)
 import Control.Lens (view)
 import Control.Monad (void)
-import Control.Monad.RWS (evalRWS, MonadState, MonadWriter(tell), RWS)
+import Control.Monad.RWS (evalRWS, MonadWriter(tell))
 import Data.Foldable as Foldable (find)
 import Data.List (foldl', intercalate, nub, stripPrefix)
 import Data.Map as Map (insertWith, Map, mapWithKey, singleton, toList)
@@ -21,7 +21,7 @@ import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleM
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..), QName(Qual, Special, UnQual))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
-import SrcLoc (endLoc, keep, origin, skip, spanText, srcLoc, SpanM, textSpan)
+import SrcLoc (endLoc, keep, origin, skip, textOfSpan, srcLoc, SpanM, spanOfText, trailingWhitespace)
 import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
@@ -171,7 +171,7 @@ moveDeclsOfModule moveSpec modules info@(ModuleInfo {_module = A.Module l _ _ _ 
                       updateImports moveSpec modules info
                       updateDecls moveSpec modules info
                       t <- view id
-                      keep (endLoc (textSpan (srcFilename (endLoc l)) t))
+                      keep (endLoc (spanOfText (srcFilename (endLoc l)) t))
                   )
                   (_moduleText info)
                   (origin (srcSpanFilename (srcInfoSpan l)))
@@ -573,7 +573,7 @@ declText (ModuleInfo {_module = m@(A.Module _ mh ps is ds), _moduleText = mtext}
               _ -> case dropWhile2 (\_  md2 -> Just d /= md2) ds of
                      (d1 : _) -> endLoc d1
                      [] -> srcLoc (A.ann m) in
-    spanText (mkSrcSpan p (endLoc d)) mtext
+    textOfSpan (mkSrcSpan p (endLoc d)) mtext
 declText x _ = error $ "declText - unexpected module: " ++ show (_module x)
 
 -- | Declaration predicates

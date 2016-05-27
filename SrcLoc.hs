@@ -8,10 +8,10 @@ module SrcLoc
     , St
     , point
     -- * Location and span info for a piece of text
-    , textSpan
+    , spanOfText
     -- * Use span info to extract text
-    , spanTextTriple
-    , spanText
+    , textTripleOfSpan
+    , textOfSpan
     -- * Repair spans that have column set to 0
     , fixSpan
     , testSpan
@@ -23,7 +23,7 @@ module SrcLoc
     , debugRender
     ) where
 
-import Control.Lens ((.=), _2, makeLenses, use, view)
+import Control.Lens ((.=), _2, makeLenses, makeLensesFor, use, view)
 import Control.Monad.RWS (ask, evalRWS, MonadWriter(tell), RWS)
 import Control.Monad.State (get, put, runState, State)
 import Data.List (partition, sort)
@@ -38,6 +38,16 @@ import Utils (lines')
 data St = St {_point :: SrcLoc}
 
 $(makeLenses ''St)
+$(makeLensesFor [("srcFilename", "locFilename"),
+                 ("srcLine", "locLine"),
+                 ("srcColumn", "locColumn")] ''SrcLoc)
+$(makeLensesFor [("srcSpanFilename", "spanFilename"),
+                 ("srcSpanStartLine", "spanStartLine"),
+                 ("srcSpanStartColumn", "spanStartColumn"),
+                 ("srcSpanEndLine", "spanEndLine"),
+                 ("srcSpanEndColumn", "spanEndColumn")] ''SrcSpan)
+$(makeLensesFor [("srcInfoSpan", "infoSpan"),
+                 ("srcInfoPoints", "infoPoints")] ''SrcSpanInfo)
 
 class SpanInfo a where
     srcSpan :: a -> SrcSpan
@@ -69,37 +79,42 @@ spanDiff sp =
       SrcLoc f l1 c1 = srcLoc sp
       SrcLoc _ l2 c2 = endLoc sp
 
-textEndLoc :: FilePath -> String -> SrcLoc
-textEndLoc path x =
+locSum :: SrcLoc -> SrcLoc -> SrcLoc
+locSum (SrcLoc f l1 c1) (SrcLoc _ l2 c2) =
+    if l1 == l2
+    then SrcLoc f l1 (c2 + c1 - 1)
+    else SrcLoc f (l2 + l1 - 1) c2
+
+endLocOfText :: FilePath -> String -> SrcLoc
+endLocOfText path x =
     SrcLoc {srcFilename = path, srcLine = length ls, srcColumn = length (last ls) + 1}
     where ls = lines' x
 
 -- | Return a span that exactly covers the string s
-textSpan :: FilePath -> String -> SrcSpanInfo
-textSpan path s =
-    let end = textEndLoc path s in
+spanOfText :: FilePath -> String -> SrcSpanInfo
+spanOfText path s =
+    let end = endLocOfText path s in
     SrcSpanInfo {srcInfoSpan = mkSrcSpan (SrcLoc path 1 1) (SrcLoc path (srcLine end) (srcColumn end)),
                  srcInfoPoints = []}
 
 -- | Return the text before, within, and after a span
-spanTextTriple :: SpanInfo a => a -> String -> (String, String, String)
-spanTextTriple sp s =
+textTripleOfSpan :: SpanInfo a => a -> String -> (String, String, String)
+textTripleOfSpan sp s =
     let (pref, s') = splitText (srcLoc sp) s in
-    let (s'', suff) = srcPairText sp s' in
+    let (s'', suff) = splitText (spanDiff sp) s' in
     (pref, s'', suff)
 
-spanText :: SpanInfo a => a -> String -> String
-spanText sp t = view _2 (spanTextTriple sp t)
+textOfSpan :: SpanInfo a => a -> String -> String
+textOfSpan sp s =
+    let (_, s') = splitText (srcLoc sp) s in
+    let (s'', _) = splitText (spanDiff sp) s' in
+    s''
 
 testSpan :: SpanInfo a => String -> a -> a
 testSpan msg sp =
     case (srcLoc sp, endLoc sp) of
       (SrcLoc _ _ c1, SrcLoc _ _ c2) | c1 < 1 || c2 < 1 -> error ("testSpan - " ++ msg)
       _ -> sp
-
--- spanText :: A.Annotated ast => ast SrcSpanInfo -> String -> String
--- spanText sp t = (\(_, x, _) -> x) (spanTextTriple (srcLoc sp) (endLoc sp) t) -- t
-
 
 -- | Given a beginning and end location, and a string which starts at
 -- the beginning location, return a (beforeend,afterend) pair.
@@ -131,59 +146,6 @@ splitText loc@(SrcLoc _ l0 c0) s0 =
                (EQ, EQ) -> pure (r, s)
                _ -> error ("splitText - invalid arguments: loc=" ++ show loc ++ ", s=" ++ show s0)
 
--- | Return the text before and after a location
-{-
-splitText :: SrcLoc -> String -> (String, String)
-splitText l s =
-    srcPairText (l {srcLine = 1, srcColumn = 1}, l) s
--}
-
--- | Build a tree of SrcSpanInfo
-makeTree :: (A.Annotated ast, Show (ast SrcSpanInfo), Eq (ast SrcSpanInfo), Ord (ast SrcSpanInfo)) => Set (ast SrcSpanInfo) -> Tree (ast SrcSpanInfo)
-makeTree s =
-    case findRoots (toList s) of
-      [] -> error "No roots"
-      [root] -> unfoldTree f root
-      roots -> error $ "Multiple roots: " ++ show roots
-    where
-      f x = (x, findChildren (toList s) x)
-
-      -- The roots are the nodes that are not covered by any other node.
-      findRoots :: (A.Annotated a, Eq (a SrcSpanInfo), Ord (a SrcSpanInfo)) => [a SrcSpanInfo] -> [a SrcSpanInfo]
-      findRoots [] = []
-      findRoots (x : xs) =
-          let (_children, other) = partition (\ y -> x `covers` y) xs
-              (ancestors, cousins) = partition (\ y -> x `coveredBy` y) other in
-          case ancestors of
-            -- If there are no ancestors, x is a root, and there may be other roots among the cousins
-            [] -> x : findRoots cousins
-            -- If there are ancestors, there must be a root among them, and there still may be roots among the cousins.
-            _ -> findRoots (ancestors ++ cousins)
-
-      findChildren :: (A.Annotated a, Eq (a SrcSpanInfo), Ord (a SrcSpanInfo), Show (a SrcSpanInfo)) =>
-                      [a SrcSpanInfo] -> a SrcSpanInfo -> [a SrcSpanInfo]
-      findChildren u x = findRoots children where children = sort (filter (\ y -> x `covers` y && x /= y) u)
-
--- True if a covers b
-covers :: (A.Annotated a, A.Annotated b) => a SrcSpanInfo -> b SrcSpanInfo -> Bool
-covers a b = srcLoc a <= srcLoc b && endLoc b <= endLoc a
-
--- True if a is covered by b
-coveredBy :: (A.Annotated a, A.Annotated b) => a SrcSpanInfo -> b SrcSpanInfo -> Bool
-coveredBy = flip covers
-
-{-
-test3 = TestCase (assertEqual "covers1" True (covers (mkspan (29, 1) (29, 8)) (mkspan (29, 3) (29, 7))))
-test4 = TestCase (assertEqual "covers2" False (covers (mkspan (29, 1) (29, 8)) (mkspan (29, 3) (29, 10))))
-test5 = TestCase (assertEqual "roots1"
-                                  [sp 5 10, sp 11 18]
-                                  (findRoots [sp 5 10,
-                                              sp 11 18,
-                                              sp 6 7,
-                                              sp 8 9,
-                                              sp 12 15]))
--}
-
 -- | Make sure every SrcSpan in the parsed module refers to existing
 -- text.  They could still be in the wrong places, so this doesn't
 -- guarantee the parse is valid, but its a pretty good bet.
@@ -196,7 +158,7 @@ validateParseResults modul t =
       validateSpan x =
           let s = srcLoc x
               e = endLoc x in
-          putStrLn ("span " ++ prettyShow s ++ "->" ++ prettyShow e ++ "=" ++ show (spanText x t))
+          putStrLn ("span " ++ prettyShow s ++ "->" ++ prettyShow e ++ "=" ++ show (textOfSpan x t))
 #endif
 
 instance Pretty SrcLoc where
@@ -221,11 +183,14 @@ keep :: SrcLoc -> SpanM ()
 keep loc = do
   t <- view id
   p <- use point
-  tell (spanText (p, loc) t)
+  tell (textOfSpan (testSpan "keep" (p, loc)) t)
   point .= loc
 
 skip :: SrcLoc -> SpanM ()
-skip loc = point .= loc
+skip loc = do
+  p <- use point
+  pure $ testSpan "skip" (p, loc)
+  point .= loc
 
 -- | Given the next SpanInfo after the point, return the trailing
 -- whitespace. Assumes the point is at the end of a span.
@@ -234,13 +199,19 @@ trailingWhitespace next = do
   fullText <- ask
   loc@(SrcLoc f _ _) <- use point
   let loc' :: SrcLoc
-      loc' = maybe (textEndLoc f fullText) srcLoc next
+      loc' = maybe (endLocOfText f fullText) srcLoc next
   case loc' >= loc of
     False -> error "trailingWhitespace"
-    True -> let s = spanText (loc, loc') fullText in
+    True -> let s = textOfSpan (loc, loc') fullText in
             case span (/= '\n') s of
               (pre, '\n' : suf) -> pure (pre ++ ['\n'])
               _ -> pure ""
+
+withTrailingWhitespace :: SpanInfo a => (SrcLoc -> SpanM ()) -> Maybe a -> SpanM ()
+withTrailingWhitespace fn next = do
+  s <- trailingWhitespace next
+  p <- use point
+  fn (locSum p (endLocOfText (view locFilename p) s))
 
 debugRender :: A.Module SrcSpanInfo -> String -> String
 debugRender m@(A.Module l mh ps is ds) s =

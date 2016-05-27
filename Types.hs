@@ -27,7 +27,7 @@ import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Syntax as S (ModuleName(ModuleName))
 import ModuleKey (ModuleKey(ModuleFullPath, ModuleKey, _moduleTop), moduleFullPath)
-import SrcLoc (fixSpan, textSpan)
+import SrcLoc (fixSpan, spanOfText)
 import System.Directory (canonicalizePath)
 import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
 import Text.PrettyPrint.HughesPJClass as PP (prettyShow)
@@ -102,7 +102,7 @@ loadModule path =
                                                           ModuleKey {_moduleTop = top} -> top
                                                           ModuleFullPath p -> takeDirectory p) path
                           , _moduleText = moduleText
-                          , _moduleSpan = textSpan path moduleText }
+                          , _moduleSpan = spanOfText path moduleText }
       mode = Exts.defaultParseMode {Exts.extensions = hseExtensions, Exts.parseFilename = path, Exts.fixities = Nothing }
 
 -- | Turn of the locations flag.  This means simple #if macros will not
