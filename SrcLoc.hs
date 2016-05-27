@@ -64,7 +64,7 @@ textEndLoc path x =
 textSpan :: FilePath -> String -> SrcSpanInfo
 textSpan path s =
     let end = textEndLoc path s in
-    SrcSpanInfo {srcInfoSpan = mkSrcSpan (SrcLoc path 1 1) (SrcLoc path (srcLine end) (srcColumn end - 1)),
+    SrcSpanInfo {srcInfoSpan = mkSrcSpan (SrcLoc path 1 1) (SrcLoc path (srcLine end) (srcColumn end)),
                  srcInfoPoints = []}
 
 -- | Return the text before and after a location
