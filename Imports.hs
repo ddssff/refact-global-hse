@@ -20,10 +20,10 @@ import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(Deri
 import Language.Haskell.Exts.Annotated.Simplify as S (sImportDecl, sImportSpec, sModuleName, sName)
 import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrintStyleMode)
-import Language.Haskell.Exts.SrcLoc (SrcLoc(srcColumn, srcFilename, srcLine), SrcSpanInfo)
+import Language.Haskell.Exts.SrcLoc (SrcLoc(srcColumn, srcFilename, srcLine), SrcSpan(srcSpanFilename), SrcSpanInfo(srcInfoSpan))
 import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(importLoc, importModule, importSpecs), ModuleName(..), Name(..))
 import ModuleKey (moduleFullPath, moduleTop)
-import SrcLoc (endLoc, keep, skip, srcLoc, textSpan)
+import SrcLoc (endLoc, keep, origin, skip, srcLoc, textSpan)
 import Symbols (symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
@@ -107,7 +107,7 @@ replaceImports newImports info@(ModuleInfo {_module = A.Module l mh ps is@(i : _
                                fulltext <- ask
                                keep (endLoc (textSpan (srcFilename (endLoc l)) fulltext)))
                            (_moduleText info)
-                           ((srcLoc l) {srcLine = 1, srcColumn = 1})
+                           (origin (srcSpanFilename (srcInfoSpan l)))
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode

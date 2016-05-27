@@ -1,9 +1,12 @@
-{-# LANGUAGE BangPatterns, CPP, FlexibleInstances, ScopedTypeVariables, UndecidableInstances #-}
+{-# LANGUAGE BangPatterns, CPP, FlexibleInstances, ScopedTypeVariables, TemplateHaskell, UndecidableInstances #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 module SrcLoc
     ( -- * SpanInfo queries
       srcLoc
     , endLoc
+    , origin
+    , St
+    , point
     -- * Location and span info for a piece of text
     , textSpan
     -- * Use span info to extract text
@@ -12,13 +15,15 @@ module SrcLoc
     -- * Repair spans that have column set to 0
     , fixSpan
     -- RWS monad to scan a text file
+    , SpanM
     , keep
     , skip
+    , trailingWhitespace
     , debugRender
     ) where
 
-import Control.Lens (_2, view)
-import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS)
+import Control.Lens ((.=), _2, makeLenses, use, view)
+import Control.Monad.RWS (ask, evalRWS, MonadWriter(tell), RWS)
 import Control.Monad.State (get, put, runState, State)
 import Data.List (partition, sort)
 import Data.Monoid ((<>))
@@ -190,28 +195,50 @@ fixSpan sp =
     where
       t1 sp' = {-trace ("fixSpan " ++ show (srcInfoSpan sp) ++ " -> " ++ show (srcInfoSpan sp'))-} sp'
 
-keep :: SrcLoc -> RWS String String SrcLoc ()
-keep l = do
-  t <- view id
-  p <- get
-  tell (spanText (p, l) t)
-  put l
+data St = St {_point :: SrcLoc}
 
-skip :: SrcLoc -> RWS String String SrcLoc ()
-skip loc = put loc
+origin :: FilePath -> St
+origin path = St {_point = SrcLoc path 1 1}
+
+$(makeLenses ''St)
+
+type SpanM = RWS String String St
+
+keep :: SrcLoc -> SpanM ()
+keep loc = do
+  t <- view id
+  p <- use point
+  tell (spanText (p, loc) t)
+  point .= loc
+
+skip :: SrcLoc -> SpanM ()
+skip loc = point .= loc
+
+trailingWhitespace :: SpanInfo a => Maybe a -> SpanM String
+trailingWhitespace next = do
+  loc@(SrcLoc f _ _) <- use point
+  fullText <- ask
+  let (_, currText) = splitText loc fullText
+  return $ maybe currText (\n -> fst (srcPairText n currText)) next
+{-
+  let (white, currText') = case span (/= '\n') currText of
+                             (pre, '\n' : suf) -> (pre ++ ['\n'], suf)
+                             _ -> ("", currText)
+  pure $ srcLocSum loc (textEndLoc f white)
+-}
 
 debugRender :: A.Module SrcSpanInfo -> String -> String
 debugRender m@(A.Module l mh ps is ds) s =
-    (snd $ evalRWS render s ((srcLoc (A.ann m)) {srcLine = 1, srcColumn = 1}))
+    snd $ evalRWS render s (St {_point = (srcLoc (A.ann m)) {srcLine = 1, srcColumn = 1}})
     where
       -- Put [] around the spans (and eventually | at the divisions of the point list)
-      render :: RWS String String SrcLoc ()
+      render :: SpanM ()
       render = do
         tell "["
-        mapM (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") ps
+        mapM_ (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") ps
         maybe void (\h -> keep (srcLoc (A.ann h)) >> tell "[" >> keep (endLoc (A.ann h)) >> tell "]") mh
-        mapM (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") is
-        mapM (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") ds
+        mapM_ (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") is
+        mapM_ (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") ds
         keep (endLoc (A.ann m))
         tell "]"
 
