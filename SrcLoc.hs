@@ -9,6 +9,7 @@ module SrcLoc
     , point
     -- * Location and span info for a piece of text
     , spanOfText
+    , endLocOfText
     -- * Use span info to extract text
     , textTripleOfSpan
     , textOfSpan

@@ -49,7 +49,6 @@ import Prelude hiding (map)
 import Test.HUnit (Test(..))
 import Test.HUnit hiding (State)
 
-
 -- | Unify complementary literals.
 unify_complements :: (IsLiteral lit1, JustLiteral lit2, HasApply atom1, HasApply atom2,
                       Unify m (atom1, atom2), term ~ UTermOf (atom1, atom2), v ~ TVarOf term,

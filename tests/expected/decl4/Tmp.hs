@@ -155,4 +155,3 @@ instance FoldDeclared (A.FieldDecl l) where
 
 instance FoldDeclared (A.GadtDecl l) where
     foldDeclared f r (A.GadtDecl _ x xs _) = let r' = foldDeclared f r x in maybe r' (foldl' (foldDeclared f) r') xs
-

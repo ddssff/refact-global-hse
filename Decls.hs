@@ -6,7 +6,7 @@ module Decls (moveDeclsByName, moveInstDecls, instClassPred,
 import Control.Exception (SomeException)
 import Control.Lens (view)
 import Control.Monad (void)
-import Control.Monad.RWS (evalRWS, MonadWriter(tell))
+import Control.Monad.RWS (ask, evalRWS, MonadWriter(tell))
 import Data.Foldable as Foldable (find)
 import Data.List (foldl', intercalate, nub, stripPrefix)
 import Data.Map as Map (insertWith, Map, mapWithKey, singleton, toList)
@@ -21,7 +21,7 @@ import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleM
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..), QName(Qual, Special, UnQual))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
-import SrcLoc (endLoc, keep, origin, skip, textOfSpan, srcLoc, SpanM, spanOfText, trailingWhitespace)
+import SrcLoc (endLoc, endLocOfText, keep, origin, skip, textOfSpan, srcLoc, SpanM, spanOfText, trailingWhitespace, withTrailingWhitespace)
 import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
@@ -202,7 +202,7 @@ newModuleMap moveSpec modules =
                 intercalate exportSep (newExports moveSpec modules thisKey) ++ "\n    ) where\n" ++
                 concatMap (\(someKey, ds) -> importsForArrivingDecls moveSpec thisKey [] (findModuleByKeyUnsafe modules someKey)) pairs ++
                 -- importsForDepartingDecls moveSpec modules thisKey ++  new module, no decls can depart
-                newDecls moveSpec modules thisKey ++ "\n"
+                newDecls moveSpec modules thisKey
       declMap :: Map ModuleKey [(ModuleKey, A.Decl SrcSpanInfo)]
       declMap = foldl' doModule mempty modules
           where
@@ -290,21 +290,26 @@ findDeclOfExportSpec info spec =
 updateImports :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> SpanM ()
 updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = A.Module _ _ _ thisModuleImports _}) = do
   -- Update the existing imports
-  mapM_ doImportDecl thisModuleImports
+  mapM_ (uncurry doImportDecl) (listPairs thisModuleImports)
   mapM_ doNewImports (filter (\m -> _moduleKey m /= thisKey) modules)
   tell $ importsForDepartingDecls moveSpec modules (findModuleByKey modules thisKey)
     where
       -- Process one import declaration.  Each of its specs will
       -- either be kept, discarded, or moved to a new import with a
       -- new module name.
-      doImportDecl :: A.ImportDecl SrcSpanInfo -> SpanM ()
-      doImportDecl x@(A.ImportDecl {importSpecs = Nothing}) = (keep . endLoc . A.ann) x
-      doImportDecl x@(A.ImportDecl {importModule = name, importSpecs = Just (A.ImportSpecList l hiding specs)}) =
+      doImportDecl :: Maybe (A.ImportDecl SrcSpanInfo) -> Maybe (A.ImportDecl SrcSpanInfo) -> SpanM ()
+      doImportDecl Nothing Nothing = pure ()
+      doImportDecl Nothing (Just first) = keep (srcLoc first)
+      doImportDecl (Just x@(A.ImportDecl {importSpecs = Nothing})) next = do
+        (keep . endLoc . A.ann) x
+        withTrailingWhitespace keep next
+      doImportDecl (Just x@(A.ImportDecl {importModule = name, importSpecs = Just (A.ImportSpecList l hiding specs)})) next =
           do keep (case specs of
                      (spec : _) -> srcLoc (A.ann spec)
                      [] -> srcLoc l)
              mapM_ (uncurry (doImportSpec (sModuleName name) hiding)) (listPairs specs)
              (keep . endLoc . A.ann) x
+             withTrailingWhitespace keep next
              mapM_ (importsForMovingDecls (sModuleName name) hiding) specs
 
       doImportSpec :: S.ModuleName -> Bool -> Maybe (A.ImportSpec SrcSpanInfo) -> Maybe (A.ImportSpec SrcSpanInfo) -> SpanM ()
@@ -546,22 +551,53 @@ reexports sym e = Set.member sym (foldDeclared Set.insert mempty e)
 updateDecls :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> SpanM ()
 updateDecls moveSpec modules info@(ModuleInfo {_module = A.Module _ _ _ _ decls}) = do
   -- Declarations that were already here and are to remain
-  mapM_ (\d -> case applyMoveSpec moveSpec (_moduleKey info) d of
-                 k | k /= _moduleKey info -> do
-                   trace ("Moving " ++ ezPrint (foldDeclared (:) [] d) ++ " to " ++ ezPrint (moduleName k) ++ " from " ++ ezPrint (_moduleName (_moduleKey info))) (pure ())
-                   skip (endLoc d)
-                 _ -> keep (endLoc d)) decls
+  mapM_ doDecl (listPairs decls)
+  ask >>= keep . endLocOfText ""
   tell $ newDecls moveSpec modules (_moduleKey info)
+    where
+      doDecl (Nothing, Nothing) = pure ()
+      doDecl (Nothing, Just first) = keep (srcLoc first)
+      doDecl (Just d, next) =
+          case applyMoveSpec moveSpec (_moduleKey info) d of
+            k | k /= _moduleKey info -> do
+              trace ("Moving " ++ ezPrint (foldDeclared (:) [] d) ++ " to " ++ ezPrint (moduleName k) ++ " from " ++ ezPrint (_moduleName (_moduleKey info))) (pure ())
+              skip (endLoc d)
+              withTrailingWhitespace skip next
+            _ -> do
+              keep (endLoc d)
+              withTrailingWhitespace keep next
 updateDecls _ _ x = error $ "updateDecls - unexpected module: " ++ show (_module x)
 
 -- | Declarations that are moving here from other modules.
 newDecls :: MoveSpec -> [ModuleInfo] -> ModuleKey -> String
 newDecls moveSpec modules thisKey =
-    concatMap (\m@(ModuleInfo {_module = A.Module _mspan _ _ _ decls'}) ->
-                   concatMap (\d -> case applyMoveSpec moveSpec (_moduleKey m) d of
-                                      k | k /= thisKey -> ""
-                                      _ -> declText m d) decls')
-              (filter (\m -> _moduleKey m /= thisKey) modules)
+    concatMap doModule modules
+    where
+      -- Scan the declarations of all the modules except this one
+      doModule info@(ModuleInfo {_module = m@(A.Module l _mh ps is decls),
+                                 _moduleKey = someKey,
+                                 _moduleText = someText})
+          | someKey /= thisKey =
+              snd $ evalRWS (do skip (lastImportLoc (_module info))
+                                mapM_ (uncurry (doDecl someKey)) (listPairs decls))
+                            someText (origin (srcSpanFilename (srcInfoSpan l)))
+      doModule _ = ""
+
+      -- If a declaration is to be moved to this module, extract its
+      -- text and add it to the result.
+      doDecl :: ModuleKey -> Maybe (A.Decl SrcSpanInfo) -> Maybe (A.Decl SrcSpanInfo) -> SpanM ()
+      doDecl _ Nothing _ = pure ()
+      doDecl someKey (Just d) next =
+          case applyMoveSpec moveSpec someKey d of
+            k | k /= thisKey -> do
+              skip (endLoc d)
+              withTrailingWhitespace skip next
+            _ -> do
+              keep (endLoc d)
+              withTrailingWhitespace keep next
+
+lastImportLoc :: A.Module SrcSpanInfo -> SrcLoc
+lastImportLoc m@(A.Module l mh ps is _) = last ([srcLoc l] ++ map endLoc (map A.ann ps ++ maybe [] ((: []) . A.ann) mh ++ map A.ann is))
 
 -- | Get the text of a declaration including the preceding whitespace
 declText :: ModuleInfo -> A.Decl SrcSpanInfo -> String
