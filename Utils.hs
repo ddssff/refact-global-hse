@@ -136,12 +136,15 @@ lines' s =
       eol (x : xs) = x : eol xs
       eol [] = []
 
-listPairs :: [a] -> [(a, Maybe a)]
-listPairs (x1 : x2 : xs) = (x1, Just x2) : listPairs (x2 : xs)
-listPairs [x] = [(x, Nothing)]
-listPairs [] = []
+listPairs :: [a] -> [(Maybe a, Maybe a)]
+listPairs [] = [(Nothing, Nothing)]
+listPairs l@(x : _ ) =
+    (Nothing, Just x) : listPairs' l
+    where
+      listPairs' (x1 : x2 : xs) = (Just x1, Just x2) : listPairs' (x2 : xs)
+      listPairs' [x1] = [(Just x1, Nothing)]
 
 -- | listTriples [1,2,3,4] ->
 --     [(Nothing,1,Just 2),(Just 1,2,Just 3),(Just 2,3,Just 4),(Just 3,4,Nothing)]
 listTriples :: [a] -> [(Maybe a, a, Maybe a)]
-listTriples l = zip3 (Nothing : map Just l) l (tail (map Just l ++ repeat Nothing))
+listTriples l = zip3 ([Nothing] ++ map Just l) l (tail (map Just l ++ [Nothing]))

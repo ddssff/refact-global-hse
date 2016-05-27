@@ -20,16 +20,14 @@ module SrcLoc
     , keep
     , skip
     , trailingWhitespace
+    , withTrailingWhitespace
     , debugRender
     ) where
 
-import Control.Lens ((.=), _2, makeLenses, makeLensesFor, use, view)
+import Control.Lens ((.=), makeLenses, makeLensesFor, use, view)
 import Control.Monad.RWS (ask, evalRWS, MonadWriter(tell), RWS)
 import Control.Monad.State (get, put, runState, State)
-import Data.List (partition, sort)
 import Data.Monoid ((<>))
-import Data.Set (Set, toList)
-import Data.Tree (Tree, unfoldTree)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann), Module(..))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), text)
@@ -116,11 +114,6 @@ testSpan msg sp =
       (SrcLoc _ _ c1, SrcLoc _ _ c2) | c1 < 1 || c2 < 1 -> error ("testSpan - " ++ msg)
       _ -> sp
 
--- | Given a beginning and end location, and a string which starts at
--- the beginning location, return a (beforeend,afterend) pair.
-srcPairText :: SpanInfo a => a -> String -> (String, String)
-srcPairText sp s0 = splitText (spanDiff sp) s0
-
 splitText :: SrcLoc -> String -> (String, String)
 splitText loc@(SrcLoc _ l0 c0) s0 =
     fst $ runState f (1, 1, "", s0)
@@ -204,7 +197,7 @@ trailingWhitespace next = do
     False -> error "trailingWhitespace"
     True -> let s = textOfSpan (loc, loc') fullText in
             case span (/= '\n') s of
-              (pre, '\n' : suf) -> pure (pre ++ ['\n'])
+              (pre, '\n' : _suf) -> pure (pre ++ ['\n'])
               _ -> pure ""
 
 withTrailingWhitespace :: SpanInfo a => (SrcLoc -> SpanM ()) -> Maybe a -> SpanM ()
@@ -214,7 +207,7 @@ withTrailingWhitespace fn next = do
   fn (locSum p (endLocOfText (view locFilename p) s))
 
 debugRender :: A.Module SrcSpanInfo -> String -> String
-debugRender m@(A.Module l mh ps is ds) s =
+debugRender m@(A.Module _ mh ps is ds) s =
     snd $ evalRWS render s (St {_point = (srcLoc (A.ann m)) {srcLine = 1, srcColumn = 1}})
     where
       -- Put [] around the spans (and eventually | at the divisions of the point list)
@@ -228,4 +221,5 @@ debugRender m@(A.Module l mh ps is ds) s =
         keep (endLoc (A.ann m))
         tell "]"
 
+void :: Monad m => m ()
 void = pure ()

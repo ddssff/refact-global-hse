@@ -240,8 +240,9 @@ updateHeader moveSpec modules m@(ModuleInfo {_moduleKey = k, _module = A.Module 
       -- exportSpecText d = (concatMap ((", " ++) . prettyPrint) . nub . foldDeclared (:) []) d
       -- Find the declaration of the export spec in the current module.
       -- If it is not there, it is a re-export which we just keep.
-      doExport :: A.ExportSpec SrcSpanInfo -> Maybe (A.ExportSpec SrcSpanInfo) -> SpanM ()
-      doExport spec next =
+      doExport :: Maybe (A.ExportSpec SrcSpanInfo) -> Maybe (A.ExportSpec SrcSpanInfo) -> SpanM ()
+      doExport Nothing _ = pure ()
+      doExport (Just spec) next =
           case findNewKeyOfExportSpec moveSpec m spec of
             Nothing -> keep nextLoc
             Just k' | k' == k -> keep nextLoc
@@ -306,8 +307,9 @@ updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = A.Mo
              (keep . endLoc . A.ann) x
              mapM_ (importsForMovingDecls (sModuleName name) hiding) specs
 
-      doImportSpec :: S.ModuleName -> Bool -> A.ImportSpec SrcSpanInfo -> Maybe (A.ImportSpec SrcSpanInfo) -> SpanM ()
-      doImportSpec name hiding spec next =
+      doImportSpec :: S.ModuleName -> Bool -> Maybe (A.ImportSpec SrcSpanInfo) -> Maybe (A.ImportSpec SrcSpanInfo) -> SpanM ()
+      doImportSpec _ _ Nothing _ = pure ()
+      doImportSpec name hiding (Just spec) next =
           case newModuleOfImportSpec moveSpec modules name spec of
             Just name'
                 | -- Retain import if module name is unchanged
