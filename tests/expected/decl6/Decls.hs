@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
-module Decls (makeMoveSpec, moveDeclsAndClean, moveDecls, ) where
+module Decls (makeMoveSpec, moveDeclsAndClean, moveDecls) where
 
 import Control.Exception (SomeException)
 import Control.Lens ((.=), makeLenses, use, view)

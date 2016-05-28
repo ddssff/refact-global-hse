@@ -5,12 +5,12 @@ module Decls (moveDeclsByName, moveInstDecls, instClassPred,
 
 import Control.Exception (SomeException)
 import Control.Lens (view)
-import Control.Monad (void)
+import Control.Monad (foldM, void)
 import Control.Monad.RWS (ask, evalRWS, MonadWriter(tell))
 import Data.Foldable as Foldable (find)
 import Data.List (foldl', intercalate, nub, stripPrefix)
 import Data.Map as Map (insertWith, Map, mapWithKey, singleton, toList)
-import Data.Maybe (catMaybes, maybeToList)
+import Data.Maybe (catMaybes, listToMaybe, maybeToList)
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set)
 import Data.Tuple (swap)
 import Debug.Trace (trace)
@@ -227,6 +227,7 @@ defaultHsSourceDir modules =
 -- *if* the symbol is imported anywhere else.
 updateHeader :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> SpanM ()
 updateHeader moveSpec modules m@(ModuleInfo {_moduleKey = k, _module = A.Module _ (Just h@(A.ModuleHead _ _ _ (Just (A.ExportSpecList l specs)))) _ _ _}) = do
+#if 0
   -- write everything to beginning of first export spec
   keep (case specs of
           (x : _) -> srcLoc (A.ann x)
@@ -250,6 +251,19 @@ updateHeader moveSpec modules m@(ModuleInfo {_moduleKey = k, _module = A.Module 
             _ -> skip nextLoc
           where
             nextLoc = maybe (endLoc (A.ann spec)) (srcLoc . A.ann) next
+#else
+  maybe (pure ()) (keep . srcLoc . A.ann) (listToMaybe specs)
+  foldM doExport False specs
+  keep (endLoc l)
+    where
+      doExport :: Bool -> A.ExportSpec SrcSpanInfo -> SpanM Bool
+      doExport needSep spec =
+          case findNewKeyOfExportSpec moveSpec m spec of
+            Just k' | k' /= k -> skip (endLoc (A.ann spec)) >> pure needSep
+            _ | needSep -> keep (endLoc (A.ann spec)) >> pure True
+            _ -> skip (srcLoc (A.ann spec)) >> keep (endLoc (A.ann spec)) >> pure True
+#endif
+
 updateHeader _ _ _ = pure ()
 
 -- | Text of exports added due to arriving declarations

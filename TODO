@@ -12,6 +12,8 @@
 
           runhaskell scripts/Clean --move=withCurrentDirectory,IO,Utils --move=replaceFile,IO,Utils --find=. --find=scripts --find=tests
 
+   21. Fix dangling comma in decl6
+   22. Make the string scanning code more efficient
 
 DONE
 

@@ -89,7 +89,6 @@ lines' s =
       -- This shouldn't happen
       eol (x : xs) = x : eol xs
       eol [] = []
-
                -- (const action `catch` (\e -> liftIO (putStrLn ("in " ++ path) >> throw e)))
 
 withTempDirectory :: (MonadIO m, MonadBaseControl IO m) =>
