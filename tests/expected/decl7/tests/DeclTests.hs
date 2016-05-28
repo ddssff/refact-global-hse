@@ -119,19 +119,6 @@ decl6 = TestCase $ testMoveSpec "tests/expected/decl6" "tests/input/decl-mover" 
                            moveDeclsByName "appendMoveSpecs" "Decls" "MoveSpec",
                            moveDeclsByName "identityMoveSpec" "Decls" "MoveSpec"]
 
-decl7 :: Test
-decl7 = TestCase $ testMoveSpec' "tests/expected/decl7" "tests/input/rgh" $
-          runSimpleMoveUnsafe "tests/input/rgh" spec
-    where
-      spec = foldl1' (<>) [moveDeclsByName "SpanM" "SrcLoc" "Scan",
-                           moveDeclsByName "skip" "SrcLoc" "Scan",
-                           moveDeclsByName "keep" "SrcLoc" "Scan",
-                           moveDeclsByName "trailingWhiteSpace" "SrcLoc" "Scan",
-                           moveDeclsByName "withTrailingWhiteSpace" "SrcLoc" "Scan",
-                           moveDeclsByName "debugRender" "SrcLoc" "Scan",
-                           moveDeclsByName "void" "SrcLoc" "Scan",
-                           moveDeclsByName "St" "SrcLoc" "Scan"]
-
 simple1 :: Test
 simple1 =
     TestCase $
