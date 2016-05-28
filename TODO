@@ -14,6 +14,7 @@
 
    21. Fix dangling comma in decl6
    22. Make the string scanning code more efficient
+   24. decl1: Why no export of tryfindM in Decls.hs?
 
 DONE
 

@@ -178,13 +178,13 @@ keep loc = do
   t <- view id
   p <- use point
   tell (textOfSpan (testSpan "keep" (p, loc)) t)
-  point .= loc
+  point .= {-trace ("keep " ++ show loc)-} loc
 
 skip :: SrcLoc -> SpanM ()
 skip loc = do
   p <- use point
   pure $ testSpan "skip" (p, loc)
-  point .= loc
+  point .= {-trace ("skip " ++ show loc)-} loc
 
 -- | Given the next SpanInfo after the point, return the trailing
 -- whitespace. Assumes the point is at the end of a span.

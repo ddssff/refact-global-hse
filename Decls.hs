@@ -199,7 +199,7 @@ newModuleMap moveSpec modules =
             -- Build module thiskey from the list of (fromkey, decl) pairs
             doModule thisKey pairs =
                 "module " ++ maybe "Main" prettyPrint (moduleName thisKey) ++ "(" ++
-                intercalate exportSep (newExports moveSpec modules thisKey) ++ "\n    ) where\n" ++
+                intercalate exportSep (newExports moveSpec modules thisKey) ++ "\n    ) where\n\n" ++
                 concatMap (\(someKey, ds) -> importsForArrivingDecls moveSpec thisKey [] (findModuleByKeyUnsafe modules someKey)) pairs ++
                 -- importsForDepartingDecls moveSpec modules thisKey ++  new module, no decls can depart
                 newDecls moveSpec modules thisKey
@@ -226,43 +226,18 @@ defaultHsSourceDir modules =
 -- out are removed.  Exports of symbols that have moved in are added
 -- *if* the symbol is imported anywhere else.
 updateHeader :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> SpanM ()
-updateHeader moveSpec modules m@(ModuleInfo {_moduleKey = k, _module = A.Module _ (Just h@(A.ModuleHead _ _ _ (Just (A.ExportSpecList l specs)))) _ _ _}) = do
-#if 0
-  -- write everything to beginning of first export spec
-  keep (case specs of
-          (x : _) -> srcLoc (A.ann x)
-          [] -> srcLoc l)
-  mapM_ (uncurry doExport) (listPairs specs)
-  tell (concat (map (exportSep ++) (newExports moveSpec modules k)))
-  keep (endLoc (A.ann h))
-  -- mapM_ newExports (filter (\x -> _moduleKey x /= _moduleKey m) modules)
-    where
-      -- exportSpecText :: A.Decl SrcSpanInfo -> String
-      -- exportSpecText d = (concatMap ((", " ++) . prettyPrint) . nub . foldDeclared (:) []) d
-      -- Find the declaration of the export spec in the current module.
-      -- If it is not there, it is a re-export which we just keep.
-      doExport :: Maybe (A.ExportSpec SrcSpanInfo) -> Maybe (A.ExportSpec SrcSpanInfo) -> SpanM ()
-      doExport Nothing _ = pure ()
-      doExport (Just spec) next =
-          case findNewKeyOfExportSpec moveSpec m spec of
-            Nothing -> keep nextLoc
-            Just k' | k' == k -> keep nextLoc
-            -- Discard until the beginning of the next spec
-            _ -> skip nextLoc
-          where
-            nextLoc = maybe (endLoc (A.ann spec)) (srcLoc . A.ann) next
-#else
+updateHeader moveSpec modules i@(ModuleInfo {_moduleKey = k,
+                                             _module = m@(A.Module _ (Just h@(A.ModuleHead l _ _ (Just (A.ExportSpecList _ specs)))) _ _ _)}) = do
   maybe (pure ()) (keep . srcLoc . A.ann) (listToMaybe specs)
   foldM doExport False specs
-  keep (endLoc l)
+  keep (endOfHeader m)
     where
       doExport :: Bool -> A.ExportSpec SrcSpanInfo -> SpanM Bool
       doExport needSep spec =
-          case findNewKeyOfExportSpec moveSpec m spec of
+          case findNewKeyOfExportSpec moveSpec i spec of
             Just k' | k' /= k -> skip (endLoc (A.ann spec)) >> pure needSep
             _ | needSep -> keep (endLoc (A.ann spec)) >> pure True
             _ -> skip (srcLoc (A.ann spec)) >> keep (endLoc (A.ann spec)) >> pure True
-#endif
 
 updateHeader _ _ _ = pure ()
 
@@ -271,13 +246,13 @@ newExports :: MoveSpec -> [ModuleInfo] -> ModuleKey -> [String]
 newExports moveSpec modules thisKey =
     map prettyPrint names
     where
-      -- This should be inferred from the module text
+      -- (This should be inferred from the text of thisKey.)
       names = nub $ concatMap newExportsFromModule (filter (\x -> _moduleKey x /= thisKey) modules)
-      -- Scan a module other than m for declarations moving to m.  If
+      -- Scan a module other than thisKey for declarations moving to thisKey.  If
       -- found, transfer the export from there to here.
       newExportsFromModule :: ModuleInfo -> [S.ExportSpec]
-      newExportsFromModule (ModuleInfo {_moduleKey = k', _module = A.Module _l _h _ _i ds}) =
-          concatMap (\d -> if (applyMoveSpec moveSpec k' d == thisKey) then toExportSpecs d else []) ds
+      newExportsFromModule (ModuleInfo {_moduleKey = k', _module = A.Module _ _ _ _ ds}) =
+          concatMap (\d -> if (applyMoveSpec moveSpec k' d == thisKey) then trace "newExportsFromModule" (toExportSpecs d) else []) ds
       newExportsFromModule x = error $ "newExports - unexpected module: " ++ show (_module x)
 
 findNewKeyOfExportSpec :: MoveSpec -> ModuleInfo -> A.ExportSpec SrcSpanInfo -> Maybe ModuleKey
@@ -315,8 +290,8 @@ updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = A.Mo
       doImportDecl Nothing Nothing = pure ()
       doImportDecl Nothing (Just first) = keep (srcLoc first)
       doImportDecl (Just x@(A.ImportDecl {importSpecs = Nothing})) next = do
-        (keep . endLoc . A.ann) x
-        withTrailingWhitespace keep next
+         keep (endLoc (A.ann x))
+         withTrailingWhitespace keep next
       doImportDecl (Just x@(A.ImportDecl {importModule = name, importSpecs = Just (A.ImportSpecList l hiding specs)})) next =
           do keep (case specs of
                      (spec : _) -> srcLoc (A.ann spec)
@@ -409,12 +384,11 @@ importsForArrivingDecls :: MoveSpec -> ModuleKey -> [A.ImportDecl SrcSpanInfo] -
 importsForArrivingDecls moveSpec thisKey thisModuleImports someModule@(ModuleInfo {_moduleKey = someKey, _module = A.Module _ _ _ is ds}) =
     if any (\d -> applyMoveSpec moveSpec someKey d == thisKey) ds
     then concatMap
-             (\i -> "\n" ++ prettyPrint' i)
+             (\i -> prettyPrint' i ++ "\n")
              (filter (\i -> moduleName thisKey /= Just (sModuleName (A.importModule i))) is) ++
          concatMap
-             (\i -> "\n" ++ prettyPrint' i)
-             (maybeToList (importDeclFromExportSpecs moveSpec thisModuleImports someModule)) ++
-         "\n"
+             (\i -> prettyPrint' i ++ "\n")
+             (maybeToList (importDeclFromExportSpecs moveSpec thisModuleImports someModule))
     else ""
 importsForArrivingDecls _ _ _ _ = ""
 
@@ -563,14 +537,15 @@ reexports sym e = Set.member sym (foldDeclared Set.insert mempty e)
 -- name is added.  The final case is invalid - a module that imported
 -- itself.
 updateDecls :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> SpanM ()
-updateDecls moveSpec modules info@(ModuleInfo {_module = A.Module _ _ _ _ decls}) = do
+updateDecls moveSpec modules info@(ModuleInfo {_module = m@(A.Module _ _ _ _ decls)}) = do
+  -- keep (endOfImports m)
   -- Declarations that were already here and are to remain
   mapM_ doDecl (listPairs decls)
   ask >>= keep . endLocOfText ""
   tell $ newDecls moveSpec modules (_moduleKey info)
     where
       doDecl (Nothing, Nothing) = pure ()
-      doDecl (Nothing, Just first) = keep (srcLoc first)
+      doDecl (Nothing, Just first) = pure () -- keep (srcLoc first)
       doDecl (Just d, next) =
           case applyMoveSpec moveSpec (_moduleKey info) d of
             k | k /= _moduleKey info -> do
@@ -592,7 +567,7 @@ newDecls moveSpec modules thisKey =
                                  _moduleKey = someKey,
                                  _moduleText = someText})
           | someKey /= thisKey =
-              snd $ evalRWS (do skip (lastImportLoc (_module info))
+              snd $ evalRWS (do skip (endOfImports (_module info))
                                 mapM_ (uncurry (doDecl someKey)) (listPairs decls))
                             someText (origin (srcSpanFilename (srcInfoSpan l)))
       doModule _ = ""
@@ -610,8 +585,17 @@ newDecls moveSpec modules thisKey =
               keep (endLoc d)
               withTrailingWhitespace keep next
 
-lastImportLoc :: A.Module SrcSpanInfo -> SrcLoc
-lastImportLoc m@(A.Module l mh ps is _) = last ([srcLoc l] ++ map endLoc (map A.ann ps ++ maybe [] ((: []) . A.ann) mh ++ map A.ann is))
+endOfImports :: A.Module SrcSpanInfo -> SrcLoc
+endOfImports m@(A.Module l mh ps [] _) = endOfHeader m
+endOfImports m@(A.Module l mh ps is _) = endLoc (A.ann (last is))
+
+endOfHeader :: A.Module SrcSpanInfo -> SrcLoc
+endOfHeader m@(A.Module l Nothing ps _ _) = endOfPragmas m
+endOfHeader m@(A.Module l (Just h) ps is _) = endLoc (A.ann h)
+
+endOfPragmas :: A.Module SrcSpanInfo -> SrcLoc
+endOfPragmas m@(A.Module l _ [] _ _) = srcLoc l
+endOfPragmas m@(A.Module l _ ps _ _) = endLoc (A.ann (last ps))
 
 -- | Get the text of a declaration including the preceding whitespace
 declText :: ModuleInfo -> A.Decl SrcSpanInfo -> String
