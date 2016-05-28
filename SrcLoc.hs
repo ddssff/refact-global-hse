@@ -172,10 +172,10 @@ fixSpan sp =
     where
       t1 sp' = {-trace ("fixSpan " ++ show (srcInfoSpan sp) ++ " -> " ++ show (srcInfoSpan sp'))-} sp'
 
-type SpanM = RWS String String St
+type SpanM = RWS () String St
 
 scanModule :: SpanM () -> String -> FilePath -> String
-scanModule action s file = snd $ evalRWS action s (St {_point = SrcLoc file 1 1, _remaining = s})
+scanModule action s file = snd $ evalRWS action () (St {_point = SrcLoc file 1 1, _remaining = s})
 
 instance EZPrint SrcLoc where
     ezPrint = prettyShow
@@ -184,8 +184,7 @@ keep :: SrcLoc -> SpanM ()
 keep loc = do
   t' <- use remaining
   p <- use point
-  let d = locDiff loc p
-  let (s', t'') = splitText d t'
+  let (s', t'') = splitText (locDiff loc p) t'
   tell s'
   remaining .= t''
   point .= {-trace ("keep " ++ show loc)-} loc
@@ -193,11 +192,8 @@ keep loc = do
 keepAll :: SpanM ()
 keepAll = do
   p@(SrcLoc file _ _) <- use point
-  -- fullText <- view id
-  -- let e = endLocOfText file fullText
   t <- use remaining
   let e' = locSum p (endLocOfText "" t)
-  -- when (e /= e') (error $ "keepAll: e=" ++ show e ++ ", e'=" ++ show e')
   keep e'
 
 skip :: SrcLoc -> SpanM ()
@@ -205,8 +201,7 @@ skip loc = do
   p <- use point
   pure $ testSpan "skip" (p, loc)
   t' <- use remaining
-  let d = locDiff loc p
-  let (_, t'') = splitText d t'
+  let (_, t'') = splitText (locDiff loc p) t'
   remaining .= t''
   point .= {-trace ("skip " ++ show loc)-} loc
 
@@ -214,19 +209,14 @@ skip loc = do
 -- whitespace. Assumes the point is at the end of a span.
 trailingWhitespace :: SpanInfo a => Maybe a -> SpanM String
 trailingWhitespace next = do
-  fullText <- ask
   t <- use remaining
   loc@(SrcLoc file _ _) <- use point
-  let loc' = maybe (endLocOfText file fullText) srcLoc next
   let loc'' = maybe (locSum loc (endLocOfText file t)) srcLoc next
-  when (loc' /= loc'') (error "trailingWhitespace")
   case loc'' >= loc of
     False -> error "trailingWhitespace"
     True -> do
-      let s = textOfSpan (loc, loc'') fullText
       let (s', _) = splitText (locDiff loc'' loc) t
-      when (s /= s') (error "trailingWhitespace")
-      case span (/= '\n') s of
+      case span (/= '\n') s' of
         (pre, '\n' : _suf) -> pure (pre ++ ['\n'])
         _ -> pure ""
 
@@ -238,7 +228,7 @@ withTrailingWhitespace fn next = do
 
 debugRender :: A.Module SrcSpanInfo -> String -> String
 debugRender m@(A.Module _ mh ps is ds) s =
-    snd $ evalRWS render s (St {_point = (srcLoc (A.ann m)) {srcLine = 1, srcColumn = 1}})
+    snd $ evalRWS render () (St {_point = (srcLoc (A.ann m)) {srcLine = 1, srcColumn = 1}, _remaining = s})
     where
       -- Put [] around the spans (and eventually | at the divisions of the point list)
       render :: SpanM ()
