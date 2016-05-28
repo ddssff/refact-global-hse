@@ -26,11 +26,9 @@ module SrcLoc
     ) where
 
 import Control.Lens ((.=), makeLenses, makeLensesFor, use, view)
-import Control.Monad (when)
-import Control.Monad.RWS (ask, evalRWS, MonadWriter(tell), RWS)
+import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS)
 import Control.Monad.State (get, put, runState, State)
 import Data.Monoid ((<>))
-import Debug.Trace
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann), Module(..))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)
@@ -41,16 +39,16 @@ data St = St { _point :: SrcLoc -- The current position in the full text
              }
 
 $(makeLenses ''St)
-$(makeLensesFor [("srcFilename", "locFilename"),
+$(makeLensesFor [("srcFilename", "locFilename"){-,
                  ("srcLine", "locLine"),
-                 ("srcColumn", "locColumn")] ''SrcLoc)
-$(makeLensesFor [("srcSpanFilename", "spanFilename"),
+                 ("srcColumn", "locColumn")-}] ''SrcLoc)
+$(makeLensesFor [{-("srcSpanFilename", "spanFilename"),
                  ("srcSpanStartLine", "spanStartLine"),
                  ("srcSpanStartColumn", "spanStartColumn"),
                  ("srcSpanEndLine", "spanEndLine"),
-                 ("srcSpanEndColumn", "spanEndColumn")] ''SrcSpan)
-$(makeLensesFor [("srcInfoSpan", "infoSpan"),
-                 ("srcInfoPoints", "infoPoints")] ''SrcSpanInfo)
+                 ("srcSpanEndColumn", "spanEndColumn")-}] ''SrcSpan)
+$(makeLensesFor [{-("srcInfoSpan", "infoSpan"),
+                 ("srcInfoPoints", "infoPoints")-}] ''SrcSpanInfo)
 
 class SpanInfo a where
     srcSpan :: a -> SrcSpan
@@ -191,7 +189,7 @@ keep loc = do
 
 keepAll :: ScanM ()
 keepAll = do
-  p@(SrcLoc file _ _) <- use point
+  p@(SrcLoc _ _ _) <- use point
   t <- use remaining
   let e' = locSum p (endLocOfText "" t)
   keep e'

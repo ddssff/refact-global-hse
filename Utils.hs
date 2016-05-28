@@ -135,8 +135,8 @@ lines' s                 =  cons (case break (== '\n') s of
 
 listPairs :: [a] -> [(Maybe a, Maybe a)]
 listPairs [] = [(Nothing, Nothing)]
-listPairs l@(x : _ ) =
-    (Nothing, Just x) : listPairs' l
+listPairs (x : xs) =
+    (Nothing, Just x) : listPairs' x xs
     where
       listPairs' x1 (x2 : xs') = (Just x1, Just x2) : listPairs' x2 xs'
       listPairs' x1 [] = [(Just x1, Nothing)]

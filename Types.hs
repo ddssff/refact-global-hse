@@ -82,28 +82,26 @@ loadModule' :: FilePath -> IO ModuleInfo
 loadModule' path = either (error . show) id <$> (loadModule path :: IO (Either SomeException ModuleInfo))
 
 loadModule :: Exception e => FilePath -> IO (Either e ModuleInfo)
-loadModule path =
-  try loadModule' {- `IO.catch` (\(e :: IOError) -> if isDoesNotExistError e || isUserError e then return Nothing else throw e) -}
+loadModule path = try $ do
+  moduleText <- liftIO $ readFile path
+  (parsed', comments, processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions mode path
+  let parsed = everywhere (mkT fixSpan) parsed'
+  -- liftIO $ writeFile (path ++ ".cpp") processed
+  -- putStr processed
+  -- validateParseResults parsed comments processed -- moduleText
+  key <- moduleKey path parsed
+  putStrLn ("loaded " ++ prettyShow key)
+  pure $ ModuleInfo { _moduleKey = key
+                    , _module = parsed
+                    , _moduleComments = comments
+                    , _modulePath = makeRelative (case key of
+                                                    ModuleKey {_moduleTop = top} -> top
+                                                    ModuleFullPath p -> takeDirectory p) path
+                    , _moduleText = moduleText
+                    , _moduleSpan = spanOfText path moduleText }
     where
-      loadModule' :: IO ModuleInfo
-      loadModule' = do
-        moduleText <- liftIO $ readFile path
-        (parsed', comments, processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions mode path
-        let parsed = everywhere (mkT fixSpan) parsed'
-        -- liftIO $ writeFile (path ++ ".cpp") processed
-        -- putStr processed
-        -- validateParseResults parsed comments processed -- moduleText
-        key <- moduleKey path parsed
-        putStrLn ("loaded " ++ prettyShow key)
-        pure $ ModuleInfo { _moduleKey = key
-                          , _module = parsed
-                          , _moduleComments = comments
-                          , _modulePath = makeRelative (case key of
-                                                          ModuleKey {_moduleTop = top} -> top
-                                                          ModuleFullPath p -> takeDirectory p) path
-                          , _moduleText = moduleText
-                          , _moduleSpan = spanOfText path moduleText }
       mode = Exts.defaultParseMode {Exts.extensions = hseExtensions, Exts.parseFilename = path, Exts.fixities = Nothing }
+  -- {- `IO.catch` (\(e :: IOError) -> if isDoesNotExistError e || isUserError e then return Nothing else throw e) -}
 
 -- | Turn of the locations flag.  This means simple #if macros will not
 -- affect the line numbers of the output text, so we can use the
