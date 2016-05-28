@@ -11,11 +11,12 @@ module DeclTests where
 import Control.Monad (when)
 import Data.List hiding (find)
 import Data.Monoid ((<>))
-import Decls (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec), runSimpleMoveUnsafe)
+import Debug.Trace
+import Decls (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec), moveSpliceDecls, runMoveUnsafe, runSimpleMoveUnsafe)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
 import Language.Haskell.Exts.Annotated.Simplify (sName, sQName)
 import qualified Language.Haskell.Exts.Syntax as S
-import ModuleKey (ModuleKey(_moduleName), moduleName)
+import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
 import System.Exit (ExitCode(ExitSuccess))
 import System.Process (readProcessWithExitCode)
 import Symbols (foldDeclared)
@@ -121,7 +122,7 @@ decl6 = TestCase $ testMoveSpec "tests/expected/decl6" "tests/input/decl-mover" 
 
 decl7 :: Test
 decl7 = TestCase $ testMoveSpec' "tests/expected/decl7" "tests/input/rgh" $
-          runSimpleMoveUnsafe "tests/input/rgh" spec
+          runMoveUnsafe "tests/input/rgh" [".", "tests"] spec
     where
       spec = foldl1' (<>) [moveDeclsByName "SpanM" "SrcLoc" "Scan",
                            moveDeclsByName "skip" "SrcLoc" "Scan",
@@ -130,7 +131,16 @@ decl7 = TestCase $ testMoveSpec' "tests/expected/decl7" "tests/input/rgh" $
                            moveDeclsByName "withTrailingWhiteSpace" "SrcLoc" "Scan",
                            moveDeclsByName "debugRender" "SrcLoc" "Scan",
                            moveDeclsByName "void" "SrcLoc" "Scan",
-                           moveDeclsByName "St" "SrcLoc" "Scan"]
+                           moveDeclsByName "St" "SrcLoc" "Scan",
+                           moveSpliceDecls testSplice]
+      -- testSplice key@(ModuleKey {_moduleName = S.ModuleName "SrcLoc"}) _ = key {_moduleName = S.ModuleName "Scan"}
+      testSplice key@(ModuleKey {_moduleName = S.ModuleName "SrcLoc"}) exp =
+          case unfoldApply exp of
+            (x : _) | (gFind x :: [S.Name]) == [S.Ident "makeLenses"] -> key {_moduleName = S.ModuleName "Scan"}
+            _ -> key
+      testSplice key _ = key
+      unfoldApply (S.App a b) = unfoldApply a ++ [b]
+      unfoldApply x = [x]
 
 simple1 :: Test
 simple1 =

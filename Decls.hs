@@ -1,6 +1,6 @@
 {-# LANGUAGE CPP, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
-module Decls (moveDeclsByName, moveInstDecls, instClassPred,
-              runSimpleMove, runSimpleMoveUnsafe, moveDeclsAndClean, moveDecls,
+module Decls (moveDeclsByName, moveInstDecls, moveSpliceDecls, instClassPred,
+              runSimpleMove, runSimpleMoveUnsafe, runMoveUnsafe, moveDeclsAndClean, moveDecls,
               MoveSpec(MoveSpec), applyMoveSpec, traceMoveSpec) where
 
 import Control.Exception (SomeException)
@@ -16,10 +16,10 @@ import Data.Tuple (swap)
 import Debug.Trace (trace)
 import Imports (cleanImports)
 import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(InstDecl, TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), InstHead(..), InstRule(IParen, IRule), Module(Module), ModuleHead(ModuleHead), Pretty, QName, Type)
-import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName, sQName)
+import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName, sQName, sModule)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
-import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..), QName(Qual, Special, UnQual))
+import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..), QName(Qual, Special, UnQual), Exp, Decl(SpliceDecl), Exp(SpliceExp), Splice(IdSplice, ParenSplice))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
 import SrcLoc (endLoc, endLocOfText, keep, origin, skip, textOfSpan, srcLoc, SpanM, spanOfText, trailingWhitespace, withTrailingWhitespace)
 import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
@@ -109,6 +109,18 @@ moveInstDecls instpred =
           _ -> mkey
 -}
 
+moveSpliceDecls :: (ModuleKey -> S.Exp -> ModuleKey) -> MoveSpec
+moveSpliceDecls exppred =
+    MoveSpec (\k d -> f k (sDecl d))
+    where
+      f :: ModuleKey -> S.Decl -> ModuleKey
+      f mkey (S.SpliceDecl _ exp) = g mkey exp
+      f mkey _ = mkey
+      g mkey (S.SpliceExp splice) = h mkey splice
+      g mkey _ = mkey
+      h mkey (S.IdSplice s) = mkey
+      h mkey (S.ParenSplice exp) = exppred mkey exp
+
 -- | Build the argument to moveInstDecls
 instClassPred :: String -> String -> String ->
                  ModuleKey -> A.QName SrcSpanInfo -> [A.Type SrcSpanInfo] -> ModuleKey
@@ -132,10 +144,18 @@ runSimpleMoveUnsafe top moveSpec =
     withTempDirectory True "." "scratch" $ \scratch -> do
       paths <- (catMaybes . map (stripPrefix "./"))
                <$> (FilePath.find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
-      loadModules paths >>= moveDeclsAndClean moveSpec scratch
+      loadModules paths >>= moveDeclsAndClean moveSpec scratch ["."]
 
-moveDeclsAndClean :: MoveSpec -> FilePath -> [ModuleInfo] -> IO ()
-moveDeclsAndClean moveSpec scratch modules = do
+runMoveUnsafe :: FilePath -> [FilePath] -> MoveSpec -> IO ()
+runMoveUnsafe top hsSourceDirs moveSpec =
+    withCurrentDirectory top $
+    withTempDirectory True "." "scratch" $ \scratch -> do
+      paths <- (catMaybes . map (stripPrefix "./"))
+               <$> (FilePath.find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
+      loadModules paths >>= moveDeclsAndClean moveSpec scratch hsSourceDirs
+
+moveDeclsAndClean :: MoveSpec -> FilePath -> [FilePath] -> [ModuleInfo] -> IO ()
+moveDeclsAndClean moveSpec scratch hsSourceDirs modules = do
   -- Move the declarations and rewrite the updated modules
   oldPaths <-
       mapM (\(m, s) -> do
@@ -152,7 +172,7 @@ moveDeclsAndClean moveSpec scratch modules = do
   -- Re-read the updated modules and clean their imports
   -- (Later we will need to find the newly created modules here)
   modules' <- mapM (\p -> either (loadError p) id <$> loadModule p) (catMaybes oldPaths ++ newPaths) :: IO [ModuleInfo]
-  cleanImports scratch [] modules'
+  cleanImports scratch hsSourceDirs modules'
     where
       loadError :: FilePath -> SomeException -> ModuleInfo
       loadError p e = error ("Unable to load updated module " ++ show p ++ ": " ++ show e)

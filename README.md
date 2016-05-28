@@ -17,6 +17,11 @@
  * Minimize LANGUAGE directives by trial and error
  * Remove modules that become empty
 
+# What it might do eventually
+
+ * Figure out what imports are required by a template haskell splice (and add them)
+ * Figure out what exports are created by a template haskell splice (and move them)
+
 # Requirements
 
  The only requirement currently not in hackage is filemanip >= 0.3.6.4,

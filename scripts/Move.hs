@@ -18,6 +18,7 @@ import System.Console.GetOpt
 data Params
     = Params { _moveSpec :: MoveSpec
              , _topDir :: FilePath
+             , _hsDirs :: [FilePath]
              , _lsDirs :: [FilePath]
              , _findDirs :: [FilePath]
              , _moduverse :: [FilePath]
@@ -26,7 +27,7 @@ data Params
 $(makeLenses ''Params)
 
 params0 :: Params
-params0 = Params {_moveSpec = mempty, _topDir = ".", _findDirs = [], _lsDirs = [], _moduverse = [], _unsafe = False}
+params0 = Params {_moveSpec = mempty, _topDir = ".", _hsDirs = [], _findDirs = [], _lsDirs = [], _moduverse = [], _unsafe = False}
 
 options :: [OptDescr (Params -> Params)]
 options =
@@ -41,6 +42,7 @@ options =
              "Move all instances of a class"
     , Option "" ["mod"] (ReqArg (\s -> over moduverse (s :)) "PATH") "Add a module to the moduverse"
     , Option "" ["top"] (ReqArg (\s -> over topDir (const s)) "DIR") "Set the top directory, module paths will be relative to this (so do it first)"
+    , Option "i" ["hs-source-dir"] (ReqArg (\s -> over hsDirs (s :)) "DIR") "Add a directory to the haskell source path (absolute or relative to top)"
     , Option "" ["ls"] (ReqArg (\s -> over lsDirs (s :)) "DIR") "Directory relative to top to search (non-recursively) for .hs files to add to the moduverse"
     , Option "" ["find"] (ReqArg (\s -> over findDirs (s :)) "DIR") "Directory relative to top to search (recursively) for .hs files to add to the moduverse"
     , Option "" ["unsafe"] (NoArg (set unsafe True)) "Skip the safety check - allow uncommitted edits in repo where clean is performed" ]
@@ -74,4 +76,4 @@ run args = do
   params <- buildParams args
   (if _unsafe params then id else withCleanRepo) $ withTempDirectory True "." "scratch" $ \scratch -> do
     modules <- loadModules (view moduverse params)
-    moveDeclsAndClean (traceMoveSpec (view moveSpec params)) scratch modules
+    moveDeclsAndClean (traceMoveSpec (view moveSpec params)) scratch (view hsDirs params) modules

@@ -22,21 +22,21 @@ import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (SrcLoc(srcColumn, srcFilename, srcLine), SrcSpan(srcSpanFilename), SrcSpanInfo(srcInfoSpan))
 import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(importLoc, importModule, importSpecs), ModuleName(..), Name(..))
-import ModuleKey (moduleFullPath, moduleTop)
+import ModuleKey (moduleFullPath, ModuleKey(..), moduleTop)
 import SrcLoc (endLoc, keep, origin, skip, srcLoc, spanOfText)
 import Symbols (symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
-import System.FilePath ((</>))
+import System.FilePath ((</>), makeRelative)
 import System.FilePath.Extra2 (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleText), hseExtensions, hsFlags, loadModule)
-
+import Utils (ezPrint)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> [FilePath] -> [ModuleInfo] -> m ()
 cleanImports _ _ [] = trace ("cleanImports - no modules") (pure ())
-cleanImports scratch extraTops info =
+cleanImports scratch hsSourceDirs info =
     dump >> mapM_ (\x -> do newText <- doModule scratch x
                             let path = moduleFullPath (_moduleKey x)
                             liftIO $ case newText of
@@ -52,8 +52,8 @@ cleanImports scratch extraTops info =
       dump = do
         let cmd = "ghc"
             args' = hsFlags ++
-                    ["--make", "-c", "-ddump-minimal-imports", "-outputdir", scratch, "-i" ++
-                    intercalate ":" (nub (extraTops ++ catMaybes (toList (Set.map moduleTop keys))))] ++
+                    ["--make", "-c", "-ddump-minimal-imports", "-outputdir", scratch] ++
+                    (if null hsSourceDirs then [] else ["-i" ++ intercalate ":" hsSourceDirs]) ++
                     concatMap ppExtension hseExtensions ++
                     map _modulePath info
         (code, _out, err) <- liftIO $ readProcessWithExitCode cmd args' ""
