@@ -18,6 +18,7 @@ module SrcLoc
     , SpanM
     , scanModule
     , keep
+    , keepAll
     , skip
     , trailingWhitespace
     , withTrailingWhitespace
@@ -181,6 +182,11 @@ keep loc = do
   p <- use point
   tell (textOfSpan (testSpan "keep" (p, loc)) t)
   point .= {-trace ("keep " ++ show loc)-} loc
+
+keepAll :: SpanM ()
+keepAll = do
+  fullText <- view id
+  keep (endLocOfText "" fullText)
 
 skip :: SrcLoc -> SpanM ()
 skip loc = do

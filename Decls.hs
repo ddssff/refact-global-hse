@@ -4,9 +4,8 @@ module Decls (moveDeclsByName, moveInstDecls, moveSpliceDecls, instClassPred,
               MoveSpec(MoveSpec), applyMoveSpec, traceMoveSpec) where
 
 import Control.Exception (SomeException)
-import Control.Lens (view)
 import Control.Monad (foldM, void)
-import Control.Monad.RWS (ask, MonadWriter(tell))
+import Control.Monad.RWS (MonadWriter(tell))
 import Data.Foldable as Foldable (find)
 import Data.List (foldl', intercalate, nub, stripPrefix)
 import Data.Map as Map (insertWith, Map, mapWithKey, singleton, toList)
@@ -21,7 +20,7 @@ import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleM
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..), QName(Qual, Special, UnQual), Exp, Decl(SpliceDecl), Exp(SpliceExp), Splice(IdSplice, ParenSplice))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
-import SrcLoc (endLoc, endLocOfText, scanModule, keep, skip, textOfSpan, srcLoc, SpanM, spanOfText, withTrailingWhitespace)
+import SrcLoc (endLoc, keep, keepAll, scanModule, skip, textOfSpan, srcLoc, SpanM, withTrailingWhitespace)
 import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
@@ -114,12 +113,12 @@ moveSpliceDecls exppred =
     MoveSpec (\k d -> f k (sDecl d))
     where
       f :: ModuleKey -> S.Decl -> ModuleKey
-      f mkey (S.SpliceDecl _ exp) = g mkey exp
+      f mkey (S.SpliceDecl _ exp') = g mkey exp'
       f mkey _ = mkey
       g mkey (S.SpliceExp splice) = h mkey splice
       g mkey _ = mkey
-      h mkey (S.IdSplice s) = mkey
-      h mkey (S.ParenSplice exp) = exppred mkey exp
+      h mkey (S.IdSplice _s) = mkey
+      h mkey (S.ParenSplice exp') = exppred mkey exp'
 
 -- | Build the argument to moveInstDecls
 instClassPred :: String -> String -> String ->
@@ -190,8 +189,7 @@ moveDeclsOfModule moveSpec modules info@(ModuleInfo {_module = A.Module l _ _ _ 
                    updateHeader moveSpec modules info
                    updateImports moveSpec modules info
                    updateDecls moveSpec modules info
-                   t <- view id
-                   keep (endLoc (spanOfText (srcFilename (endLoc l)) t)))
+                   keepAll)
                (_moduleText info)
                (srcSpanFilename (srcInfoSpan l))
 moveDeclsOfModule _ _ x = error $ "moveDeclsOfModule - unexpected module: " ++ show (_module x)
@@ -219,7 +217,7 @@ newModuleMap moveSpec modules =
             doModule thisKey pairs =
                 "module " ++ maybe "Main" prettyPrint (moduleName thisKey) ++ "(" ++
                 intercalate exportSep (newExports moveSpec modules thisKey) ++ "\n    ) where\n\n" ++
-                concatMap (\(someKey, ds) -> importsForArrivingDecls moveSpec thisKey [] (findModuleByKeyUnsafe modules someKey)) pairs ++
+                concatMap (\(someKey, _ds) -> importsForArrivingDecls moveSpec thisKey [] (findModuleByKeyUnsafe modules someKey)) pairs ++
                 -- importsForDepartingDecls moveSpec modules thisKey ++  new module, no decls can depart
                 newDecls moveSpec modules thisKey
       declMap :: Map ModuleKey [(ModuleKey, A.Decl SrcSpanInfo)]
@@ -245,8 +243,8 @@ defaultHsSourceDir modules =
 -- out are removed.  Exports of symbols that have moved in are added
 -- *if* the symbol is imported anywhere else.
 updateHeader :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> SpanM ()
-updateHeader moveSpec modules i@(ModuleInfo {_moduleKey = k,
-                                             _module = m@(A.Module _ (Just h@(A.ModuleHead l _ _ (Just (A.ExportSpecList _ specs)))) _ _ _)}) = do
+updateHeader moveSpec _modules i@(ModuleInfo {_moduleKey = k,
+                                             _module = m@(A.Module _ (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList _ specs)))) _ _ _)}) = do
   maybe (pure ()) (keep . srcLoc . A.ann) (listToMaybe specs)
   foldM doExport False specs
   keep (endOfHeader m)
@@ -556,15 +554,15 @@ reexports sym e = Set.member sym (foldDeclared Set.insert mempty e)
 -- name is added.  The final case is invalid - a module that imported
 -- itself.
 updateDecls :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> SpanM ()
-updateDecls moveSpec modules info@(ModuleInfo {_module = m@(A.Module _ _ _ _ decls)}) = do
+updateDecls moveSpec modules info@(ModuleInfo {_module = (A.Module _ _ _ _ decls)}) = do
   -- keep (endOfImports m)
   -- Declarations that were already here and are to remain
   mapM_ doDecl (listPairs decls)
-  ask >>= keep . endLocOfText ""
+  keepAll
   tell $ newDecls moveSpec modules (_moduleKey info)
     where
       doDecl (Nothing, Nothing) = pure ()
-      doDecl (Nothing, Just first) = pure () -- keep (srcLoc first)
+      doDecl (Nothing, Just _first) = pure () -- keep (srcLoc first)
       doDecl (Just d, next) =
           case applyMoveSpec moveSpec (_moduleKey info) d of
             k | k /= _moduleKey info -> do
@@ -582,7 +580,7 @@ newDecls moveSpec modules thisKey =
     concatMap doModule modules
     where
       -- Scan the declarations of all the modules except this one
-      doModule info@(ModuleInfo {_module = m@(A.Module l _mh ps is decls),
+      doModule info@(ModuleInfo {_module = (A.Module l _mh _ps _is decls),
                                  _moduleKey = someKey,
                                  _moduleText = someText})
           | someKey /= thisKey =
@@ -605,16 +603,16 @@ newDecls moveSpec modules thisKey =
               withTrailingWhitespace keep next
 
 endOfImports :: A.Module SrcSpanInfo -> SrcLoc
-endOfImports m@(A.Module l mh ps [] _) = endOfHeader m
-endOfImports m@(A.Module l mh ps is _) = endLoc (A.ann (last is))
+endOfImports m@(A.Module _l _mh _ps [] _) = endOfHeader m
+endOfImports (A.Module _l _mh _ps is _) = endLoc (A.ann (last is))
 
 endOfHeader :: A.Module SrcSpanInfo -> SrcLoc
-endOfHeader m@(A.Module l Nothing ps _ _) = endOfPragmas m
-endOfHeader m@(A.Module l (Just h) ps is _) = endLoc (A.ann h)
+endOfHeader m@(A.Module _l Nothing _ps _ _) = endOfPragmas m
+endOfHeader (A.Module _l (Just h) _ps _is _) = endLoc (A.ann h)
 
 endOfPragmas :: A.Module SrcSpanInfo -> SrcLoc
-endOfPragmas m@(A.Module l _ [] _ _) = srcLoc l
-endOfPragmas m@(A.Module l _ ps _ _) = endLoc (A.ann (last ps))
+endOfPragmas (A.Module l _ [] _ _) = srcLoc l
+endOfPragmas (A.Module _l _ ps _ _) = endLoc (A.ann (last ps))
 
 -- | Get the text of a declaration including the preceding whitespace
 declText :: ModuleInfo -> A.Decl SrcSpanInfo -> String

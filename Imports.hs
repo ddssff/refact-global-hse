@@ -7,31 +7,30 @@ module Imports (cleanImports) where
 
 import Control.Exception (SomeException)
 import Control.Monad (void)
-import Control.Monad.RWS (ask, evalRWS, MonadWriter(tell))
+import Control.Monad.RWS (MonadWriter(tell))
 import Control.Monad.Trans (liftIO, MonadIO)
 import Data.Char (toLower)
 import Data.Function (on)
 import Data.List (find, groupBy, intercalate, nub, sortBy)
 import Data.Maybe (catMaybes)
-import Data.Set as Set (empty, fromList, member, Set, singleton, toList, union, unions)
+import Data.Set as Set (empty, fromList, member, Set, singleton, union, unions)
 import qualified Data.Set as Set (map)
 import Debug.Trace (trace)
 import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Pretty, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
 import Language.Haskell.Exts.Annotated.Simplify as S (sImportDecl, sImportSpec, sModuleName, sName)
 import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrintStyleMode)
-import Language.Haskell.Exts.SrcLoc (SrcLoc(srcColumn, srcFilename, srcLine), SrcSpan(srcSpanFilename), SrcSpanInfo(srcInfoSpan))
+import Language.Haskell.Exts.SrcLoc (SrcSpan(srcSpanFilename), SrcSpanInfo(srcInfoSpan))
 import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(importLoc, importModule, importSpecs), ModuleName(..), Name(..))
-import ModuleKey (moduleFullPath, ModuleKey(..), moduleTop)
-import SrcLoc (endLoc, keep, scanModule, skip, srcLoc, spanOfText)
+import ModuleKey (moduleFullPath)
+import SrcLoc (endLoc, keep, keepAll, scanModule, skip, srcLoc)
 import Symbols (symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
-import System.FilePath ((</>), makeRelative)
+import System.FilePath ((</>))
 import System.FilePath.Extra2 (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Types (ModuleInfo(ModuleInfo, _module, _moduleKey, _modulePath, _moduleText), hseExtensions, hsFlags, loadModule)
-import Utils (ezPrint)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> [FilePath] -> [ModuleInfo] -> m ()
@@ -48,7 +47,6 @@ cleanImports scratch hsSourceDirs info =
                                                            void $ replaceFile path s
                                        Just _ -> pure ()) info
     where
-      keys = Set.fromList (map _moduleKey info)
       dump = do
         let cmd = "ghc"
             args' = hsFlags ++
@@ -97,15 +95,14 @@ updateSource _ _ _ _ = error "updateSource"
 -- | Compare the old and new import sets and if they differ clip out
 -- the imports from the sourceText and insert the new ones.
 replaceImports :: [A.ImportDecl SrcSpanInfo] -> ModuleInfo -> Maybe String
-replaceImports newImports info@(ModuleInfo {_module = A.Module l mh ps is ds})
+replaceImports newImports (ModuleInfo {_module = A.Module _l _mh _ps is _ds})
     | map sImportDecl is == map sImportDecl newImports =
         Nothing
-replaceImports newImports info@(ModuleInfo {_module = A.Module l mh ps is@(i : _) ds}) =
+replaceImports newImports info@(ModuleInfo {_module = A.Module l _mh _ps is@(i : _) _ds}) =
     Just $ scanModule (do keep (srcLoc (A.ann i))
                           tell (intercalate "\n" (map prettyPrint' newImports))
                           skip (endLoc (A.ann (last is)))
-                          fulltext <- ask
-                          keep (endLoc (spanOfText (srcFilename (endLoc l)) fulltext)))
+                          keepAll)
                       (_moduleText info)
                       (srcSpanFilename (srcInfoSpan l))
 
