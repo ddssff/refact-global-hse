@@ -1,10 +1,21 @@
 # What it does
 
- * It moves declarations between modules
- * It globally updates imports of those declarations
- * It minimizes the imports of all modified modules
- * It retains all comments and white space outside of the import list
- * It leaves code in #if alone
+ * Moves declarations between modules
+ * Moves the exports of those declarations
+ * Adds imports to the arrival module to support the new declarations
+ * Update imports in all known modules to reflect the declaration's new location
+ * Maybe import the symbols of the departing declaration if still referenced
+ * Copy LANGUAGE pragmas from the departure module to the arrival module
+ * Clean up import lists using ghc's -ddump-minimal-imports flag
+ * Retain all comments and white space outside of the import list
+
+# What it might do soon
+
+ * Handle CPP directives
+ * Move a declaration to a particular line of a module (rather than the end)
+ * Find symbols that are exported but never imported and make them local
+ * Minimize LANGUAGE directives by trial and error
+ * Remove modules that become empty
 
 # Requirements
 
@@ -27,9 +38,9 @@
         $ chmod g-w . .ghci
         $ ghci
         λ runSimpleMove "/path/to/somerepo" (moveDeclsByName "funcname1" "Foo.OldMod" "Foo.NewMod" <>
-                                           moveDeclsByName "funcname2" "Foo.OldMod" "Foo.NewMod")
+                                             moveDeclsByName "funcname2" "Foo.OldMod" "Foo.NewMod")
 
-# Reformatted import lists
+# About reformatted import lists
 
 I know many people have particular opinions about the formatting of import
 lists.  Unfortunately, this tool will reformat your import list in a very
@@ -46,9 +57,7 @@ The tool will find it for you the next time it runs.
 
   1. EMPTY IMPORT LISTS - when an import list becomes empty it is not
      necessarily safe to remove it - it may be importing necessary
-     instances.  However, by default the import cleaner does remove import
-     lists in this case, because the move operations create a lot of these.
-     However, it never removes an import lists that starts out empty.
+     instances.  So at present it doesn't.
 
   2. Sometimes you can avoid circular imports by moving a declaration to
      a temporary module and then to where you actually wanted it.
@@ -57,13 +66,8 @@ The tool will find it for you the next time it runs.
 
   1. Add ways to break circular imports.  For example, find additional decls
      so that moving the whole group does not leave dangling references.
-  2. Remove modules that become empty
   3. Distinguish what exactly each test case tests
-  4. Specify where in the module a moved declaration should appear
-  5. Global tests for symbols exported but never imported
-  6. Global tests for minimizing LANGUAGE directives (by trial and error)
   7. Whitespace issues - e.g. a comment directly following a decl should stay with
      that decl.
   8. Finish the HasSymbols and HasCNames instances in Symbols.hs.  Retire FoldDeclared.
   9. Port from haskell-src-exts to ghc-exactprint.
- 10. Retire FoldM
