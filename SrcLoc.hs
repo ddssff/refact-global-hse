@@ -26,15 +26,19 @@ module SrcLoc
     ) where
 
 import Control.Lens ((.=), makeLenses, makeLensesFor, use, view)
+import Control.Monad (when)
 import Control.Monad.RWS (ask, evalRWS, MonadWriter(tell), RWS)
 import Control.Monad.State (get, put, runState, State)
 import Data.Monoid ((<>))
+import Debug.Trace
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann), Module(..))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
-import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), text)
-import Utils (lines')
+import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)
+import Utils (EZPrint(ezPrint), lines')
 
-data St = St {_point :: SrcLoc}
+data St = St { _point :: SrcLoc -- The current position in the full text
+             , _remaining :: String  -- The text remaining after _point
+             }
 
 $(makeLenses ''St)
 $(makeLensesFor [("srcFilename", "locFilename"),
@@ -69,14 +73,14 @@ srcLoc x = let (SrcSpan f b e _ _) = srcSpan x in SrcLoc f b e
 endLoc :: SpanInfo a => a -> SrcLoc
 endLoc x = let (SrcSpan f _ _ b e) = srcSpan x in SrcLoc f b e
 
-spanDiff :: SpanInfo a => a -> SrcLoc
-spanDiff sp =
+locDiff :: SrcLoc -> SrcLoc -> SrcLoc
+locDiff (SrcLoc file l1 c1) (SrcLoc _ l2 c2) =
     if l1 == l2
-    then SrcLoc f 1 (c2 - c1 + 1)
-    else SrcLoc f (l2 - l1 + 1) c2
-    where
-      SrcLoc f l1 c1 = srcLoc sp
-      SrcLoc _ l2 c2 = endLoc sp
+    then SrcLoc file 1 (c1 - c2 + 1)
+    else SrcLoc file (l1 - l2 + 1) c1
+
+spanDiff :: SpanInfo a => a -> SrcLoc
+spanDiff sp = locDiff (endLoc sp) (srcLoc sp)
 
 locSum :: SrcLoc -> SrcLoc -> SrcLoc
 locSum (SrcLoc f l1 c1) (SrcLoc _ l2 c2) =
@@ -168,30 +172,42 @@ fixSpan sp =
     where
       t1 sp' = {-trace ("fixSpan " ++ show (srcInfoSpan sp) ++ " -> " ++ show (srcInfoSpan sp'))-} sp'
 
-origin :: FilePath -> St
-origin path = St {_point = SrcLoc path 1 1}
-
 type SpanM = RWS String String St
 
 scanModule :: SpanM () -> String -> FilePath -> String
-scanModule action s file = snd $ evalRWS action s (origin file)
+scanModule action s file = snd $ evalRWS action s (St {_point = SrcLoc file 1 1, _remaining = s})
+
+instance EZPrint SrcLoc where
+    ezPrint = prettyShow
 
 keep :: SrcLoc -> SpanM ()
 keep loc = do
-  t <- view id
+  t' <- use remaining
   p <- use point
-  tell (textOfSpan (testSpan "keep" (p, loc)) t)
+  let d = locDiff loc p
+  let (s', t'') = splitText d t'
+  tell s'
+  remaining .= t''
   point .= {-trace ("keep " ++ show loc)-} loc
 
 keepAll :: SpanM ()
 keepAll = do
-  fullText <- view id
-  keep (endLocOfText "" fullText)
+  p@(SrcLoc file _ _) <- use point
+  -- fullText <- view id
+  -- let e = endLocOfText file fullText
+  t <- use remaining
+  let e' = locSum p (endLocOfText "" t)
+  -- when (e /= e') (error $ "keepAll: e=" ++ show e ++ ", e'=" ++ show e')
+  keep e'
 
 skip :: SrcLoc -> SpanM ()
 skip loc = do
   p <- use point
   pure $ testSpan "skip" (p, loc)
+  t' <- use remaining
+  let d = locDiff loc p
+  let (_, t'') = splitText d t'
+  remaining .= t''
   point .= {-trace ("skip " ++ show loc)-} loc
 
 -- | Given the next SpanInfo after the point, return the trailing
@@ -199,15 +215,20 @@ skip loc = do
 trailingWhitespace :: SpanInfo a => Maybe a -> SpanM String
 trailingWhitespace next = do
   fullText <- ask
-  loc@(SrcLoc f _ _) <- use point
-  let loc' :: SrcLoc
-      loc' = maybe (endLocOfText f fullText) srcLoc next
-  case loc' >= loc of
+  t <- use remaining
+  loc@(SrcLoc file _ _) <- use point
+  let loc' = maybe (endLocOfText file fullText) srcLoc next
+  let loc'' = maybe (locSum loc (endLocOfText file t)) srcLoc next
+  when (loc' /= loc'') (error "trailingWhitespace")
+  case loc'' >= loc of
     False -> error "trailingWhitespace"
-    True -> let s = textOfSpan (loc, loc') fullText in
-            case span (/= '\n') s of
-              (pre, '\n' : _suf) -> pure (pre ++ ['\n'])
-              _ -> pure ""
+    True -> do
+      let s = textOfSpan (loc, loc'') fullText
+      let (s', _) = splitText (locDiff loc'' loc) t
+      when (s /= s') (error "trailingWhitespace")
+      case span (/= '\n') s of
+        (pre, '\n' : _suf) -> pure (pre ++ ['\n'])
+        _ -> pure ""
 
 withTrailingWhitespace :: SpanInfo a => (SrcLoc -> SpanM ()) -> Maybe a -> SpanM ()
 withTrailingWhitespace fn next = do
