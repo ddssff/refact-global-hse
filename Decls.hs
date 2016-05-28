@@ -20,7 +20,7 @@ import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleM
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..), QName(Qual, Special, UnQual), Exp, Decl(SpliceDecl), Exp(SpliceExp), Splice(IdSplice, ParenSplice))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
-import SrcLoc (endLoc, keep, keepAll, scanModule, skip, textOfSpan, srcLoc, SpanM, withTrailingWhitespace)
+import SrcLoc (endLoc, keep, keepAll, scanModule, skip, textOfSpan, srcLoc, ScanM, withTrailingWhitespace)
 import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
@@ -242,14 +242,14 @@ defaultHsSourceDir modules =
 -- | Write the new export list.  Exports of symbols that have moved
 -- out are removed.  Exports of symbols that have moved in are added
 -- *if* the symbol is imported anywhere else.
-updateHeader :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> SpanM ()
+updateHeader :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> ScanM ()
 updateHeader moveSpec _modules i@(ModuleInfo {_moduleKey = k,
                                              _module = m@(A.Module _ (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList _ specs)))) _ _ _)}) = do
   maybe (pure ()) (keep . srcLoc . A.ann) (listToMaybe specs)
   foldM doExport False specs
   keep (endOfHeader m)
     where
-      doExport :: Bool -> A.ExportSpec SrcSpanInfo -> SpanM Bool
+      doExport :: Bool -> A.ExportSpec SrcSpanInfo -> ScanM Bool
       doExport needSep spec =
           case findNewKeyOfExportSpec moveSpec i spec of
             Just k' | k' /= k -> skip (endLoc (A.ann spec)) >> pure needSep
@@ -293,7 +293,7 @@ findDeclOfExportSpec info spec =
 
 -- Find the declaration of the symbols of an import spec.  If that
 -- declaration moved, update the module name.
-updateImports :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> SpanM ()
+updateImports :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> ScanM ()
 updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = A.Module _ _ _ thisModuleImports _}) = do
   -- Update the existing imports
   mapM_ (uncurry doImportDecl) (listPairs thisModuleImports)
@@ -303,7 +303,7 @@ updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = A.Mo
       -- Process one import declaration.  Each of its specs will
       -- either be kept, discarded, or moved to a new import with a
       -- new module name.
-      doImportDecl :: Maybe (A.ImportDecl SrcSpanInfo) -> Maybe (A.ImportDecl SrcSpanInfo) -> SpanM ()
+      doImportDecl :: Maybe (A.ImportDecl SrcSpanInfo) -> Maybe (A.ImportDecl SrcSpanInfo) -> ScanM ()
       doImportDecl Nothing Nothing = pure ()
       doImportDecl Nothing (Just first) = keep (srcLoc first)
       doImportDecl (Just x@(A.ImportDecl {importSpecs = Nothing})) next = do
@@ -318,7 +318,7 @@ updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = A.Mo
              withTrailingWhitespace keep next
              mapM_ (importsForMovingDecls (sModuleName name) hiding) specs
 
-      doImportSpec :: S.ModuleName -> Bool -> Maybe (A.ImportSpec SrcSpanInfo) -> Maybe (A.ImportSpec SrcSpanInfo) -> SpanM ()
+      doImportSpec :: S.ModuleName -> Bool -> Maybe (A.ImportSpec SrcSpanInfo) -> Maybe (A.ImportSpec SrcSpanInfo) -> ScanM ()
       doImportSpec _ _ Nothing _ = pure ()
       doImportSpec name hiding (Just spec) next =
           case newModuleOfImportSpec moveSpec modules name spec of
@@ -329,7 +329,7 @@ updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = A.Mo
           where
             nextLoc = maybe (endLoc (A.ann spec)) (srcLoc . A.ann) next
 
-      importsForMovingDecls :: S.ModuleName -> Bool -> A.ImportSpec SrcSpanInfo -> SpanM ()
+      importsForMovingDecls :: S.ModuleName -> Bool -> A.ImportSpec SrcSpanInfo -> ScanM ()
       importsForMovingDecls name hiding spec =
           case newModuleOfImportSpec moveSpec modules name spec of
             Just name'
@@ -350,7 +350,7 @@ updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = A.Mo
       -- (with updated module names.)  Finally, if a declaration
       -- moves from thisKey to someKey, we need to add an import of it
       -- here (as long as someKey doesn't import thisKey)
-      doNewImports :: ModuleInfo -> SpanM ()
+      doNewImports :: ModuleInfo -> ScanM ()
       doNewImports someModule = do
         tell $ importsForArrivingDecls moveSpec thisKey thisModuleImports someModule
 updateImports _ _ x = error $ "updateImports - unexpected module: " ++ show (_module x)
@@ -553,7 +553,7 @@ reexports sym e = Set.member sym (foldDeclared Set.insert mempty e)
 -- than this one, in which case the a new import with the new module
 -- name is added.  The final case is invalid - a module that imported
 -- itself.
-updateDecls :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> SpanM ()
+updateDecls :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> ScanM ()
 updateDecls moveSpec modules info@(ModuleInfo {_module = (A.Module _ _ _ _ decls)}) = do
   -- keep (endOfImports m)
   -- Declarations that were already here and are to remain
@@ -591,7 +591,7 @@ newDecls moveSpec modules thisKey =
 
       -- If a declaration is to be moved to this module, extract its
       -- text and add it to the result.
-      doDecl :: ModuleKey -> Maybe (A.Decl SrcSpanInfo) -> Maybe (A.Decl SrcSpanInfo) -> SpanM ()
+      doDecl :: ModuleKey -> Maybe (A.Decl SrcSpanInfo) -> Maybe (A.Decl SrcSpanInfo) -> ScanM ()
       doDecl _ Nothing _ = pure ()
       doDecl someKey (Just d) next =
           case applyMoveSpec moveSpec someKey d of

@@ -15,7 +15,7 @@ module SrcLoc
     , fixSpan
     , testSpan
     -- RWS monad to scan a text file
-    , SpanM
+    , ScanM
     , scanModule
     , keep
     , keepAll
@@ -172,15 +172,15 @@ fixSpan sp =
     where
       t1 sp' = {-trace ("fixSpan " ++ show (srcInfoSpan sp) ++ " -> " ++ show (srcInfoSpan sp'))-} sp'
 
-type SpanM = RWS () String St
+type ScanM = RWS () String St
 
-scanModule :: SpanM () -> String -> FilePath -> String
+scanModule :: ScanM () -> String -> FilePath -> String
 scanModule action s file = snd $ evalRWS action () (St {_point = SrcLoc file 1 1, _remaining = s})
 
 instance EZPrint SrcLoc where
     ezPrint = prettyShow
 
-keep :: SrcLoc -> SpanM ()
+keep :: SrcLoc -> ScanM ()
 keep loc = do
   t' <- use remaining
   p <- use point
@@ -189,14 +189,14 @@ keep loc = do
   remaining .= t''
   point .= {-trace ("keep " ++ show loc)-} loc
 
-keepAll :: SpanM ()
+keepAll :: ScanM ()
 keepAll = do
   p@(SrcLoc file _ _) <- use point
   t <- use remaining
   let e' = locSum p (endLocOfText "" t)
   keep e'
 
-skip :: SrcLoc -> SpanM ()
+skip :: SrcLoc -> ScanM ()
 skip loc = do
   p <- use point
   pure $ testSpan "skip" (p, loc)
@@ -207,7 +207,7 @@ skip loc = do
 
 -- | Given the next SpanInfo after the point, return the trailing
 -- whitespace. Assumes the point is at the end of a span.
-trailingWhitespace :: SpanInfo a => Maybe a -> SpanM String
+trailingWhitespace :: SpanInfo a => Maybe a -> ScanM String
 trailingWhitespace next = do
   t <- use remaining
   loc@(SrcLoc file _ _) <- use point
@@ -220,7 +220,7 @@ trailingWhitespace next = do
         (pre, '\n' : _suf) -> pure (pre ++ ['\n'])
         _ -> pure ""
 
-withTrailingWhitespace :: SpanInfo a => (SrcLoc -> SpanM ()) -> Maybe a -> SpanM ()
+withTrailingWhitespace :: SpanInfo a => (SrcLoc -> ScanM ()) -> Maybe a -> ScanM ()
 withTrailingWhitespace fn next = do
   s <- trailingWhitespace next
   p <- use point
@@ -231,7 +231,7 @@ debugRender m@(A.Module _ mh ps is ds) s =
     snd $ evalRWS render () (St {_point = (srcLoc (A.ann m)) {srcLine = 1, srcColumn = 1}, _remaining = s})
     where
       -- Put [] around the spans (and eventually | at the divisions of the point list)
-      render :: SpanM ()
+      render :: ScanM ()
       render = do
         tell "["
         mapM_ (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") ps
