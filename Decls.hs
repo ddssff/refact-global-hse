@@ -6,7 +6,7 @@ module Decls (moveDeclsByName, moveInstDecls, moveSpliceDecls, instClassPred,
 import Control.Exception (SomeException)
 import Control.Lens (view)
 import Control.Monad (foldM, void)
-import Control.Monad.RWS (ask, evalRWS, MonadWriter(tell))
+import Control.Monad.RWS (ask, MonadWriter(tell))
 import Data.Foldable as Foldable (find)
 import Data.List (foldl', intercalate, nub, stripPrefix)
 import Data.Map as Map (insertWith, Map, mapWithKey, singleton, toList)
@@ -16,12 +16,12 @@ import Data.Tuple (swap)
 import Debug.Trace (trace)
 import Imports (cleanImports)
 import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(InstDecl, TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), InstHead(..), InstRule(IParen, IRule), Module(Module), ModuleHead(ModuleHead), Pretty, QName, Type)
-import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName, sQName, sModule)
+import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName, sQName)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..), QName(Qual, Special, UnQual), Exp, Decl(SpliceDecl), Exp(SpliceExp), Splice(IdSplice, ParenSplice))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
-import SrcLoc (endLoc, endLocOfText, keep, origin, skip, textOfSpan, srcLoc, SpanM, spanOfText, trailingWhitespace, withTrailingWhitespace)
+import SrcLoc (endLoc, endLocOfText, scanModule, keep, skip, textOfSpan, srcLoc, SpanM, spanOfText, withTrailingWhitespace)
 import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
@@ -186,15 +186,14 @@ moveDecls moveSpec modules = map (\info -> moveDeclsOfModule moveSpec modules in
 moveDeclsOfModule :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> String
 moveDeclsOfModule moveSpec modules info@(ModuleInfo {_module = A.Module l _ _ _ _}) =
     -- let modules' = newModules moveSpec modules ++ modules in
-    snd $ evalRWS (do keep (srcLoc l)
-                      updateHeader moveSpec modules info
-                      updateImports moveSpec modules info
-                      updateDecls moveSpec modules info
-                      t <- view id
-                      keep (endLoc (spanOfText (srcFilename (endLoc l)) t))
-                  )
-                  (_moduleText info)
-                  (origin (srcSpanFilename (srcInfoSpan l)))
+    scanModule (do keep (srcLoc l)
+                   updateHeader moveSpec modules info
+                   updateImports moveSpec modules info
+                   updateDecls moveSpec modules info
+                   t <- view id
+                   keep (endLoc (spanOfText (srcFilename (endLoc l)) t)))
+               (_moduleText info)
+               (srcSpanFilename (srcInfoSpan l))
 moveDeclsOfModule _ _ x = error $ "moveDeclsOfModule - unexpected module: " ++ show (_module x)
 
 -- | Unsafe ModuleInfo lookup
@@ -587,9 +586,9 @@ newDecls moveSpec modules thisKey =
                                  _moduleKey = someKey,
                                  _moduleText = someText})
           | someKey /= thisKey =
-              snd $ evalRWS (do skip (endOfImports (_module info))
-                                mapM_ (uncurry (doDecl someKey)) (listPairs decls))
-                            someText (origin (srcSpanFilename (srcInfoSpan l)))
+              scanModule (do skip (endOfImports (_module info))
+                             mapM_ (uncurry (doDecl someKey)) (listPairs decls))
+                         someText (srcSpanFilename (srcInfoSpan l))
       doModule _ = ""
 
       -- If a declaration is to be moved to this module, extract its

@@ -4,8 +4,6 @@ module SrcLoc
     ( -- * SpanInfo queries
       srcLoc
     , endLoc
-    , origin
-    , St
     , point
     -- * Location and span info for a piece of text
     , spanOfText
@@ -18,6 +16,7 @@ module SrcLoc
     , testSpan
     -- RWS monad to scan a text file
     , SpanM
+    , scanModule
     , keep
     , skip
     , trailingWhitespace
@@ -172,6 +171,9 @@ origin :: FilePath -> St
 origin path = St {_point = SrcLoc path 1 1}
 
 type SpanM = RWS String String St
+
+scanModule :: SpanM () -> String -> FilePath -> String
+scanModule action s file = snd $ evalRWS action s (origin file)
 
 keep :: SrcLoc -> SpanM ()
 keep loc = do

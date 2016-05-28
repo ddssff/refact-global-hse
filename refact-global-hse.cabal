@@ -32,7 +32,6 @@ Library
     Decls
     Imports
     ModuleKey
-    Scan
     SrcLoc
     Symbols
     Types

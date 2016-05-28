@@ -23,7 +23,7 @@ import Language.Haskell.Exts.Pretty (defaultMode, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (SrcLoc(srcColumn, srcFilename, srcLine), SrcSpan(srcSpanFilename), SrcSpanInfo(srcInfoSpan))
 import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(importLoc, importModule, importSpecs), ModuleName(..), Name(..))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleTop)
-import SrcLoc (endLoc, keep, origin, skip, srcLoc, spanOfText)
+import SrcLoc (endLoc, keep, scanModule, skip, srcLoc, spanOfText)
 import Symbols (symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>), makeRelative)
@@ -101,13 +101,13 @@ replaceImports newImports info@(ModuleInfo {_module = A.Module l mh ps is ds})
     | map sImportDecl is == map sImportDecl newImports =
         Nothing
 replaceImports newImports info@(ModuleInfo {_module = A.Module l mh ps is@(i : _) ds}) =
-    (Just . snd) $ evalRWS (do keep (srcLoc (A.ann i))
-                               tell (intercalate "\n" (map prettyPrint' newImports))
-                               skip (endLoc (A.ann (last is)))
-                               fulltext <- ask
-                               keep (endLoc (spanOfText (srcFilename (endLoc l)) fulltext)))
-                           (_moduleText info)
-                           (origin (srcSpanFilename (srcInfoSpan l)))
+    Just $ scanModule (do keep (srcLoc (A.ann i))
+                          tell (intercalate "\n" (map prettyPrint' newImports))
+                          skip (endLoc (A.ann (last is)))
+                          fulltext <- ask
+                          keep (endLoc (spanOfText (srcFilename (endLoc l)) fulltext)))
+                      (_moduleText info)
+                      (srcSpanFilename (srcInfoSpan l))
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode

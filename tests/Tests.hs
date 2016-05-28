@@ -5,7 +5,7 @@
 
 import Data.List (intercalate)
 import DeclTests
-import Scan (debugRender)
+import SrcLoc (debugRender)
 import System.Exit (ExitCode(..), exitWith)
 import Test.HUnit (assertEqual, errors, failures, runTestTT, Test(TestCase, TestList))
 import Types (loadModule', ModuleInfo(..))
