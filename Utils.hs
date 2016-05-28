@@ -8,7 +8,7 @@ import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Bool (bool)
 import Data.Generics (Data(gmapM), GenericM, listify, Typeable)
-import Data.List (groupBy, intercalate, stripPrefix)
+import Data.List (intercalate, stripPrefix)
 import Data.Sequence (Seq, (|>))
 import qualified Language.Haskell.Exts.Syntax as S (ModuleName(..))
 import System.Directory (createDirectoryIfMissing, getCurrentDirectory, removeDirectoryRecursive, removeFile, setCurrentDirectory)
@@ -116,33 +116,30 @@ replaceFile path text = do
   text' <- readFile path
   when (text /= text') (error $ "Failed to replace " ++ show path)
 
--- | A version of lines that preserves the presence or absence of a
--- terminating newline
-lines' :: String -> [String]
-lines' s =
-    -- Group characters into strings containing either only newlines or no newlines,
-    -- and then transform the newline only strings into empty lines.
-    bol (groupBy (\ a b -> a /= '\n' && b /= '\n') s)
-    where
-      -- If we are at beginning of line and see a newline, insert an empty
-      bol ("\n" : xs) = "" : bol xs
-      -- If we are at beginning of line and see something else, call end of line
-      bol (x : xs) = x : eol xs
-      -- If we see EOF at bol insert a trailing empty
-      bol [] = [""]
-      -- If we are seeking end of line and see a newline, go to beginning of line
-      eol ("\n" : xs) = bol xs
-      -- This shouldn't happen
-      eol (x : xs) = x : eol xs
-      eol [] = []
+-- | Slightly modified lines function from Data.List (aka
+-- Data.OldList).  It preserves the presence or absence of a
+-- terminating newline by appending [""].  Thus, the corresponding
+-- unlines function is intercalate "\n".
+lines'                   :: String -> [String]
+lines' ""                =  [""]
+-- Somehow GHC doesn't detect the selector thunks in the below code,
+-- so s' keeps a reference to the first line via the pair and we have
+-- a space leak (cf. #4334).
+-- So we need to make GHC see the selector thunks with a trick.
+lines' s                 =  cons (case break (== '\n') s of
+                                    (l, s') -> (l, case s' of
+                                                    []      -> [] -- no newline
+                                                    _:s''   -> lines' s''))
+  where
+    cons ~(h, t)        =  h : t
 
 listPairs :: [a] -> [(Maybe a, Maybe a)]
 listPairs [] = [(Nothing, Nothing)]
 listPairs l@(x : _ ) =
     (Nothing, Just x) : listPairs' l
     where
-      listPairs' (x1 : x2 : xs) = (Just x1, Just x2) : listPairs' (x2 : xs)
-      listPairs' [x1] = [(Just x1, Nothing)]
+      listPairs' x1 (x2 : xs') = (Just x1, Just x2) : listPairs' x2 xs'
+      listPairs' x1 [] = [(Just x1, Nothing)]
 
 -- | listTriples [1,2,3,4] ->
 --     [(Nothing,1,Just 2),(Just 1,2,Just 3),(Just 2,3,Just 4),(Just 3,4,Nothing)]
