@@ -15,6 +15,7 @@ import Decls (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec),
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
 import Language.Haskell.Exts.Annotated.Simplify (sName, sQName)
 import qualified Language.Haskell.Exts.Syntax as S
+import ModuleInfo
 import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
 import System.Exit (ExitCode(ExitSuccess))
 import System.Process (readProcessWithExitCode)

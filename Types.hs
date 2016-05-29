@@ -1,9 +1,7 @@
 {-# LANGUAGE ScopedTypeVariables, TemplateHaskell #-}
 
 module Types
-    ( ModuleInfo(..)
-    , fullPathOfModuleInfo
-    , hseExtensions
+    ( hseExtensions
     , hsFlags
     , hsSourceDirs
     , loadModule
@@ -26,29 +24,13 @@ import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensi
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import Language.Haskell.Exts.Syntax as S (ModuleName(ModuleName))
+import ModuleInfo (ModuleInfo(..))
 import ModuleKey (ModuleKey(ModuleFullPath, ModuleKey, _moduleTop), moduleFullPath)
 import SrcLoc (fixSpan, spanOfText)
 import System.Directory (canonicalizePath)
 import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
 import Text.PrettyPrint.HughesPJClass as PP (prettyShow)
 import Utils (EZPrint(ezPrint))
-
-data ModuleInfo =
-    ModuleInfo { _moduleKey :: ModuleKey
-               , _module :: A.Module SrcSpanInfo
-               , _moduleComments :: [Comment]
-               , _modulePath :: FilePath
-               , _moduleText :: String
-               , _moduleSpan :: SrcSpanInfo
-               }
-
-instance EZPrint ModuleInfo where
-    ezPrint (ModuleInfo {_module = A.Module _ (Just (A.ModuleHead _ n _ _)) _ _ _}) = prettyPrint n
-    ezPrint (ModuleInfo {_module = A.Module _ Nothing _ _ _}) = "Main"
-    ezPrint (ModuleInfo {_module = _}) = error "ezPrint: unexpected module"
-
-fullPathOfModuleInfo :: ModuleInfo -> FilePath
-fullPathOfModuleInfo = moduleFullPath . _moduleKey
 
   -- | From hsx2hs, but removing Arrows because it makes test case
 -- fold3c and others fail.  Maybe we should parse the headers and then

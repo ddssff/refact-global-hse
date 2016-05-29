@@ -19,12 +19,13 @@ import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..), QName(Qual, Special, UnQual), Exp, Decl(SpliceDecl), Exp(SpliceExp), Splice(IdSplice, ParenSplice))
+import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
 import SrcLoc (endLoc, keep, keepAll, scanModule, skip, textOfSpan, srcLoc, ScanM, withTrailingWhitespace)
 import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Types (loadModule, loadModules, ModuleInfo(..))
+import Types (loadModule, loadModules)
 import Utils (dropWhile2, EZPrint(ezPrint), gFind, listPairs, replaceFile, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 -- | Specifies where to move each declaration of each module.  Given a

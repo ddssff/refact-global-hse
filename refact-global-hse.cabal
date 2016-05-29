@@ -32,6 +32,7 @@ Library
     Decls
     Imports
     ModuleKey
+    ModuleInfo
     SrcLoc
     Symbols
     Types

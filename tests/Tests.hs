@@ -5,10 +5,11 @@
 
 import Data.List (intercalate)
 import DeclTests
+import ModuleInfo (ModuleInfo(..))
 import SrcLoc (debugRender)
 import System.Exit (ExitCode(..), exitWith)
 import Test.HUnit (assertEqual, errors, failures, runTestTT, Test(TestCase, TestList))
-import Types (loadModule', ModuleInfo(..))
+import Types (loadModule')
 
 main :: IO ()
 main = runTestTT (TestList [declTests, cpp1]) >>= doCounts
