@@ -104,8 +104,7 @@ replaceImports newImports info@(ModuleInfo {_module = A.Module l _mh _ps is@(i :
                           tell (intercalate "\n" (map prettyPrint' newImports))
                           skip (endLoc (A.ann (last is)))
                           keepAll)
-                      (_moduleText info)
-                      (srcSpanFilename (srcInfoSpan l))
+                      info
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode

@@ -7,7 +7,6 @@ import Language.Haskell.Exts.Annotated.Simplify (sName)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (ClassDecl(..), CName(..), ConDecl(..), Decl(..), DeclHead(..), ExportSpec(..), FieldDecl(..), GadtDecl(..), ImportSpec(..), InstHead(..), InstRule(..), Match(..), Name, Pat(..), PatField(..), QName(..), QualConDecl(..), RPat(..))
 import qualified Language.Haskell.Exts.Syntax as S (Name)
 
-
 -- | Do a fold over the names that are declared in a declaration (not
 -- every name that appears, just the ones that the declaration is
 -- causing to exist - what's the word for that?  Reify!)  The function
@@ -138,9 +137,7 @@ instance FoldDeclared (A.ExportSpec l) where
     foldDeclared f r (A.EThingWith _ name _) = foldDeclared f r name
     foldDeclared _ r (A.EModuleContents _ _) = r -- This probably won't work correctly
 
--- Return the set of symbols appearing in a construct.  Some
--- constructs, such as instance declarations, declare no symbols, in
--- which case Nothing is returned.  Some declare more than one.
+-- The following instances of FoldDeclared are only called by the FoldMembers instances.  Hopefully.
 instance FoldDeclared (A.QualConDecl l) where
     foldDeclared f r (A.QualConDecl _l _ _ x) = foldDeclared f r x
 

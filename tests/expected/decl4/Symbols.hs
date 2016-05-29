@@ -14,11 +14,9 @@ import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl(ClassDecl, Da
 import qualified Language.Haskell.Exts.Syntax as S (CName(..), ExportSpec(..), ImportSpec(..), Name(..), QName(..))
 import Tmp (FoldDeclared(foldDeclared))
 
--- | Do a fold over the names that are declared in a declaration (not
--- every name that appears, just the ones that the declaration is
--- causing to exist - what's the word for that?  Reify!)  The function
--- argument takes a Maybe because some declarations don't cause a
--- symbol to become bound - instances, for example.
+-- Return the set of symbols appearing in a construct.  Some
+-- constructs, such as instance declarations, declare no symbols, in
+-- which case Nothing is returned.  Some declare more than one.
 symbolsDeclaredBy :: FoldDeclared a => a -> [S.Name]
 symbolsDeclaredBy = reverse . foldDeclared (:) mempty
 
@@ -53,5 +51,3 @@ instance FoldMembers (A.Decl a) where
     foldMembers f r (A.DataDecl _ _ _ _ xs _) = foldl' (foldDeclared f) r xs -- data/newtype _ x = ...
     foldMembers f r (A.GDataDecl _ _ _ _ _ xs _) = foldl' (foldDeclared f) r xs
     foldMembers _ r _ = r
-
--- The following instances of FoldDeclared are only called by the FoldMembers instances.  Hopefully.

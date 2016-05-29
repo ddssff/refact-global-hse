@@ -4,10 +4,13 @@ module SrcLoc
     ( -- * SpanInfo queries
       srcLoc
     , endLoc
-    , point
     -- * Location and span info for a piece of text
     , spanOfText
     , endLocOfText
+    -- * Split text at a location
+    , splitText
+    , splits
+    , splits'
     -- * Use span info to extract text
     , textTripleOfSpan
     , textOfSpan
@@ -16,26 +19,35 @@ module SrcLoc
     , testSpan
     -- RWS monad to scan a text file
     , ScanM
+    , point
+    , comments
+    , remaining
     , scanModule
     , keep
     , keepAll
     , skip
+    , realEnd
     , trailingWhitespace
     , withTrailingWhitespace
     , debugRender
     ) where
 
-import Control.Lens ((.=), makeLenses, makeLensesFor, use, view)
+import Control.Lens ((.=), (%=), makeLenses, makeLensesFor, use, view)
 import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS)
+import Control.Monad (when)
 import Control.Monad.State (get, put, runState, State)
+import Data.Char (isSpace)
 import Data.Monoid ((<>))
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann), Module(..))
+import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
+import ModuleInfo
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)
 import Utils (EZPrint(ezPrint), lines')
 
 data St = St { _point :: SrcLoc -- The current position in the full text
              , _remaining :: String  -- The text remaining after _point
+             , _comments :: [Comment] -- The comments remaining after _point
              }
 
 $(makeLenses ''St)
@@ -137,10 +149,45 @@ splitText loc@(SrcLoc _ l0 c0) s0 =
                                   (ch : s') -> put (l, c + 1, r ++ [ch], s') >> f
                (_, LT) ->
                    case s of
-                     [] -> error "splitText"
+                     [] -> error ("splitText " ++ ", loc=" ++ show loc ++ ", s=" ++ show s)
                      (ch : s') -> put (l, c + 1, r ++ [ch], s') >> f
                (EQ, EQ) -> pure (r, s)
                _ -> error ("splitText - invalid arguments: loc=" ++ show loc ++ ", s=" ++ show s0)
+
+-- | Using n locations split a string into n + 1 segments.
+-- splits (SrcLoc "" 80 20) [SrcLoc "" 80 22, SrcLoc "" 80 25, SrcLoc "" 81 4] "first line\nsecond line" ->
+--   [("fi",SrcSpan ""         80 20 80 22),
+--    ("rst",SrcSpan ""        80 22 80 25),
+--    (" line\nsec",SrcSpan "" 80 25 81  4),
+--    ("ond line",SrcSpan ""   81  4 81 12)]
+splits :: SrcLoc -> [SrcLoc] -> String -> [(String, SrcSpan)]
+splits offset@(SrcLoc file _ _) locs@(_ : locs') s =
+    zip (f offset locs s) (map (uncurry mkSrcSpan) (zip (offset : locs) (locs ++ [locSum offset (endLocOfText file s)])))
+    where
+      f _ [] s = [s]
+      f offset (loc : locs) s =
+          let (pre, suf) = splitText (locDiff loc offset) s in
+          pre : f loc locs suf
+
+
+data Seg
+    = Span SrcLoc String
+    | Between SrcLoc String
+    deriving Show
+
+-- splits' (SrcLoc "" 80 20) [SrcSpan "" 80 20 80 22, SrcSpan "" 80 25 81 4] "first line\nsecond line"
+--   [Span (SrcLoc "" 80 20), "fi", Between (SrcLoc "" 80 22) "rst",
+--    Span (SrcLoc "" 80 25 81 4) " line\nsec", Between (SrcLoc "" 81 4) "ond line"]
+splits' :: SrcLoc -> [SrcSpan] -> String -> [Seg]
+splits' offset@(SrcLoc file _ _) spans s =
+    f offset spans s
+    where
+      f offset [] s = [Between offset s]
+      f offset (sp : sps) s =
+          let (pre, s') = splitText (locDiff (srcLoc sp) offset) s in
+          let (seg, s'') = splitText (locDiff (endLoc sp) (srcLoc sp)) s' in
+          -- trace ("offset=" ++ show offset ++ ", sp=" ++ show sp ++ ", pre=" ++ show pre ++ ", seg=" ++ show seg) $
+          (if null pre then [] else [Between offset pre]) ++ [Span (srcLoc sp) seg] ++ f (endLoc sp) sps s''
 
 -- | Make sure every SrcSpan in the parsed module refers to existing
 -- text.  They could still be in the wrong places, so this doesn't
@@ -172,8 +219,11 @@ fixSpan sp =
 
 type ScanM = RWS () String St
 
-scanModule :: ScanM () -> String -> FilePath -> String
-scanModule action s file = snd $ evalRWS action () (St {_point = SrcLoc file 1 1, _remaining = s})
+scanModule :: ScanM () -> ModuleInfo -> String
+scanModule action m@(ModuleInfo {_module = A.Module _ _ _ _ _}) =
+    snd $ evalRWS action () (St { _point = SrcLoc (_modulePath m) 1 1
+                                , _remaining = _moduleText m
+                                , _comments = _moduleComments m })
 
 instance EZPrint SrcLoc where
     ezPrint = prettyShow
@@ -186,6 +236,28 @@ keep loc = do
   tell s'
   remaining .= t''
   point .= {-trace ("keep " ++ show loc)-} loc
+  comments %= dropWhile (\(Comment _ sp _) -> loc > srcLoc sp)
+
+-- | Given an object annotated with SrcSpanInfo, find its "real" end,
+-- that is the position beyond which lies whitespace and comments.
+realEnd :: SrcLoc -> SrcSpanInfo -> [Comment] -> String -> SrcLoc
+realEnd offset sp cs s =
+  let b = srcLoc sp
+      e = endLoc sp
+      s' = snd (splitText b s)
+      csps = map (\(Comment _ sp _) -> sp) cs
+      csps' = dropWhile (\sp -> srcLoc sp < b) csps
+      csps'' = takeWhile (\sp -> srcLoc sp <= e) csps'
+      segs = splits' b csps'' s' in
+  let r = case dropWhile isWhite (reverse segs) of
+            [] -> e
+            (Span loc _ : _) -> loc
+            (Between loc _ : _) -> loc in
+  if r < b || r > e then error ("realEnd: sp=" ++ show sp ++ ", segs=" ++ show segs ++ " -> " ++ show r) else r
+    where
+      isWhite (Between _ s) | all isSpace s = True
+      isWhite (Span _ _) = True
+      isWhite _ = False
 
 keepAll :: ScanM ()
 keepAll = do
@@ -202,6 +274,7 @@ skip loc = do
   let (_, t'') = splitText (locDiff loc p) t'
   remaining .= t''
   point .= {-trace ("skip " ++ show loc)-} loc
+  comments %= dropWhile (\(Comment _ sp _) -> loc > srcLoc sp)
 
 -- | Given the next SpanInfo after the point, return the trailing
 -- whitespace preceding that span. Assumes the point is at the end of

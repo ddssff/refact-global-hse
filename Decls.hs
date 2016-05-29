@@ -191,8 +191,7 @@ moveDeclsOfModule moveSpec modules info@(ModuleInfo {_module = A.Module l _ _ _ 
                    updateImports moveSpec modules info
                    updateDecls moveSpec modules info
                    keepAll)
-               (_moduleText info)
-               (srcSpanFilename (srcInfoSpan l))
+               info
 moveDeclsOfModule _ _ x = error $ "moveDeclsOfModule - unexpected module: " ++ show (_module x)
 
 -- | Unsafe ModuleInfo lookup
@@ -589,7 +588,7 @@ newDecls moveSpec modules thisKey =
           | someKey /= thisKey =
               scanModule (do skip (endOfImports (_module info))
                              mapM_ (uncurry (doDecl someKey)) (listPairs decls))
-                         someText (srcSpanFilename (srcInfoSpan l))
+                         info
       doModule _ = ""
 
       -- If a declaration is to be moved to this module, extract its
