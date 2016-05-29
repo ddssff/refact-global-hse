@@ -15,6 +15,8 @@
    22. Make the string scanning code more efficient
    24. decl1: Why no export of tryfindM in Decls.hs?
    25. Doing decl7 in "real" source directory gives strange errors
+   26. decl5: comment of first declaration not removed on departure - point
+       starts at start of first decl instead of end of last import.
 
 DONE
 

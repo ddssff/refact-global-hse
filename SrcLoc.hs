@@ -204,21 +204,22 @@ skip loc = do
   point .= {-trace ("skip " ++ show loc)-} loc
 
 -- | Given the next SpanInfo after the point, return the trailing
--- whitespace. Assumes the point is at the end of a span.
-trailingWhitespace :: SpanInfo a => Maybe a -> ScanM String
+-- whitespace preceding that span. Assumes the point is at the end of
+-- a span.
+trailingWhitespace :: Maybe SrcLoc -> ScanM String
 trailingWhitespace next = do
   t <- use remaining
   loc@(SrcLoc file _ _) <- use point
-  let loc'' = maybe (locSum loc (endLocOfText file t)) srcLoc next
+  let loc'' = maybe (locSum loc (endLocOfText file t)) id next
   case loc'' >= loc of
-    False -> error "trailingWhitespace"
+    False -> error $ "trailingWhitespace: " ++ show loc'' ++ " < " ++ show loc
     True -> do
       let (s', _) = splitText (locDiff loc'' loc) t
       case span (/= '\n') s' of
         (pre, '\n' : _suf) -> pure (pre ++ ['\n'])
         _ -> pure ""
 
-withTrailingWhitespace :: SpanInfo a => (SrcLoc -> ScanM ()) -> Maybe a -> ScanM ()
+withTrailingWhitespace :: (SrcLoc -> ScanM ()) -> Maybe SrcLoc -> ScanM ()
 withTrailingWhitespace fn next = do
   s <- trailingWhitespace next
   p <- use point

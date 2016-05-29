@@ -17,7 +17,7 @@ main = runTestTT (TestList [declTests, cpp1]) >>= doCounts
 
 cpp1 :: Test
 cpp1 = TestCase $ do
-         info@(ModuleInfo {_module = m, _moduleText = s}) <- loadModule' "tests/input/cpp/A.hs"
+         (ModuleInfo {_module = m, _moduleText = s}) <- loadModule' "tests/input/cpp/A.hs"
          assertEqual "cpp1" expected (debugRender m s)
     where
       expected =

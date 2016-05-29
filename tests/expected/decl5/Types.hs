@@ -28,8 +28,6 @@ import ModuleKey (ModuleKey(ModuleKey, _moduleTop, _moduleName), moduleKey)
 import SrcLoc (fixSpan, textSpan)
 import System.FilePath ((</>), makeRelative)
 import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), prettyShow, text)
-
--- A module is uniquely identitifed by its path and name
 data ModuleInfo =
     ModuleInfo { _moduleKey :: ModuleKey
                , _module :: A.Module SrcSpanInfo
