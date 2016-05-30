@@ -9,6 +9,7 @@ import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Bool (bool)
 import Data.Generics (Data(gmapM), GenericM, listify, Typeable)
 import Data.List (intercalate, stripPrefix)
+import Data.Maybe (mapMaybe)
 import Data.Sequence (Seq, (|>))
 import qualified Language.Haskell.Exts.Syntax as S (ModuleName(..))
 import System.Directory (createDirectoryIfMissing, getCurrentDirectory, removeDirectoryRecursive, removeFile, setCurrentDirectory)
@@ -145,3 +146,8 @@ listPairs (x : xs) =
 --     [(Nothing,1,Just 2),(Just 1,2,Just 3),(Just 2,3,Just 4),(Just 3,4,Nothing)]
 listTriples :: [a] -> [(Maybe a, a, Maybe a)]
 listTriples l = zip3 ([Nothing] ++ map Just l) l (tail (map Just l ++ [Nothing]))
+
+-- | Like dropWhile, except the last element that satisfied p is included:
+--   dropWhileNext even [2,4,6,1,3,5,8] -> [6,1,3,5,8]
+dropWhileNext :: (a -> Bool) -> [a] -> [a]
+dropWhileNext p xs = mapMaybe fst $ dropWhile (\(_,x) -> maybe True p x) $ listPairs xs

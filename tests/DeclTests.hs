@@ -21,7 +21,6 @@ import System.Exit (ExitCode(ExitSuccess))
 import System.Process (readProcessWithExitCode)
 import Symbols (foldDeclared)
 import Test.HUnit
-import Types
 import Utils (gFind, gitResetSubdir)
 
 declTests :: Test
@@ -29,7 +28,7 @@ declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, simple1]
 
 -- Test moving a declaration to a module that currently imports it
 decl1 :: Test
-decl1 = TestCase $ testMoveSpec "tests/expected/decl1" "tests/input/atp-haskell" moveSpec1
+decl1 = TestLabel "decl1" $ TestCase $ testMoveSpec "tests/expected/decl1" "tests/input/atp-haskell" moveSpec1
 
 -- Move tryfindM from Lib to Tableaux.  Tableaux already imports
 -- tryfindM, so that import should be removed.  The question is, now
@@ -74,7 +73,7 @@ moveSpec1 k d = error $ "Unexpected decl: " ++ take 120 (show d) ++ ".."
 -- Test moving a declaration to a non-existant module
 -- Test updating import of decl that moved from A to B in module C
 decl2 :: Test
-decl2 = TestCase $ do
+decl2 = TestLabel "decl2" $ TestCase $ do
           let input = "tests/input/decl-mover"
           testMoveSpec' "tests/expected/decl2" input
             (runSimpleMoveUnsafe input (moveDeclsByName "withCurrentDirectory" "IO" "Tmp"))
@@ -85,14 +84,14 @@ decl2 = TestCase $ do
 -- if we are moving it to the place where it is used (which could be
 -- called "moving up".)
 decl3 :: Test
-decl3 = TestCase $ do
+decl3 = TestLabel "decl3" $ TestCase $ do
           let input = "tests/input/decl-mover"
           testMoveSpec' "tests/expected/decl3" input
             (runSimpleMoveUnsafe input (moveDeclsByName "lines'" "SrcLoc" "Tmp") >>
              runSimpleMoveUnsafe input (moveDeclsByName "lines'" "Tmp" "Utils"))
 
 decl4 :: Test
-decl4 = TestCase $ do
+decl4 = TestLabel "decl4" $ TestCase $ do
           let input = "tests/input/decl-mover"
           testMoveSpec' "tests/expected/decl4" input (runSimpleMoveUnsafe input spec)
     where
@@ -106,25 +105,34 @@ decl4 = TestCase $ do
       instpred key _ _ = key
 
 decl5 :: Test
-decl5 = TestCase $ testMoveSpec "tests/expected/decl5" "tests/input/decl-mover" spec
+decl5 = TestLabel "decl5" $ TestCase $ testMoveSpec "tests/expected/decl5" "tests/input/decl-mover" spec
     where
       spec = foldl1' (<>) [moveDeclsByName "ModuleKey" "Types" "ModuleKey",
                            moveDeclsByName "fullPathOfModuleKey" "Types" "ModuleKey",
                            moveDeclsByName "moduleKey" "Types" "ModuleKey"]
 
 decl6 :: Test
-decl6 = TestCase $ testMoveSpec "tests/expected/decl6" "tests/input/decl-mover" spec
+decl6 = TestLabel "decl6" $ TestCase $ testMoveSpec "tests/expected/decl6" "tests/input/decl-mover" spec
     where
       spec = foldl1' (<>) [moveDeclsByName "MoveSpec" "Decls" "MoveSpec",
                            moveDeclsByName "moveDeclsByName" "Decls" "MoveSpec",
                            moveDeclsByName "appendMoveSpecs" "Decls" "MoveSpec",
                            moveDeclsByName "identityMoveSpec" "Decls" "MoveSpec"]
 
+-- Need a way to add imports of the lenses created by makeLenses
 decl7 :: Test
-decl7 = TestCase $ testMoveSpec' "tests/expected/decl7" "tests/input/rgh" $
+decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tests/input/rgh" $
           runMoveUnsafe "tests/input/rgh" [".", "tests"] spec
     where
-      spec = foldl1' (<>) [moveDeclsByName "SpanM" "SrcLoc" "Scan",
+      spec = foldl1' (<>) [moveDeclsByName "textOfSpan" "SrcLoc" "Scan",
+                           moveDeclsByName "srcLoc" "SrcLoc" "Scan",
+                           moveDeclsByName "endLoc" "SrcLoc" "Scan",
+                           moveDeclsByName "splitText" "SrcLoc" "Scan",
+                           moveDeclsByName "spanDiff" "SrcLoc" "Scan",
+                           moveDeclsByName "testSpan" "SrcLoc" "Scan",
+                           moveDeclsByName "SpanInfo" "SrcLoc" "Scan",
+                           moveInstDecls instPred,
+                           moveDeclsByName "SpanM" "SrcLoc" "Scan",
                            moveDeclsByName "skip" "SrcLoc" "Scan",
                            moveDeclsByName "keep" "SrcLoc" "Scan",
                            moveDeclsByName "trailingWhiteSpace" "SrcLoc" "Scan",
@@ -141,10 +149,15 @@ decl7 = TestCase $ testMoveSpec' "tests/expected/decl7" "tests/input/rgh" $
       testSplice key _ = key
       unfoldApply (S.App a b) = unfoldApply a ++ [b]
       unfoldApply x = [x]
+      instPred key@(ModuleKey {_moduleName = S.ModuleName "SrcLoc"}) name _types
+          | (gFind (sQName name) :: [S.Name]) == [S.Ident "SpanInfo"] =
+              key {_moduleName = S.ModuleName "Scan"}
+      instPred key _ _ = key
+
 
 simple1 :: Test
 simple1 =
-    TestCase $
+     TestLabel "simple1" $ TestCase $
       testMoveSpec' "tests/expected/simple1" "tests/input/simple" $
         runSimpleMoveUnsafe "tests/input/simple" (moveDeclsByName "listPairs" "A" "B")
 

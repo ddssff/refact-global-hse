@@ -17,16 +17,15 @@ import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
 import Data.List (groupBy, intercalate)
 import Debug.Trace (trace)
-import qualified Language.Haskell.Exts.Annotated as A (Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName))
+import Language.Haskell.Exts.Annotated as A (Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName))
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
 import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensions, parseFilename, fixities), fromParseResult)
-import Language.Haskell.Exts.Pretty (prettyPrint)
-import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
+import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpanInfo(..), SrcSpan(..))
 import Language.Haskell.Exts.Syntax as S (ModuleName(ModuleName))
 import ModuleInfo (ModuleInfo(..))
-import ModuleKey (ModuleKey(ModuleFullPath, ModuleKey, _moduleTop), moduleFullPath)
-import SrcLoc (fixSpan, spanOfText)
+import ModuleKey (ModuleKey(ModuleFullPath, ModuleKey, _moduleTop))
+import SrcLoc (endLoc, fixSpan, mapTopAnnotations, fixEnd, spanOfText, srcLoc)
 import System.Directory (canonicalizePath)
 import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
 import Text.PrettyPrint.HughesPJClass as PP (prettyShow)
@@ -67,7 +66,7 @@ loadModule :: Exception e => FilePath -> IO (Either e ModuleInfo)
 loadModule path = try $ do
   moduleText <- liftIO $ readFile path
   (parsed', comments, processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions mode path
-  let parsed = everywhere (mkT fixSpan) parsed'
+  let parsed = mapTopAnnotations (fixEnd comments moduleText) $ everywhere (mkT fixSpan) parsed'
   -- liftIO $ writeFile (path ++ ".cpp") processed
   -- putStr processed
   -- validateParseResults parsed comments processed -- moduleText

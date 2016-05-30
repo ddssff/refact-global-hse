@@ -26,7 +26,7 @@ module SrcLoc
     , keep
     , keepAll
     , skip
-    , realEnd
+    , fixEnd
     , trailingWhitespace
     , withTrailingWhitespace
     , debugRender
@@ -94,11 +94,14 @@ locDiff (SrcLoc file l1 c1) (SrcLoc _ l2 c2) =
 spanDiff :: SpanInfo a => a -> SrcLoc
 spanDiff sp = locDiff (endLoc sp) (srcLoc sp)
 
+spanDiff' :: SrcSpan -> SrcLoc -> SrcSpan
+spanDiff' sp l = mkSrcSpan (locDiff (srcLoc sp) l) (locDiff (endLoc sp) l)
+
 locSum :: SrcLoc -> SrcLoc -> SrcLoc
 locSum (SrcLoc f l1 c1) (SrcLoc _ l2 c2) =
-    if l1 == l2
-    then SrcLoc f l1 (c2 + c1 - 1)
-    else SrcLoc f (l2 + l1 - 1) c2
+    if l2 == 1
+    then SrcLoc f (l1 + l2 - 1) (c1 + c2 - 1)
+    else SrcLoc f (l1 + l2 - 1) c2
 
 endLocOfText :: FilePath -> String -> SrcLoc
 endLocOfText path x =
@@ -173,23 +176,26 @@ splits offset@(SrcLoc file _ _) locs@(_ : locs') s =
 
 
 data Seg
-    = Span SrcLoc String
-    | Between SrcLoc String
+    = Span (SrcLoc, SrcLoc) String
+    | Between (SrcLoc, SrcLoc) String
     deriving Show
 
 -- splits' (SrcLoc "" 80 20) [SrcSpan "" 80 20 80 22, SrcSpan "" 80 25 81 4] "first line\nsecond line"
 --   [Span (SrcLoc "" 80 20), "fi", Between (SrcLoc "" 80 22) "rst",
 --    Span (SrcLoc "" 80 25 81 4) " line\nsec", Between (SrcLoc "" 81 4) "ond line"]
-splits' :: SrcLoc -> [SrcSpan] -> String -> [Seg]
-splits' offset@(SrcLoc file _ _) spans s =
-    f offset spans s
+splits' :: FilePath -> [SrcSpan] -> String -> [Seg]
+splits' file spans s =
+    f (SrcLoc file 1 1) spans s
     where
-      f offset [] s = [Between offset s]
-      f offset (sp : sps) s =
-          let (pre, s') = splitText (locDiff (srcLoc sp) offset) s in
+      f :: SrcLoc -> [SrcSpan] -> String -> [Seg]
+      f offset [] s' = [Between (offset, locSum offset (endLocOfText file s')) s']
+      f offset (sp : sps) s''' =
+          let (pre, s') = splitText (locDiff (srcLoc sp) offset) s''' in
           let (seg, s'') = splitText (locDiff (endLoc sp) (srcLoc sp)) s' in
           -- trace ("offset=" ++ show offset ++ ", sp=" ++ show sp ++ ", pre=" ++ show pre ++ ", seg=" ++ show seg) $
-          (if null pre then [] else [Between offset pre]) ++ [Span (srcLoc sp) seg] ++ f (endLoc sp) sps s''
+          (if null pre then [] else [Between (offset, srcLoc sp) pre]) ++ [Span (srcLoc sp, endLoc sp) seg] ++ f (endLoc sp) sps s''
+      -- t1 r = trace ("splits' " ++ show file ++ " " ++ show spans ++ " " ++ show s ++ " -> " ++ show r) r
+      -- t2 offset el b = trace ("splits' final: offset=" ++ show offset ++ ", el=" ++ show el ++ ", seg=" ++ show b) b
 
 -- | Make sure every SrcSpan in the parsed module refers to existing
 -- text.  They could still be in the wrong places, so this doesn't
@@ -240,21 +246,32 @@ keep loc = do
   point .= {-trace ("keep " ++ show loc)-} loc
   comments %= dropWhile (\(Comment _ sp _) -> loc > srcLoc sp)
 
--- | Given an object annotated with SrcSpanInfo, find its "real" end,
--- that is the position beyond which lies whitespace and comments.
-realEnd :: SrcLoc -> SrcSpanInfo -> [Comment] -> String -> SrcLoc
-realEnd offset sp cs s =
-  let b = srcLoc sp
+-- | Move the endpoint of a span to before any trailing whitespace and comments.
+fixEnd :: [Comment] -> String -> SrcSpanInfo -> SrcSpanInfo
+fixEnd cs s si@(SrcSpanInfo {srcInfoSpan = sp@(SrcSpan {srcSpanFilename = file})}) =
+    let e@(SrcLoc _ l c) = realEnd si cs s in
+    case (e < srcLoc sp, e > endLoc sp) of
+      (True, _) -> error "realEnd returned position before span"
+      (_, True) -> error "realEnd returned position after span"
+      _ -> si {srcInfoSpan = sp {srcSpanEndLine = l, srcSpanEndColumn = c}}
+
+-- | Given a SrcSpanInfo, find the "real" end of the object it covers,
+-- meaning the position beyond which lies only whitespace and comments.
+realEnd :: SrcSpanInfo -> [Comment] -> String -> SrcLoc
+realEnd sp cs s =
+  let b@(SrcLoc file _ _) = srcLoc sp
       e = endLoc sp
-      s' = snd (splitText b s)
-      csps = map (\(Comment _ sp _) -> sp) cs
-      csps' = dropWhile (\sp -> srcLoc sp < b) csps
-      csps'' = takeWhile (\sp -> srcLoc sp <= e) csps'
-      segs = splits' b csps'' s' in
+      (_, s') = splitText b s
+      (s'', _) = splitText (locDiff e b) s'
+      commentSpans = map (flip spanDiff' b) .
+                     takeWhile (\sp -> endLoc sp <= e) .
+                     dropWhile (\sp -> srcLoc sp < b) .
+                     map (\(Comment _ sp _) -> sp) $ cs
+      segs = splits' file commentSpans s'' in
   let r = case dropWhile isWhite (reverse segs) of
             [] -> e
-            (Span loc _ : _) -> loc
-            (Between loc _ : _) -> loc in
+            (Span (_, e') _ : _) -> locSum b e'
+            (Between (_, e') _ : _) -> locSum b e' in
   if r < b || r > e then error ("realEnd: sp=" ++ show sp ++ ", segs=" ++ show segs ++ " -> " ++ show r) else r
     where
       isWhite (Between _ s) | all isSpace s = True
@@ -300,9 +317,9 @@ withTrailingWhitespace fn next = do
   p <- use point
   fn (locSum p (endLocOfText (view locFilename p) s))
 
-debugRender :: A.Module SrcSpanInfo -> String -> String
-debugRender m@(A.Module _ mh ps is ds) s =
-    snd $ evalRWS render () (St {_point = (srcLoc (A.ann m)) {srcLine = 1, srcColumn = 1}, _remaining = s})
+debugRender :: A.Module SrcSpanInfo -> [Comment] -> String -> String
+debugRender m@(A.Module _ mh ps is ds) cs s =
+    snd $ evalRWS render () (St {_point = (srcLoc (A.ann m)) {srcLine = 1, srcColumn = 1}, _comments = cs, _remaining = s})
     where
       -- Put [] around the spans (and eventually | at the divisions of the point list)
       render :: ScanM ()

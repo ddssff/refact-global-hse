@@ -311,10 +311,12 @@ updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = m@(A
           Nothing -> do
             keep (endLoc (A.ann x))
             withTrailingWhitespace keep (fmap srcLoc next)
-          Just (A.ImportSpecList l hiding specs@(spec : _)) -> do
-            keep (srcLoc . A.ann $ spec)
+          Just (A.ImportSpecList l hiding specs) -> do
+            keep $ case specs of
+                     (spec : _) -> srcLoc (A.ann spec)
+                     [] -> srcLoc l
             mapM_ (uncurry (doImportSpec (sModuleName (A.importModule x)) hiding)) (listPairs specs)
-            keep (endLoc x)
+            keep (endLoc l)
             withTrailingWhitespace keep (fmap srcLoc next)
             -- Some of the specs may be of declarations that moved out of thisKey,
             -- output new imports for these.

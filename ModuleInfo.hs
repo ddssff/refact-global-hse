@@ -5,25 +5,11 @@ module ModuleInfo
     , fullPathOfModuleInfo
     ) where
 
-import qualified CPP (BoolOptions(locations), CpphsOptions(boolopts), defaultCpphsOptions, parseFileWithCommentsAndCPP)
-import Control.Exception (Exception, SomeException)
-import Control.Exception.Lifted as IO (try)
-import Control.Monad (when)
-import Control.Monad.Trans (MonadIO(liftIO))
-import Data.Generics (everywhere, mkT)
-import Data.List (groupBy, intercalate)
-import Debug.Trace (trace)
-import qualified Language.Haskell.Exts.Annotated as A (Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName))
+import qualified Language.Haskell.Exts.Annotated as A (Module(Module), ModuleHead(ModuleHead))
 import Language.Haskell.Exts.Comments (Comment(..))
-import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
-import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensions, parseFilename, fixities), fromParseResult)
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
-import Language.Haskell.Exts.Syntax as S (ModuleName(ModuleName))
-import ModuleKey (ModuleKey(ModuleFullPath, ModuleKey, _moduleTop), moduleFullPath)
-import System.Directory (canonicalizePath)
-import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
-import Text.PrettyPrint.HughesPJClass as PP (prettyShow)
+import ModuleKey (moduleFullPath, ModuleKey)
 import Utils (EZPrint(ezPrint))
 
 data ModuleInfo =
