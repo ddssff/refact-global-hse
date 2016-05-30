@@ -49,6 +49,17 @@ executable move-decls
     filepath,
     lens
 
+executable clean-imports
+  Hs-Source-Dirs: scripts
+  Main-Is: Clean.hs
+  Build-Depends:
+    base,
+    directory,
+    refact-global-hse,
+    filemanip > 0.3.6.3,
+    filepath,
+    lens
+
 Test-Suite refact-global-hse-tests
   Type: exitcode-stdio-1.0
   Hs-Source-Dirs: tests
