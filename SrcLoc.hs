@@ -35,7 +35,6 @@ module SrcLoc
 
 import Control.Lens ((.=), (%=), makeLenses, makeLensesFor, use, view)
 import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS)
-import Control.Monad (when)
 import Control.Monad.State (get, put, runState, State)
 import Data.Char (isSpace)
 import Data.Monoid ((<>))
@@ -91,11 +90,8 @@ locDiff (SrcLoc file l1 c1) (SrcLoc _ l2 c2) =
     then SrcLoc file 1 (c1 - c2 + 1)
     else SrcLoc file (l1 - l2 + 1) c1
 
-spanDiff :: SpanInfo a => a -> SrcLoc
-spanDiff sp = locDiff (endLoc sp) (srcLoc sp)
-
-spanDiff' :: SrcSpan -> SrcLoc -> SrcSpan
-spanDiff' sp l = mkSrcSpan (locDiff (srcLoc sp) l) (locDiff (endLoc sp) l)
+spanDiff :: SrcSpan -> SrcLoc -> SrcSpan
+spanDiff sp l = mkSrcSpan (locDiff (srcLoc sp) l) (locDiff (endLoc sp) l)
 
 locSum :: SrcLoc -> SrcLoc -> SrcLoc
 locSum (SrcLoc f l1 c1) (SrcLoc _ l2 c2) =
@@ -119,13 +115,13 @@ spanOfText path s =
 textTripleOfSpan :: SpanInfo a => a -> String -> (String, String, String)
 textTripleOfSpan sp s =
     let (pref, s') = splitText (srcLoc sp) s in
-    let (s'', suff) = splitText (spanDiff sp) s' in
+    let (s'', suff) = splitText (locDiff (endLoc sp) (srcLoc sp)) s' in
     (pref, s'', suff)
 
 textOfSpan :: SpanInfo a => a -> String -> String
 textOfSpan sp s =
     let (_, s') = splitText (srcLoc sp) s in
-    let (s'', _) = splitText (spanDiff sp) s' in
+    let (s'', _) = splitText (locDiff (endLoc sp) (srcLoc sp)) s' in
     s''
 
 testSpan :: SpanInfo a => String -> a -> a
@@ -263,7 +259,7 @@ realEnd sp cs s =
       e = endLoc sp
       (_, s') = splitText b s
       (s'', _) = splitText (locDiff e b) s'
-      commentSpans = map (flip spanDiff' b) .
+      commentSpans = map (flip spanDiff b) .
                      takeWhile (\sp -> endLoc sp <= e) .
                      dropWhile (\sp -> srcLoc sp < b) .
                      map (\(Comment _ sp _) -> sp) $ cs
