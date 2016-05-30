@@ -30,6 +30,7 @@ module SrcLoc
     , trailingWhitespace
     , withTrailingWhitespace
     , debugRender
+    , mapTopAnnotations
     ) where
 
 import Control.Lens ((.=), (%=), makeLenses, makeLensesFor, use, view)
@@ -38,12 +39,13 @@ import Control.Monad (when)
 import Control.Monad.State (get, put, runState, State)
 import Data.Char (isSpace)
 import Data.Monoid ((<>))
-import qualified Language.Haskell.Exts.Annotated.Syntax as A (Annotated(ann), Module(..))
+import Debug.Trace
+import Language.Haskell.Exts.Annotated.Syntax as A -- (Annotated(ann), Module(..))
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import ModuleInfo
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)
-import Utils (EZPrint(ezPrint), lines')
+import Utils (dropWhileNext, EZPrint(ezPrint), lines')
 
 data St = St { _point :: SrcLoc -- The current position in the full text
              , _remaining :: String  -- The text remaining after _point
@@ -315,3 +317,44 @@ debugRender m@(A.Module _ mh ps is ds) s =
 
 void :: Monad m => m ()
 void = pure ()
+
+-- | Modify end locations so they precede any trailing whitespace
+mapTopAnnotations :: (a -> a) -> A.Module a -> A.Module a
+mapTopAnnotations fn (A.Module loc mh ps is ds) =
+    A.Module loc (fmap fixMH mh) ps (map fixImport is) (map fixDecl ds)
+    where
+      fixMH (A.ModuleHead sp name warn specs) = A.ModuleHead (fn sp) name warn specs
+      fixImport i = i {importAnn = fn (importAnn i)}
+      fixDecl (TypeDecl l a b) = (TypeDecl (fn l) a b)
+      fixDecl (TypeFamDecl l a b) = (TypeFamDecl (fn l) a b)
+      fixDecl (ClosedTypeFamDecl l a b c) = (ClosedTypeFamDecl (fn l) a b c)
+      fixDecl (DataDecl l a b c d e) = (DataDecl (fn l) a b c d e)
+      fixDecl (GDataDecl l a b c d e f) = GDataDecl (fn l) a b c d e f
+      fixDecl (DataFamDecl l a b c) = (DataFamDecl (fn l) a b c)
+      fixDecl (TypeInsDecl l a b) = (TypeInsDecl (fn l) a b)
+      fixDecl (DataInsDecl l a b c d) = (DataInsDecl (fn l) a b c d)
+      fixDecl (GDataInsDecl l a b c d e) = (GDataInsDecl (fn l) a b c d e)
+      fixDecl (ClassDecl l a b c d) = (ClassDecl (fn l) a b c d)
+      fixDecl (InstDecl l a b c) = (InstDecl (fn l) a b c)
+      fixDecl (DerivDecl l a b) = (DerivDecl (fn l) a b)
+      fixDecl (InfixDecl l a b c) = (InfixDecl (fn l) a b c)
+      fixDecl (DefaultDecl l a) = (DefaultDecl (fn l) a)
+      fixDecl (SpliceDecl l a) = (SpliceDecl (fn l) a)
+      fixDecl (TypeSig l a b) = (TypeSig (fn l) a b)
+      fixDecl (PatSynSig l a b c d e) = (PatSynSig (fn l) a b c d e)
+      fixDecl (FunBind l a) = (FunBind (fn l) a)
+      fixDecl (PatBind l a b c) = (PatBind (fn l) a b c)
+      fixDecl (PatSyn l a b c) = (PatSyn (fn l) a b c)
+      fixDecl (ForImp l a b c d e) = (ForImp (fn l) a b c d e)
+      fixDecl (ForExp l a b c d) = (ForExp (fn l) a b c d)
+      fixDecl (RulePragmaDecl l a) = (RulePragmaDecl (fn l) a)
+      fixDecl (DeprPragmaDecl l a) = (DeprPragmaDecl (fn l) a)
+      fixDecl (WarnPragmaDecl l a) = (WarnPragmaDecl (fn l) a)
+      fixDecl (InlineSig l a b c) = (InlineSig (fn l) a b c)
+      fixDecl (InlineConlikeSig l a b) = (InlineConlikeSig (fn l) a b)
+      fixDecl (SpecSig l a b c) = (SpecSig (fn l) a b c)
+      fixDecl (SpecInlineSig l a b c d) = (SpecInlineSig (fn l) a b c d)
+      fixDecl (InstSig l a) = (InstSig (fn l) a)
+      fixDecl (AnnPragma l a) = (AnnPragma (fn l) a)
+      fixDecl (MinimalPragma l a) = (MinimalPragma (fn l) a)
+      fixDecl (RoleAnnotDecl l a b) = (RoleAnnotDecl (fn l) a b)

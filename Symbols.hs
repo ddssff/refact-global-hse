@@ -69,7 +69,7 @@ instance HasSymbols S.Decl where
     toExportSpecs x@(GDataInsDecl _SrcLoc _DataOrNew _Type _MaybeKind _GadtDecls _Deriving) = error $ "HasSymbols GDataInsDecl: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(InfixDecl _SrcLoc _Assoc _Int _Ops) = error $ "HasSymbols InfixDecl: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(DefaultDecl _SrcLoc _Types) = error $ "HasSymbols DefaultDecl: " ++ show x ++ "\n" ++ prettyPrint x
-    toExportSpecs x@(SpliceDecl _SrcLoc _Exp) = []
+    toExportSpecs (SpliceDecl _SrcLoc _Exp) = []
     toExportSpecs x@(PatSynSig _SrcLoc _Name _MaybeTyVarBind _Context1 _Context2 _Type) = error $ "HasSymbols PatSynSig: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(ForImp _SrcLoc _CallConv _Safety _String _Name _Type) = error $ "HasSymbols ForImp: " ++ show x ++ "\n" ++ prettyPrint x
     toExportSpecs x@(ForExp _SrcLoc _CallConv _String _Name _Type) = error $ "HasSymbols ForExp: " ++ show x ++ "\n" ++ prettyPrint x
