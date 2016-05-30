@@ -26,7 +26,7 @@ module SrcLoc
     , keep
     , keepAll
     , skip
-    , fixEnd
+    , fixEnds
     , trailingWhitespace
     , withTrailingWhitespace
     , debugRender
@@ -37,6 +37,7 @@ import Control.Lens ((.=), (%=), makeLenses, makeLensesFor, use, view)
 import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS)
 import Control.Monad.State (get, put, runState, State)
 import Data.Char (isSpace)
+import Data.List (dropWhileEnd)
 import Data.Monoid ((<>))
 import Debug.Trace
 import Language.Haskell.Exts.Annotated.Syntax as A -- (Annotated(ann), Module(..))
@@ -242,14 +243,18 @@ keep loc = do
   point .= {-trace ("keep " ++ show loc)-} loc
   comments %= dropWhile (\(Comment _ sp _) -> loc > srcLoc sp)
 
+-- | Tighten the start and end points of a span to exclude any leading
+-- and trailing whitespace and comments.
+
 -- | Move the endpoint of a span to before any trailing whitespace and comments.
-fixEnd :: [Comment] -> String -> SrcSpanInfo -> SrcSpanInfo
-fixEnd cs s si@(SrcSpanInfo {srcInfoSpan = sp@(SrcSpan {srcSpanFilename = file})}) =
-    let e@(SrcLoc _ l c) = realEnd si cs s in
-    case (e < srcLoc sp, e > endLoc sp) of
-      (True, _) -> error "realEnd returned position before span"
-      (_, True) -> error "realEnd returned position after span"
-      _ -> si {srcInfoSpan = sp {srcSpanEndLine = l, srcSpanEndColumn = c}}
+fixEnds :: [Comment] -> String -> SrcSpanInfo -> SrcSpanInfo
+fixEnds cs s si@(SrcSpanInfo {srcInfoSpan = sp@(SrcSpan {srcSpanFilename = file})}) =
+    let b@(SrcLoc _ bl bc) = realBegin si cs s in
+    let e@(SrcLoc _ el ec) = realEnd si cs s in
+    case (b < srcLoc sp || b > endLoc sp || e < srcLoc sp || e > endLoc sp) of
+      True -> error "fixEnds returned position outside span"
+      _ -> si {srcInfoSpan = sp {srcSpanStartLine = bl, srcSpanStartColumn = bc,
+                                 srcSpanEndLine = el, srcSpanEndColumn = ec}}
 
 -- | Given a SrcSpanInfo, find the "real" end of the object it covers,
 -- meaning the position beyond which lies only whitespace and comments.
@@ -257,22 +262,51 @@ realEnd :: SrcSpanInfo -> [Comment] -> String -> SrcLoc
 realEnd sp cs s =
   let b@(SrcLoc file _ _) = srcLoc sp
       e = endLoc sp
-      (_, s') = splitText b s
-      (s'', _) = splitText (locDiff e b) s'
+      s'' = textOfSpan sp s
       commentSpans = map (flip spanDiff b) .
                      takeWhile (\sp -> endLoc sp <= e) .
                      dropWhile (\sp -> srcLoc sp < b) .
                      map (\(Comment _ sp _) -> sp) $ cs
       segs = splits' file commentSpans s'' in
-  let r = case dropWhile isWhite (reverse segs) of
-            [] -> e
-            (Span (_, e') _ : _) -> locSum b e'
-            (Between (_, e') _ : _) -> locSum b e' in
-  if r < b || r > e then error ("realEnd: sp=" ++ show sp ++ ", segs=" ++ show segs ++ " -> " ++ show r) else r
+  -- Use the end of the last nonspace segment
+  let e' = case dropWhile isWhite (reverse segs) of
+            [] -> endLocOfText file s''
+            (Span (_, x) _ : _) -> x
+            (Between (_, x) _ : _) -> x
+      (s''', _) = splitText e' s''
+      s'''' = dropWhileEnd isSpace s''' in
+      locSum b (endLocOfText file s'''')
+      -- e'' = locSum b e' in
+  -- if r < b || r > e then error ("realEnd: sp=" ++ show sp ++ ", segs=" ++ show segs ++ " -> " ++ show e'') else e''
     where
       isWhite (Between _ s) | all isSpace s = True
       isWhite (Span _ _) = True
       isWhite _ = False
+
+realBegin :: SrcSpanInfo -> [Comment] -> String -> SrcLoc
+realBegin sp cs s =
+  let b@(SrcLoc file _ _) = srcLoc sp
+      e = endLoc sp
+      s'' = textOfSpan sp s
+      commentSpans = map (flip spanDiff b) .
+                     takeWhile (\sp -> endLoc sp <= e) .
+                     dropWhile (\sp -> srcLoc sp < b) .
+                     map (\(Comment _ sp _) -> sp) $ cs
+      segs = splits' file commentSpans s'' in
+  let b' = case dropWhile isWhite segs of
+            [] -> b
+            (Span (x, _) _ : _) -> {-locSum b-} x
+            (Between (x, _) _ : _) -> {-locSum b-} x
+      (_, s''') = splitText b' s''
+      b'' = endLocOfText "" (takeWhile isSpace s''') in
+  foldr1 locSum [b, b', b'']
+  -- if r < b || r > e then error ("realEnd: sp=" ++ show sp ++ ", segs=" ++ show segs ++ " -> " ++ show r) else r
+    where
+      isWhite (Between _ s) | all isSpace s = True
+      isWhite (Span _ _) = True
+      isWhite _ = False
+
+
 
 keepAll :: ScanM ()
 keepAll = do

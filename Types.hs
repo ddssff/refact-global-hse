@@ -25,7 +25,7 @@ import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpanInfo(..), SrcSpan(..))
 import Language.Haskell.Exts.Syntax as S (ModuleName(ModuleName))
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (ModuleKey(ModuleFullPath, ModuleKey, _moduleTop))
-import SrcLoc (endLoc, fixSpan, mapTopAnnotations, fixEnd, spanOfText, srcLoc)
+import SrcLoc (endLoc, fixSpan, mapTopAnnotations, fixEnds, spanOfText, srcLoc)
 import System.Directory (canonicalizePath)
 import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
 import Text.PrettyPrint.HughesPJClass as PP (prettyShow)
@@ -66,7 +66,7 @@ loadModule :: Exception e => FilePath -> IO (Either e ModuleInfo)
 loadModule path = try $ do
   moduleText <- liftIO $ readFile path
   (parsed', comments, processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions mode path
-  let parsed = mapTopAnnotations (fixEnd comments moduleText) $ everywhere (mkT fixSpan) parsed'
+  let parsed = mapTopAnnotations (fixEnds comments moduleText) $ everywhere (mkT fixSpan) parsed'
   -- liftIO $ writeFile (path ++ ".cpp") processed
   -- putStr processed
   -- validateParseResults parsed comments processed -- moduleText
