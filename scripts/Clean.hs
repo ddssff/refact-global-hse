@@ -10,7 +10,7 @@ import Data.Monoid ((<>))
 import Debug.Trace
 import GHC (hsSourceDirs)
 import Imports (cleanImports)
-import Types (loadModules)
+import LoadModule (loadModules)
 import Utils (withCleanRepo, withCurrentDirectory, withTempDirectory)
 import System.Directory
 import System.Environment
@@ -85,5 +85,5 @@ finalParams params = do
 main = do
   params <- buildParams >>= finalParams
   (if (view unsafe params) then id else withCleanRepo) $ withTempDirectory True "." "scratch" $ \scratch -> do
-    modules <- loadModules (view moduverse params)
+    modules <- loadModules def (view moduverse params)
     cleanImports scratch (def {hsSourceDirs = view topDirs params})  modules

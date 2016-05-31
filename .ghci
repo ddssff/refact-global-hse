@@ -5,6 +5,6 @@
 :m +Language.Haskell.Exts.Annotated
 :m +Test.HUnit
 :m +Decls
-:m +Types
+:m +LoadModule
 :m +Utils
 :set prompt "λ "

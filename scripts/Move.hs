@@ -4,16 +4,17 @@
 {-# LANGUAGE RankNTypes, TemplateHaskell #-}
 import Control.Lens
 import Control.Monad (foldM)
+import Data.Default (def)
 import Data.List (groupBy, stripPrefix)
 import Data.Monoid ((<>), mempty)
 import Debug.Trace
 import Decls (instClassPred, moveDeclsByName, moveDeclsAndClean, moveInstDecls, MoveSpec, traceMoveSpec)
-import Types (loadModules)
-import Utils (withCleanRepo, withCurrentDirectory, withTempDirectory)
+import LoadModule (loadModules)
 import System.Environment
 import System.FilePath ((</>), makeRelative)
 import System.FilePath.Find ((&&?), (==?), always, depth, extension, fileType, FileType(RegularFile), find)
 import System.Console.GetOpt
+import Utils (withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 data Params
     = Params { _moveSpec :: MoveSpec
@@ -75,5 +76,5 @@ run :: [String] -> IO ()
 run args = do
   params <- buildParams args
   (if _unsafe params then id else withCleanRepo) $ withTempDirectory True "." "scratch" $ \scratch -> do
-    modules <- loadModules (view moduverse params)
+    modules <- loadModules def (view moduverse params)
     moveDeclsAndClean (traceMoveSpec (view moveSpec params)) scratch (view hsDirs params) modules

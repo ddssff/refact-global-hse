@@ -3,13 +3,14 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 
+import Data.Default (def)
 import Data.List (intercalate)
 import DeclTests
+import LoadModule (loadModule')
 import ModuleInfo (ModuleInfo(..))
 import SrcLoc (debugRender)
 import System.Exit (ExitCode(..), exitWith)
 import Test.HUnit (assertEqual, errors, failures, runTestTT, Test(TestCase, TestList))
-import Types (loadModule')
 
 main :: IO ()
 main = runTestTT (TestList [declTests, cpp1]) >>= doCounts
@@ -18,7 +19,7 @@ main = runTestTT (TestList [declTests, cpp1]) >>= doCounts
 
 cpp1 :: Test
 cpp1 = TestCase $ do
-         (ModuleInfo {_module = m, _moduleText = s, _moduleComments = cs}) <- loadModule' "tests/input/cpp/A.hs"
+         (ModuleInfo {_module = m, _moduleText = s, _moduleComments = cs}) <- loadModule' def "tests/input/cpp/A.hs"
          assertEqual "cpp1" expected (debugRender m cs s)
     where
       expected =

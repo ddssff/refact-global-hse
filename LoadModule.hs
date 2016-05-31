@@ -1,69 +1,46 @@
 {-# LANGUAGE ScopedTypeVariables, TemplateHaskell #-}
 
-module Types
-    ( hseExtensions
-    , hsFlags
-    , hsSourceDirs
-    , loadModule
+module LoadModule
+    ( loadModule
     , loadModule'
     , loadModules
+    -- , hseExtensions
+    -- , hsFlags
+    -- , hsSourceDirs
     ) where
 
 import qualified CPP (BoolOptions(locations), CpphsOptions(boolopts), defaultCpphsOptions, parseFileWithCommentsAndCPP)
 import Control.Exception (Exception, SomeException)
 import Control.Exception.Lifted as IO (try)
-import Control.Monad (when)
 import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
 import Data.List (groupBy, intercalate)
 import Debug.Trace (trace)
+import GHC (extensionsForHSEParser, GHCOpts(..))
 import Language.Haskell.Exts.Annotated as A (Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName))
-import Language.Haskell.Exts.Comments (Comment(..))
-import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
+import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensions, parseFilename, fixities), fromParseResult)
-import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpanInfo(..), SrcSpan(..))
+import Language.Haskell.Exts.SrcLoc (SrcSpanInfo(..))
 import Language.Haskell.Exts.Syntax as S (ModuleName(ModuleName))
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (ModuleKey(..))
-import SrcLoc (endLoc, fixSpan, mapTopAnnotations, fixEnds, spanOfText, srcLoc)
+import SrcLoc (fixSpan, mapTopAnnotations, fixEnds, spanOfText)
 import System.Directory (canonicalizePath)
 import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
 import Text.PrettyPrint.HughesPJClass as PP (prettyShow)
 import Utils (EZPrint(ezPrint))
 
-  -- | From hsx2hs, but removing Arrows because it makes test case
--- fold3c and others fail.  Maybe we should parse the headers and then
--- use the options there?  There are functions to do this.
-hseExtensions :: [Extension]
-hseExtensions = map nameToExtension
-    [ RecursiveDo, ParallelListComp, MultiParamTypeClasses, FunctionalDependencies, RankNTypes, ExistentialQuantification
-    , ScopedTypeVariables, ImplicitParams, FlexibleContexts, FlexibleInstances, EmptyDataDecls, KindSignatures
-    , BangPatterns, TemplateHaskell, ForeignFunctionInterface, {- Arrows, -} DeriveGeneric, NamedFieldPuns, PatternGuards
-    , MagicHash, TypeFamilies, StandaloneDeriving, TypeOperators, RecordWildCards, GADTs, UnboxedTuples
-    , PackageImports, QuasiQuotes, {-TransformListComp,-} ViewPatterns, {-XmlSyntax, RegularPatterns,-} TupleSections
-    , ExplicitNamespaces
-    ]
-    where
-      nameToExtension :: KnownExtension -> Extension
-      nameToExtension x = EnableExtension x
-
-hsFlags :: [String]
-hsFlags = []
-
-hsSourceDirs :: [FilePath]
-hsSourceDirs = []
-
-loadModules :: [FilePath] -> IO [ModuleInfo]
-loadModules paths = t1 <$> mapM loadModule' paths
+loadModules :: GHCOpts -> [FilePath] -> IO [ModuleInfo]
+loadModules opts paths = t1 <$> mapM (loadModule' opts) paths
     where
       t1 :: [ModuleInfo] -> [ModuleInfo]
       t1 modules = trace ("modules loaded: " ++ show (map ezPrint modules)) modules
 
-loadModule' :: FilePath -> IO ModuleInfo
-loadModule' path = either (error . show) id <$> (loadModule path :: IO (Either SomeException ModuleInfo))
+loadModule' :: GHCOpts -> FilePath -> IO ModuleInfo
+loadModule' opts path = either (error . show) id <$> (loadModule opts path :: IO (Either SomeException ModuleInfo))
 
-loadModule :: Exception e => FilePath -> IO (Either e ModuleInfo)
-loadModule path = try $ do
+loadModule :: Exception e => GHCOpts -> FilePath -> IO (Either e ModuleInfo)
+loadModule opts path = try $ do
   moduleText <- liftIO $ readFile path
   (parsed', comments, processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions mode path
   let parsed = mapTopAnnotations (fixEnds comments moduleText) $ everywhere (mkT fixSpan) parsed'
@@ -81,7 +58,9 @@ loadModule path = try $ do
                     , _moduleText = moduleText
                     , _moduleSpan = spanOfText path moduleText }
     where
-      mode = Exts.defaultParseMode {Exts.extensions = hseExtensions, Exts.parseFilename = path, Exts.fixities = Nothing }
+      mode = Exts.defaultParseMode {Exts.extensions = map EnableExtension (GHC.extensions opts ++ extensionsForHSEParser),
+                                    Exts.parseFilename = path,
+                                    Exts.fixities = Nothing }
   -- {- `IO.catch` (\(e :: IOError) -> if isDoesNotExistError e || isUserError e then return Nothing else throw e) -}
 
 -- | Turn of the locations flag.  This means simple #if macros will not

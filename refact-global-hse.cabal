@@ -33,11 +33,11 @@ Library
     Decls
     GHC
     Imports
+    LoadModule
     ModuleKey
     ModuleInfo
     SrcLoc
     Symbols
-    Types
     Utils
   GHC-options: -Wall -O2
 
@@ -46,6 +46,7 @@ executable move-decls
   Main-Is: Move.hs
   Build-Depends:
     base,
+    data-default,
     refact-global-hse,
     filemanip > 0.3.6.3,
     filepath,
@@ -70,6 +71,7 @@ Test-Suite refact-global-hse-tests
   Build-Depends:
     base,
     containers,
+    data-default,
     filepath,
     filemanip > 0.3.6.3,
     haskell-src-exts,

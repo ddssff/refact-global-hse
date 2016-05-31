@@ -17,18 +17,18 @@ import Data.Tuple (swap)
 import Debug.Trace (trace)
 import GHC (GHCOpts(hsSourceDirs))
 import Imports (cleanImports)
-import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(InstDecl, TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), InstHead(..), InstRule(IParen, IRule), Module(Module), ModuleHead(ModuleHead), ModulePragma(..), Pretty, QName, Type)
+import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(InstDecl, TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), InstHead(..), InstRule(IParen, IRule), Module(Module), ModuleHead(ModuleHead), ModulePragma(..), Pretty, QName, Type)
 import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName, sModulePragma, sQName)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
-import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
+import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), ModulePragma(..), Name(..), QName(Qual, Special, UnQual), Exp, Decl(SpliceDecl), Exp(SpliceExp), Splice(IdSplice, ParenSplice))
+import LoadModule (loadModule, loadModules)
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
-import SrcLoc (endLoc, keep, keepAll, scanModule, skip, textOfSpan, srcLoc, ScanM, withTrailingWhitespace)
+import SrcLoc (endLoc, endOfHeader, endOfImports, keep, keepAll, scanModule, skip, textOfSpan, srcLoc, ScanM, withTrailingWhitespace)
 import Symbols (FoldDeclared(foldDeclared), toExportSpecs)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Types (loadModule, loadModules)
 import Utils (dropWhile2, EZPrint(ezPrint), gFind, listPairs, replaceFile, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 -- | Specifies where to move each declaration of each module.  Given a
@@ -147,7 +147,7 @@ runSimpleMoveUnsafe top moveSpec =
     withTempDirectory True "." "scratch" $ \scratch -> do
       paths <- (catMaybes . map (stripPrefix "./"))
                <$> (FilePath.find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
-      loadModules paths >>= moveDeclsAndClean moveSpec scratch ["."]
+      loadModules def paths >>= moveDeclsAndClean moveSpec scratch ["."]
 
 runMoveUnsafe :: FilePath -> [FilePath] -> MoveSpec -> IO ()
 runMoveUnsafe top hsSourceDirs moveSpec =
@@ -155,7 +155,7 @@ runMoveUnsafe top hsSourceDirs moveSpec =
     withTempDirectory True "." "scratch" $ \scratch -> do
       paths <- (catMaybes . map (stripPrefix "./"))
                <$> (FilePath.find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
-      loadModules paths >>= moveDeclsAndClean moveSpec scratch hsSourceDirs
+      loadModules def paths >>= moveDeclsAndClean moveSpec scratch hsSourceDirs
 
 moveDeclsAndClean :: MoveSpec -> FilePath -> [FilePath] -> [ModuleInfo] -> IO ()
 moveDeclsAndClean moveSpec scratch hsSourceDirs modules = do
@@ -174,7 +174,7 @@ moveDeclsAndClean moveSpec scratch hsSourceDirs modules = do
                    (Map.toList (newModuleMap moveSpec modules))
   -- Re-read the updated modules and clean their imports
   -- (Later we will need to find the newly created modules here)
-  modules' <- mapM (\p -> either (loadError p) id <$> loadModule p) (catMaybes oldPaths ++ newPaths) :: IO [ModuleInfo]
+  modules' <- mapM (\p -> either (loadError p) id <$> loadModule def p) (catMaybes oldPaths ++ newPaths) :: IO [ModuleInfo]
   cleanImports scratch (def {hsSourceDirs = hsSourceDirs}) modules'
     where
       loadError :: FilePath -> SomeException -> ModuleInfo
@@ -631,38 +631,6 @@ newDecls moveSpec modules thisKey =
             True -> do
               keep (endLoc d)
               withTrailingWhitespace keep (fmap srcLoc next)
-
-endOfDecls :: A.Module SrcSpanInfo -> SrcLoc
-endOfDecls m@(A.Module _l _mh _ps _ []) = endOfImports m
-endOfDecls (A.Module _l _mh _ps _is ds) = endLoc (A.ann (last ds))
-
-endOfImports :: A.Module SrcSpanInfo -> SrcLoc
-endOfImports m@(A.Module _l _mh _ps [] _) = endOfHeader m
-endOfImports (A.Module _l _mh _ps is _) = endLoc (A.ann (last is))
-
-endOfHeader :: A.Module SrcSpanInfo -> SrcLoc
-endOfHeader m@(A.Module _l Nothing _ps _ _) = endOfPragmas m
-endOfHeader (A.Module _l (Just h) _ps _is _) = endLoc (A.ann h)
-
-endOfPragmas :: A.Module SrcSpanInfo -> SrcLoc
-endOfPragmas (A.Module l _ [] _ _) = endLoc l
-endOfPragmas (A.Module _l _ ps _ _) = endLoc (A.ann (last ps))
-
-startOfDecls :: A.Module SrcSpanInfo -> SrcLoc
-startOfDecls m@(A.Module _l _mh _ps _is []) = startOfImports m
-startOfDecls (A.Module _l _mh _ps _is (d : _)) = srcLoc (A.ann d)
-
-startOfImports :: A.Module SrcSpanInfo -> SrcLoc
-startOfImports m@(A.Module _l _mh _ps [] _) = startOfHeader m
-startOfImports (A.Module _l _mh _ps (i : _) _) = srcLoc (A.ann i)
-
-startOfHeader :: A.Module SrcSpanInfo -> SrcLoc
-startOfHeader m@(A.Module _l Nothing _ps _ _) = startOfPragmas m
-startOfHeader (A.Module _l (Just h) _ps _is _) = srcLoc (A.ann h)
-
-startOfPragmas :: A.Module SrcSpanInfo -> SrcLoc
-startOfPragmas (A.Module l _ [] _ _) = srcLoc l
-startOfPragmas (A.Module _l _ (p : _) _ _) = srcLoc (A.ann p)
 
 -- | Get the text of a declaration including the preceding whitespace
 declText :: ModuleInfo -> A.Decl SrcSpanInfo -> String

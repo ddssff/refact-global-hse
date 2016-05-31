@@ -9,21 +9,25 @@
 module DeclTests where
 
 import Control.Monad (when)
+import CPP (CpphsOptions(..), defaultCpphsOptions)
 import Data.List hiding (find)
 import Data.Monoid ((<>))
 import Decls (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec), moveSpliceDecls, runMoveUnsafe, runSimpleMoveUnsafe)
+import GHC (GHCOpts(..))
+import Imports (cleanImports)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
+import Language.Haskell.Exts.Extension (KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules))
 import Language.Haskell.Exts.Annotated.Simplify (sName, sQName)
 import qualified Language.Haskell.Exts.Syntax as S
+import LoadModule (loadModule')
 import ModuleInfo
 import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
-import System.Exit (ExitCode(ExitSuccess))
+import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
 import System.Process (readProcessWithExitCode)
 import Symbols (foldDeclared)
 import Test.HUnit
-import Types (loadModule')
-import Utils (gFind, gitResetSubdir)
+import Utils (dropWhile2, EZPrint(ezPrint), gFind, gitResetSubdir, listPairs, replaceFile, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 declTests :: Test
 declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, simple1]
@@ -157,11 +161,45 @@ decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tes
       instPred key _ _ = key
 
 load8 :: Test
-load8 = TestLabel "load8" $ TestCase $ testMoveSpec' "tests/expected/decl8" input $ do
-          m <- loadModule' (input </> "client/Examples/MVExample.hs")
-          pure ()
+load8 = TestLabel "load8" $ TestCase $
+          withCurrentDirectory "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client" $
+          withCleanRepo $
+          withTempDirectory True "." "scratch" $ \scratch -> do
+            let opts = GHCOpts {hc = "ghcjs",
+                                hsSourceDirs=["client", "../happstack-ghcjs-webmodule"],
+                                cppOptions = defaultCpphsOptions {defines = [("CLIENT", "1"), ("SERVER", "0"), ("SERVE_DYNAMIC", "")]},
+                                extensions = [CPP, OverloadedStrings, ExtendedDefaultRules]}
+            m <- loadModule' opts "client/Examples/MVExample.hs"
+            cleanImports scratch opts [m]
+            (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
+            case code of
+              ExitSuccess -> assertString diff
+              ExitFailure 1 -> assertString diff
+              ExitFailure 2 -> assertString err
     where
-      input = "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client"
+      expected = "/home/dsf/git/refact-global-hse/tests/expected/decl8"
+      actual = "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client"
+      spec = foldl1' (<>) [moveDeclsByName "foo" "Bar" "Baz"]
+
+load9 :: Test
+load9 = TestLabel "load9" $ TestCase $
+          withCurrentDirectory "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client" $
+          withCleanRepo $
+          withTempDirectory True "." "scratch" $ \scratch -> do
+            let opts = GHCOpts {hc = "ghc",
+                                hsSourceDirs=["client", "../happstack-ghcjs-webmodule"],
+                                cppOptions = defaultCpphsOptions {defines = [("CLIENT", "0"), ("SERVER", "1"), ("SERVE_DYNAMIC", "")]},
+                                extensions = [CPP, OverloadedStrings, ExtendedDefaultRules]}
+            m <- loadModule' opts"client/Examples/MVExample.hs"
+            cleanImports scratch opts [m]
+            (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
+            case code of
+              ExitSuccess -> assertString diff
+              ExitFailure 1 -> assertString diff
+              ExitFailure 2 -> assertString err
+    where
+      expected = "/home/dsf/git/refact-global-hse/tests/expected/decl8"
+      actual = "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client"
       spec = foldl1' (<>) [moveDeclsByName "foo" "Bar" "Baz"]
 
 simple1 :: Test

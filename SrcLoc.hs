@@ -31,6 +31,16 @@ module SrcLoc
     , withTrailingWhitespace
     , debugRender
     , mapTopAnnotations
+
+
+    , endOfDecls
+    , endOfImports
+    , endOfHeader
+    , endOfPragmas
+    , startOfDecls
+    , startOfImports
+    , startOfHeader
+    , startOfPragmas
     ) where
 
 import Control.Lens ((.=), (%=), makeLenses, makeLensesFor, use, view)
@@ -324,9 +334,11 @@ skip loc = do
   point .= {-trace ("skip " ++ show loc)-} loc
   comments %= dropWhile (\(Comment _ sp _) -> loc > srcLoc sp)
 
--- | Given the next SpanInfo after the point, return the trailing
--- whitespace preceding that span. Assumes the point is at the end of
--- a span.
+-- | Assuming the spans of the ast have been adjusted (tightened)
+-- using fixEnds, look at the text between point and the beginning of
+-- the next span and decide which part belongs to the preceding
+-- declaration (or import or whatever) and which belongs to the next
+-- one.
 trailingWhitespace :: Maybe SrcLoc -> ScanM String
 trailingWhitespace next = do
   t <- use remaining
@@ -404,3 +416,35 @@ mapTopAnnotations fn (A.Module loc mh ps is ds) =
       fixDecl (AnnPragma l a) = (AnnPragma (fn l) a)
       fixDecl (MinimalPragma l a) = (MinimalPragma (fn l) a)
       fixDecl (RoleAnnotDecl l a b) = (RoleAnnotDecl (fn l) a b)
+
+endOfDecls :: A.Module SrcSpanInfo -> SrcLoc
+endOfDecls m@(A.Module _l _mh _ps _ []) = endOfImports m
+endOfDecls (A.Module _l _mh _ps _is ds) = endLoc (A.ann (last ds))
+
+endOfImports :: A.Module SrcSpanInfo -> SrcLoc
+endOfImports m@(A.Module _l _mh _ps [] _) = endOfHeader m
+endOfImports (A.Module _l _mh _ps is _) = endLoc (A.ann (last is))
+
+endOfHeader :: A.Module SrcSpanInfo -> SrcLoc
+endOfHeader m@(A.Module _l Nothing _ps _ _) = endOfPragmas m
+endOfHeader (A.Module _l (Just h) _ps _is _) = endLoc (A.ann h)
+
+endOfPragmas :: A.Module SrcSpanInfo -> SrcLoc
+endOfPragmas (A.Module l _ [] _ _) = endLoc l
+endOfPragmas (A.Module _l _ ps _ _) = endLoc (A.ann (last ps))
+
+startOfDecls :: A.Module SrcSpanInfo -> SrcLoc
+startOfDecls m@(A.Module _l _mh _ps _is []) = startOfImports m
+startOfDecls (A.Module _l _mh _ps _is (d : _)) = srcLoc (A.ann d)
+
+startOfImports :: A.Module SrcSpanInfo -> SrcLoc
+startOfImports m@(A.Module _l _mh _ps [] _) = startOfHeader m
+startOfImports (A.Module _l _mh _ps (i : _) _) = srcLoc (A.ann i)
+
+startOfHeader :: A.Module SrcSpanInfo -> SrcLoc
+startOfHeader m@(A.Module _l Nothing _ps _ _) = startOfPragmas m
+startOfHeader (A.Module _l (Just h) _ps _is _) = srcLoc (A.ann h)
+
+startOfPragmas :: A.Module SrcSpanInfo -> SrcLoc
+startOfPragmas (A.Module l _ [] _ _) = srcLoc l
+startOfPragmas (A.Module _l _ (p : _) _ _) = srcLoc (A.ann p)
