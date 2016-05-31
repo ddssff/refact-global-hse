@@ -1,24 +1,25 @@
-{-# LANGUAGE CPP, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
+{-# LANGUAGE CPP, FlexibleContexts, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
 module Decls (moveDeclsByName, moveInstDecls, moveSpliceDecls, instClassPred,
               runSimpleMove, runSimpleMoveUnsafe, runMoveUnsafe, moveDeclsAndClean, moveDecls,
               MoveSpec(MoveSpec), applyMoveSpec, traceMoveSpec) where
 
 import Control.Exception (SomeException)
-import Control.Monad (foldM, void)
-import Control.Monad.RWS (MonadWriter(tell))
+import Control.Monad (foldM, void, when)
+import Control.Monad.RWS (modify, MonadWriter(tell))
+import Control.Monad.State (execState, MonadState)
 import Data.Foldable as Foldable (find)
-import Data.List (foldl', intercalate, nub, stripPrefix)
+import Data.List ((\\), foldl', intercalate, nub, stripPrefix)
 import Data.Map as Map (insertWith, Map, mapWithKey, singleton, toList)
 import Data.Maybe (catMaybes, listToMaybe, maybeToList)
-import Data.Set as Set (fromList, insert, isSubsetOf, member, Set)
+import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, toList)
 import Data.Tuple (swap)
 import Debug.Trace (trace)
 import Imports (cleanImports)
-import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(InstDecl, TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), InstHead(..), InstRule(IParen, IRule), Module(Module), ModuleHead(ModuleHead), Pretty, QName, Type)
-import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName, sQName)
+import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(InstDecl, TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), InstHead(..), InstRule(IParen, IRule), Module(Module), ModuleHead(ModuleHead), ModulePragma(..), Pretty, QName, Type)
+import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName, sModulePragma, sQName)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
-import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..), QName(Qual, Special, UnQual), Exp, Decl(SpliceDecl), Exp(SpliceExp), Splice(IdSplice, ParenSplice))
+import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), ModulePragma(..), Name(..), QName(Qual, Special, UnQual), Exp, Decl(SpliceDecl), Exp(SpliceExp), Splice(IdSplice, ParenSplice))
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
 import SrcLoc (endLoc, keep, keepAll, scanModule, skip, textOfSpan, srcLoc, ScanM, withTrailingWhitespace)
@@ -184,9 +185,10 @@ moveDecls moveSpec modules = map (\info -> moveDeclsOfModule moveSpec modules in
 
 -- | Update one module and return its text
 moveDeclsOfModule :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> String
-moveDeclsOfModule moveSpec modules info@(ModuleInfo {_module = A.Module l _ _ _ _}) =
+moveDeclsOfModule moveSpec modules info@(ModuleInfo {_module = A.Module l _ ps _ _}) =
     -- let modules' = newModules moveSpec modules ++ modules in
     scanModule (do keep (srcLoc l)
+                   tell (newPragmas moveSpec modules (_moduleKey info) ps)
                    updateHeader moveSpec modules info
                    updateImports moveSpec modules info
                    updateDecls moveSpec modules info
@@ -215,6 +217,7 @@ newModuleMap moveSpec modules =
             doModule :: ModuleKey -> [(ModuleKey, A.Decl SrcSpanInfo)] -> String
             -- Build module thiskey from the list of (fromkey, decl) pairs
             doModule thisKey pairs =
+                newPragmas moveSpec modules thisKey [] ++
                 "module " ++ maybe "Main" prettyPrint (moduleName thisKey) ++ "(" ++
                 intercalate exportSep (newExports moveSpec modules thisKey) ++ "\n    ) where\n\n" ++
                 concatMap (\(someKey, _ds) -> importsForArrivingDecls moveSpec thisKey [] (findModuleByKeyUnsafe modules someKey)) pairs ++
@@ -238,6 +241,28 @@ defaultHsSourceDir modules =
                           (Map.singleton "." 0)
                           (map _modulePath modules) in
     snd (maximum (map swap (Map.toList countMap)))
+
+-- If a declaration is arriving in this module we need to add all the LANGUAGE
+-- pragmas from that module to this one.
+newPragmas :: MoveSpec -> [ModuleInfo] -> ModuleKey -> [A.ModulePragma SrcSpanInfo] -> String
+newPragmas moveSpec modules thisKey thesePragmas =
+  let (arriving :: Set S.ModulePragma) =
+          execState (mapM_ (\(ModuleInfo {_moduleKey = someKey,_module = m@(A.Module _ _mh somePragmas _is someDecls)}) ->
+                                when
+                                  (someKey /= thisKey)
+                                  (mapM_ (\d -> when
+                                                  (applyMoveSpec moveSpec someKey d == thisKey)
+                                                  (mapM_ addPragma (pragmaDiff somePragmas thesePragmas))) someDecls)) modules) mempty in
+  unlines (map prettyPrint' (Set.toList arriving))
+    where
+      addPragma :: MonadState (Set S.ModulePragma) m => S.Name -> m ()
+      addPragma name = modify (Set.insert (S.LanguagePragma (SrcLoc "" 1 1) [name]))
+      pragmaDiff :: [A.ModulePragma SrcSpanInfo] -> [A.ModulePragma SrcSpanInfo] -> [S.Name]
+      pragmaDiff ps qs = t1 (concatMap pragmaLanguageNames (map sModulePragma ps) \\ concatMap pragmaLanguageNames (map sModulePragma qs))
+          where t1 x = trace ("pragmaDiff " ++ show (map sModulePragma ps) ++ " " ++ show (map sModulePragma qs) ++ " -> " ++ show x) x
+      pragmaLanguageNames :: S.ModulePragma -> [S.Name]
+      pragmaLanguageNames (S.LanguagePragma l names) = names
+      pragmaLanguageNames _ = []
 
 -- | Write the new export list.  Exports of symbols that have moved
 -- out are removed.  Exports of symbols that have moved in are added

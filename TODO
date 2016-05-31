@@ -22,6 +22,9 @@
           2. Comment of a FoldDeclaredBy instance left at EOF
           3. extra newline before class FoldDeclared block comment
           4. symbolsDeclaredBy block comment moved to Tmp
+   28. Should there be options to modify imports of library modules that were
+       previously changed using Move.hs?  You could use them to document how
+       to upgrade clients of your library.  Eh.
 
 DONE
 
