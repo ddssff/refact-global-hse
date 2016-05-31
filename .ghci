@@ -1,10 +1,11 @@
 :set -itests
 :set -XScopedTypeVariables
 :load tests/Tests
-:m +System.Process
+:m +Data.Monoid System.Process
 :m +Language.Haskell.Exts.Annotated
 :m +Test.HUnit
 :m +Decls
 :m +LoadModule
 :m +Utils
+:m +System.FilePath.Find
 :set prompt "λ "
