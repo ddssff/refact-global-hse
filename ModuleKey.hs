@@ -1,7 +1,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 
 module ModuleKey
-    ( ModuleKey(ModuleKey, ModuleFullPath, _moduleTop, _moduleName, _moduleFullPath)
+    ( ModuleKey(ModuleKey, _moduleTop, _moduleName, _moduleExt, ModuleFullPath, _moduleFullPath)
     , moduleFullPath
     , moduleName
     , moduleTop

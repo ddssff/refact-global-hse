@@ -39,13 +39,12 @@ import Control.Monad.State (get, put, runState, State)
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd)
 import Data.Monoid ((<>))
-import Debug.Trace
 import Language.Haskell.Exts.Annotated.Syntax as A -- (Annotated(ann), Module(..))
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import ModuleInfo
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)
-import Utils (dropWhileNext, EZPrint(ezPrint), lines')
+import Utils (EZPrint(ezPrint), lines')
 
 data St = St { _point :: SrcLoc -- The current position in the full text
              , _remaining :: String  -- The text remaining after _point
@@ -163,8 +162,8 @@ splitText loc@(SrcLoc _ l0 c0) s0 =
 --    (" line\nsec",SrcSpan "" 80 25 81  4),
 --    ("ond line",SrcSpan ""   81  4 81 12)]
 splits :: SrcLoc -> [SrcLoc] -> String -> [(String, SrcSpan)]
-splits offset@(SrcLoc file _ _) locs@(_ : locs') s =
-    zip (f offset locs s) (map (uncurry mkSrcSpan) (zip (offset : locs) (locs ++ [locSum offset (endLocOfText file s)])))
+splits offset0@(SrcLoc file _ _) locs0@(_ : _) s0 =
+    zip (f offset0 locs0 s0) (map (uncurry mkSrcSpan) (zip (offset0 : locs0) (locs0 ++ [locSum offset0 (endLocOfText file s0)])))
     where
       f _ [] s = [s]
       f offset (loc : locs) s =
@@ -248,7 +247,7 @@ keep loc = do
 
 -- | Move the endpoint of a span to before any trailing whitespace and comments.
 fixEnds :: [Comment] -> String -> SrcSpanInfo -> SrcSpanInfo
-fixEnds cs s si@(SrcSpanInfo {srcInfoSpan = sp@(SrcSpan {srcSpanFilename = file})}) =
+fixEnds cs s si@(SrcSpanInfo {srcInfoSpan = sp}) =
     let b@(SrcLoc _ bl bc) = realBegin si cs s in
     let e@(SrcLoc _ el ec) = realEnd si cs s in
     case (b < srcLoc sp || b > endLoc sp || e < srcLoc sp || e > endLoc sp) of
@@ -264,9 +263,9 @@ realEnd sp cs s =
       e = endLoc sp
       s'' = textOfSpan sp s
       commentSpans = map (flip spanDiff b) .
-                     takeWhile (\sp -> endLoc sp <= e) .
-                     dropWhile (\sp -> srcLoc sp < b) .
-                     map (\(Comment _ sp _) -> sp) $ cs
+                     takeWhile ((<= e) . endLoc) .
+                     dropWhile ((< b) . srcLoc) .
+                     map (\(Comment _ sp' _) -> sp') $ cs
       segs = splits' file commentSpans s'' in
   -- Use the end of the last nonspace segment
   let e' = case dropWhile isWhite (reverse segs) of
@@ -279,7 +278,7 @@ realEnd sp cs s =
       -- e'' = locSum b e' in
   -- if r < b || r > e then error ("realEnd: sp=" ++ show sp ++ ", segs=" ++ show segs ++ " -> " ++ show e'') else e''
     where
-      isWhite (Between _ s) | all isSpace s = True
+      isWhite (Between _ s') | all isSpace s' = True
       isWhite (Span _ _) = True
       isWhite _ = False
 
@@ -289,9 +288,9 @@ realBegin sp cs s =
       e = endLoc sp
       s'' = textOfSpan sp s
       commentSpans = map (flip spanDiff b) .
-                     takeWhile (\sp -> endLoc sp <= e) .
-                     dropWhile (\sp -> srcLoc sp < b) .
-                     map (\(Comment _ sp _) -> sp) $ cs
+                     takeWhile ((<= e) . endLoc) .
+                     dropWhile ((< b) . srcLoc) .
+                     map (\(Comment _ sp' _) -> sp') $ cs
       segs = splits' file commentSpans s'' in
   let b' = case dropWhile isWhite segs of
             [] -> b
@@ -302,7 +301,7 @@ realBegin sp cs s =
   foldr1 locSum [b, b', b'']
   -- if r < b || r > e then error ("realEnd: sp=" ++ show sp ++ ", segs=" ++ show segs ++ " -> " ++ show r) else r
     where
-      isWhite (Between _ s) | all isSpace s = True
+      isWhite (Between _ s') | all isSpace s' = True
       isWhite (Span _ _) = True
       isWhite _ = False
 

@@ -7,6 +7,7 @@ import Control.Exception (SomeException)
 import Control.Monad (foldM, void, when)
 import Control.Monad.RWS (modify, MonadWriter(tell))
 import Control.Monad.State (execState, MonadState)
+import Data.Default (def)
 import Data.Foldable as Foldable (find)
 import Data.List ((\\), foldl', intercalate, nub, stripPrefix)
 import Data.Map as Map (insertWith, Map, mapWithKey, singleton, toList)
@@ -14,6 +15,7 @@ import Data.Maybe (catMaybes, listToMaybe, maybeToList)
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, toList)
 import Data.Tuple (swap)
 import Debug.Trace (trace)
+import GHC (GHCOpts(hsSourceDirs))
 import Imports (cleanImports)
 import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(InstDecl, TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), InstHead(..), InstRule(IParen, IRule), Module(Module), ModuleHead(ModuleHead), ModulePragma(..), Pretty, QName, Type)
 import Language.Haskell.Exts.Annotated.Simplify (sDecl, sExportSpec, sModuleName, sModulePragma, sQName)
@@ -173,7 +175,7 @@ moveDeclsAndClean moveSpec scratch hsSourceDirs modules = do
   -- Re-read the updated modules and clean their imports
   -- (Later we will need to find the newly created modules here)
   modules' <- mapM (\p -> either (loadError p) id <$> loadModule p) (catMaybes oldPaths ++ newPaths) :: IO [ModuleInfo]
-  cleanImports scratch hsSourceDirs modules'
+  cleanImports scratch (def {hsSourceDirs = hsSourceDirs}) modules'
     where
       loadError :: FilePath -> SomeException -> ModuleInfo
       loadError p e = error ("Unable to load updated module " ++ show p ++ ": " ++ show e)
@@ -623,11 +625,11 @@ newDecls moveSpec modules thisKey =
       doDecl :: ModuleKey -> Maybe (A.Decl SrcSpanInfo) -> Maybe (A.Decl SrcSpanInfo) -> ScanM ()
       doDecl _ Nothing _ = pure ()
       doDecl someKey (Just d) next =
-          case applyMoveSpec moveSpec someKey d of
-            someKey | someKey /= thisKey -> do
+          case applyMoveSpec moveSpec someKey d == thisKey of
+            False -> do
               skip (endLoc d)
               withTrailingWhitespace skip (fmap srcLoc next)
-            _ -> do
+            True -> do
               keep (endLoc d)
               withTrailingWhitespace keep (fmap srcLoc next)
 

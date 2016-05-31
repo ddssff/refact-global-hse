@@ -14,6 +14,7 @@ Library
     base,
     containers,
     cpphs,
+    data-default,
     directory,
     filemanip > 0.3.6.3,
     filemanip-extra,
@@ -30,6 +31,7 @@ Library
   Exposed-Modules:
     CPP
     Decls
+    GHC
     Imports
     ModuleKey
     ModuleInfo
@@ -54,6 +56,7 @@ executable clean-imports
   Main-Is: Clean.hs
   Build-Depends:
     base,
+    data-default,
     directory,
     refact-global-hse,
     filemanip > 0.3.6.3,
@@ -67,12 +70,13 @@ Test-Suite refact-global-hse-tests
   Build-Depends:
     base,
     containers,
-    refact-global-hse,
+    filepath,
     filemanip > 0.3.6.3,
     haskell-src-exts,
     HUnit,
     lens,
     mtl,
     process,
+    refact-global-hse,
     syb
   GHC-options: -Wall -O2

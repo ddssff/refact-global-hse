@@ -18,9 +18,11 @@ import qualified Language.Haskell.Exts.Syntax as S
 import ModuleInfo
 import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
 import System.Exit (ExitCode(ExitSuccess))
+import System.FilePath ((</>))
 import System.Process (readProcessWithExitCode)
 import Symbols (foldDeclared)
 import Test.HUnit
+import Types (loadModule')
 import Utils (gFind, gitResetSubdir)
 
 declTests :: Test
@@ -154,6 +156,13 @@ decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tes
               key {_moduleName = S.ModuleName "Scan"}
       instPred key _ _ = key
 
+load8 :: Test
+load8 = TestLabel "load8" $ TestCase $ testMoveSpec' "tests/expected/decl8" input $ do
+          m <- loadModule' (input </> "client/Examples/MVExample.hs")
+          pure ()
+    where
+      input = "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client"
+      spec = foldl1' (<>) [moveDeclsByName "foo" "Bar" "Baz"]
 
 simple1 :: Test
 simple1 =

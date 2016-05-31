@@ -24,7 +24,7 @@ import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensi
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpanInfo(..), SrcSpan(..))
 import Language.Haskell.Exts.Syntax as S (ModuleName(ModuleName))
 import ModuleInfo (ModuleInfo(..))
-import ModuleKey (ModuleKey(ModuleFullPath, ModuleKey, _moduleTop))
+import ModuleKey (ModuleKey(..))
 import SrcLoc (endLoc, fixSpan, mapTopAnnotations, fixEnds, spanOfText, srcLoc)
 import System.Directory (canonicalizePath)
 import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
@@ -105,14 +105,14 @@ moduleKey _ (A.XmlHybrid {}) = error "XmlHybrid"
 moduleKey path (A.Module _ Nothing _ _ _) = do
   ModuleFullPath <$> canonicalizePath path
 moduleKey path (A.Module _ (Just (A.ModuleHead _ (A.ModuleName _ name) _ _)) _ _ _) = do
-  path' <- canonicalizePath path
-  let name' = splitModuleName name
-      (path'', ext) = splitExtension path'
-      dirs = splitDirectories path''
-      (dirs', name'') = splitAt (length dirs - length name') dirs
-  when (name'' /= name') (error $ "Module name mismatch - name: " ++ show name' ++ ", path: " ++ show name'')
-  pure $ ModuleKey (joinPath dirs')
-                   (S.ModuleName (intercalate "." name''))
-                   ext
-      where
-        splitModuleName = filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))
+  canonicalizePath path >>= pure . makeKey
+    where
+      makeKey path' =
+          let name' = splitModuleName name
+              (path'', ext) = splitExtension path'
+              dirs = splitDirectories path''
+              (dirs', name'') = splitAt (length dirs - length name') dirs in
+          case (name'' == name') of
+            False -> ModuleFullPath path'
+            True -> ModuleKey {_moduleTop = joinPath dirs', _moduleName = S.ModuleName (intercalate "." name''), _moduleExt = ext}
+      splitModuleName = filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))

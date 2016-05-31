@@ -1,5 +1,4 @@
 {-# LANGUAGE CPP #-}
-{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# OPTIONS -Wall #-}
 
@@ -13,14 +12,16 @@ import Data.Char (toLower)
 import Data.Function (on)
 import Data.List (find, groupBy, intercalate, nub, sortBy)
 import Data.Maybe (catMaybes)
+import Data.Monoid ((<>))
 import Data.Set as Set (empty, fromList, member, Set, singleton, union, unions)
 import qualified Data.Set as Set (map)
 import Debug.Trace (trace)
+import GHC (GHCOpts(..), ghcProcessArgs)
 import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Pretty, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
 import Language.Haskell.Exts.Annotated.Simplify as S (sImportDecl, sImportSpec, sModuleName, sName)
 import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrintStyleMode)
-import Language.Haskell.Exts.SrcLoc (SrcSpan(srcSpanFilename), SrcSpanInfo(srcInfoSpan))
+import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(importLoc, importModule, importSpecs), ModuleName(..), Name(..))
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath)
@@ -34,13 +35,13 @@ import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Types (hseExtensions, hsFlags, loadModule)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
-cleanImports :: MonadIO m => FilePath -> [FilePath] -> [ModuleInfo] -> m ()
+cleanImports :: MonadIO m => FilePath -> GHCOpts -> [ModuleInfo] -> m ()
 cleanImports _ _ [] = trace ("cleanImports - no modules") (pure ())
-cleanImports scratch hsSourceDirs info =
+cleanImports scratch opts info =
     dump >> mapM_ (\x -> do newText <- doModule scratch x
                             let path = moduleFullPath (_moduleKey x)
                             liftIO $ case newText of
-                                       Nothing -> putStrLn (path ++ ": unable to clean imports")
+                                       Nothing -> putStrLn (path <> ": unable to clean imports")
                                        Just s | _moduleText x /= s ->
                                                         do putStrLn (path ++ " imports changed")
                                                            -- let (path', ext) = splitExtension path in
@@ -52,7 +53,7 @@ cleanImports scratch hsSourceDirs info =
         let cmd = "ghc"
             args' = hsFlags ++
                     ["--make", "-c", "-ddump-minimal-imports", "-outputdir", scratch] ++
-                    (if null hsSourceDirs then [] else ["-i" ++ intercalate ":" hsSourceDirs]) ++
+                    ghcProcessArgs opts ++
                     concatMap ppExtension hseExtensions ++
                     map _modulePath info
         (code, _out, err) <- liftIO $ readProcessWithExitCode cmd args' ""
@@ -99,7 +100,7 @@ replaceImports :: [A.ImportDecl SrcSpanInfo] -> ModuleInfo -> Maybe String
 replaceImports newImports (ModuleInfo {_module = A.Module _l _mh _ps is _ds})
     | map sImportDecl is == map sImportDecl newImports =
         Nothing
-replaceImports newImports info@(ModuleInfo {_module = A.Module l _mh _ps is@(i : _) _ds}) =
+replaceImports newImports info@(ModuleInfo {_module = A.Module _l _mh _ps is@(i : _) _ds}) =
     Just $ scanModule (do keep (srcLoc (A.ann i))
                           tell (intercalate "\n" (map prettyPrint' newImports))
                           skip (endLoc (A.ann (last is)))
