@@ -1,3 +1,8 @@
+{-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleInstances #-}
+{-# LANGUAGE OverloadedLists #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Tmp(FoldDeclared(foldDeclared)
     ) where
 

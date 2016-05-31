@@ -1,3 +1,6 @@
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Tmp(withCurrentDirectory
     ) where
 

@@ -1,3 +1,9 @@
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
 module MoveSpec(MoveSpec
     , appendMoveSpecs
     , identityMoveSpec

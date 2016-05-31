@@ -1,3 +1,4 @@
+{-# LANGUAGE ScopedTypeVariables #-}
 module ModuleKey(ModuleKey(ModuleKey, _moduleTop, _moduleName)
     , fullPathOfModuleKey
     , moduleKey

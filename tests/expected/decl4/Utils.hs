@@ -1,5 +1,5 @@
-{-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes, ScopedTypeVariables #-}
 module Utils where
 
 import Control.Exception (SomeException, throw)
