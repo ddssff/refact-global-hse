@@ -8,35 +8,25 @@ module GHC
     , ghcProcessArgs
     ) where
 
+import CPP
 import Data.Default (Default(def))
 import Data.List (intercalate)
 import Data.Monoid ((<>))
-import Text.PrettyPrint (text)
-import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow)
 
 -- | Support a tiny subset of the GHC command line options.
 data GHCOpts =
     GHCOpts
     { hsSourceDirs :: [FilePath]
-    , cppOptions :: [CPPOption]
+    , cpphsOptions :: CpphsOptions
     , languageOptions :: [String]
     }
 
 instance Default GHCOpts where
-    def = GHCOpts [] [] []
-
-data CPPOption
-    = CPPDefine String (Maybe String)
-    | CPPUndefine String
-
-instance Pretty CPPOption where
-    pPrint (CPPUndefine name) = text $ "-U" <> name
-    pPrint (CPPDefine name Nothing) = text $ "-D" <> name
-    pPrint (CPPDefine name (Just s)) = text $ "-D" <> name <> "=" <> s
+    def = GHCOpts [] defaultCpphsOptions []
 
 ghcProcessArgs :: GHCOpts -> [String]
 ghcProcessArgs (GHCOpts {..}) =
-    map prettyShow cppOptions <>
+    map (\(name, s) -> "-D" ++ name ++ if null s then "" else ("=" ++ s)) (defines cpphsOptions) <>
     map ("-X" ++) languageOptions <>
     case hsSourceDirs of
       [] -> []

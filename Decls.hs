@@ -249,7 +249,7 @@ defaultHsSourceDir modules =
 newPragmas :: MoveSpec -> [ModuleInfo] -> ModuleKey -> [A.ModulePragma SrcSpanInfo] -> String
 newPragmas moveSpec modules thisKey thesePragmas =
   let (arriving :: Set S.ModulePragma) =
-          execState (mapM_ (\(ModuleInfo {_moduleKey = someKey,_module = m@(A.Module _ _mh somePragmas _is someDecls)}) ->
+          execState (mapM_ (\(ModuleInfo {_moduleKey = someKey,_module = (A.Module _ _mh somePragmas _is someDecls)}) ->
                                 when
                                   (someKey /= thisKey)
                                   (mapM_ (\d -> when
@@ -263,7 +263,7 @@ newPragmas moveSpec modules thisKey thesePragmas =
       pragmaDiff ps qs = t1 (concatMap pragmaLanguageNames (map sModulePragma ps) \\ concatMap pragmaLanguageNames (map sModulePragma qs))
           where t1 x = trace ("pragmaDiff " ++ show (map sModulePragma ps) ++ " " ++ show (map sModulePragma qs) ++ " -> " ++ show x) x
       pragmaLanguageNames :: S.ModulePragma -> [S.Name]
-      pragmaLanguageNames (S.LanguagePragma l names) = names
+      pragmaLanguageNames (S.LanguagePragma _l names) = names
       pragmaLanguageNames _ = []
 
 -- | Write the new export list.  Exports of symbols that have moved
@@ -296,7 +296,7 @@ newExports moveSpec modules thisKey =
       -- found, transfer the export from there to here.
       newExportsFromModule :: ModuleInfo -> [S.ExportSpec]
       newExportsFromModule (ModuleInfo {_moduleKey = k', _module = A.Module _ _ _ _ ds}) =
-          concatMap (\d -> if (applyMoveSpec moveSpec k' d == thisKey) then trace "newExportsFromModule" (toExportSpecs d) else []) ds
+          concatMap (\d -> if (applyMoveSpec moveSpec k' d == thisKey) then toExportSpecs d else []) ds
       newExportsFromModule x = error $ "newExports - unexpected module: " ++ show (_module x)
 
 findNewKeyOfExportSpec :: MoveSpec -> ModuleInfo -> A.ExportSpec SrcSpanInfo -> Maybe ModuleKey
@@ -321,7 +321,7 @@ findDeclOfExportSpec info spec =
 -- Find the declaration of the symbols of an import spec.  If that
 -- declaration moved, update the module name.
 updateImports :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> ScanM ()
-updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = m@(A.Module _ _ _ thisModuleImports _)}) = do
+updateImports moveSpec modules (ModuleInfo {_moduleKey = thisKey, _module = (A.Module _ _ _ thisModuleImports _)}) = do
   -- Update the existing imports
   mapM_ (uncurry doImportDecl) (listPairs thisModuleImports)
   mapM_ doNewImports (filter (\m' -> _moduleKey m' /= thisKey) modules)
@@ -585,7 +585,7 @@ reexports sym e = Set.member sym (foldDeclared Set.insert mempty e)
 -- name is added.  The final case is invalid - a module that imported
 -- itself.
 updateDecls :: MoveSpec -> [ModuleInfo] -> ModuleInfo -> ScanM ()
-updateDecls moveSpec modules info@(ModuleInfo {_module = (A.Module _ _ _ _ decls), _moduleKey = thisKey}) = do
+updateDecls moveSpec modules (ModuleInfo {_module = (A.Module _ _ _ _ decls), _moduleKey = thisKey}) = do
   -- keep (endOfImports m)
   -- Declarations that were already here and are to remain
   mapM_ doDecl (listPairs decls)
@@ -611,9 +611,8 @@ newDecls moveSpec modules thisKey =
     concatMap doModule modules
     where
       -- Scan the declarations of all the modules except this one
-      doModule info@(ModuleInfo {_module = (A.Module l _mh _ps _is decls),
-                                 _moduleKey = someKey,
-                                 _moduleText = someText})
+      doModule info@(ModuleInfo {_module = (A.Module _l _mh _ps _is decls),
+                                 _moduleKey = someKey})
           | someKey /= thisKey =
               scanModule (do skip (endOfImports (_module info))
                              mapM_ (uncurry (doDecl someKey)) (listPairs decls))

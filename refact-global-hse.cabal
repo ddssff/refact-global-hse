@@ -1,6 +1,6 @@
 Name: refact-global-hse
 Version: 1.0
-Synopsis: Move declarations between modules, clean up import lists
+Synopsis: Identity transformations on sets of Haskell modules
 Description: Move declarations between modules, clean up import lists
 Homepage: https://github.com/ddssff/refact-global-hse
 License: BSD3
