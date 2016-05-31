@@ -31,7 +31,9 @@ module SrcLoc
     , withTrailingWhitespace
     , debugRender
     , mapTopAnnotations
-
+    , locSum
+    , locDiff
+    , locFilename
 
     , endOfDecls
     , endOfImports

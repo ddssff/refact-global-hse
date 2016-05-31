@@ -400,7 +400,7 @@ importsForDepartingDecls moveSpec modules (Just (ModuleInfo {_moduleKey = thisKe
                                case t2 d thisKey someKey (findModuleByKey modules someKey) of
                                  Just (ModuleInfo {_module = A.Module _ _ _ someModuleImports _}) ->
                                      case moveType someModuleImports thisModuleName of
-                                       Down ->  "\n" ++ prettyPrint' (importSpecFromDecl someModuleName d) ++ "\n"
+                                       Down -> "\n" ++ prettyPrint' (importSpecFromDecl someModuleName d) ++ "\n"
                                        Up -> ""
                                  -- Moving a declaration from thisKey to someKey is a "Down"
                                  -- move if there are any remaining uses of those symbols in
@@ -411,7 +411,12 @@ importsForDepartingDecls moveSpec modules (Just (ModuleInfo {_moduleKey = thisKe
                                  Nothing -> "\n" ++ prettyPrint' (importSpecFromDecl someModuleName d) ++ "\n"
                        _ -> "") ds
     where
-      t2 d k k' x = trace ("departing: " ++ ezPrint d ++ " from " ++ ezPrint k ++ " -> " ++ ezPrint k') x
+      t2 d k k' x = trace ("departing: " ++ ezPrint d ++ " from " ++ ezPrint k ++ " -> " ++ ezPrint k' ++ ", " ++ moveType' k k') x
+      moveType' thisKey someKey =
+          case (findModuleByKey modules someKey, moduleName thisKey) of
+            (Just (ModuleInfo {_module = A.Module _ _ _ someModuleImports _}), Just thisModuleName) ->
+                show (moveType someModuleImports thisModuleName)
+            _ -> "Unknown"
 importsForDepartingDecls _ _ _ = ""
 
 moveType :: [A.ImportDecl SrcSpanInfo] -> S.ModuleName -> MoveType
@@ -428,15 +433,22 @@ moveType arrivalModuleImports departureModuleName =
       -- departure module.
       False -> Down
 
+-- | Copy the entire import list of the departure module - it will be
+-- cleaned up later.  Also, if this is an Up move we can import the
+-- departure module itself.  If it is a down move the departure module
+-- will be importing the arriving declaration.
 importsForArrivingDecls :: MoveSpec -> ModuleKey -> [A.ImportDecl SrcSpanInfo] -> ModuleInfo -> String
-importsForArrivingDecls moveSpec thisKey thisModuleImports someModule@(ModuleInfo {_moduleKey = someKey, _module = A.Module _ _ _ is ds}) =
+importsForArrivingDecls moveSpec thisKey thisModuleImports someModule@(ModuleInfo {_moduleKey = someKey, _module = A.Module _ _ _ someModuleImports ds}) =
     if any (\d -> applyMoveSpec moveSpec someKey d == thisKey) ds
     then concatMap
              (\i -> prettyPrint' i ++ "\n")
-             (filter (\i -> moduleName thisKey /= Just (sModuleName (A.importModule i))) is) ++
+             (filter (\i -> moduleName thisKey /= Just (sModuleName (A.importModule i))) someModuleImports) ++
          concatMap
              (\i -> prettyPrint' i ++ "\n")
-             (maybeToList (importDeclFromExportSpecs moveSpec thisModuleImports someModule))
+             (maybeToList (importDeclFromExportSpecs moveSpec thisModuleImports someModule)) ++
+         case (fmap (moveType someModuleImports) (moduleName thisKey), moduleName someKey) of
+           (Just Up, Just someName) -> "import " ++ prettyPrint someName ++ "\n"
+           _ -> ""
     else ""
 importsForArrivingDecls _ _ _ _ = ""
 
