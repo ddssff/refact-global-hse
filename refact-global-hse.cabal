@@ -19,6 +19,7 @@ Library
     filemanip > 0.3.6.3,
     filemanip-extra,
     filepath,
+    haskell-names,
     haskell-src-exts,
     lens,
     lifted-base,

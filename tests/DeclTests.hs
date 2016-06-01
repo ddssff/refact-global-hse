@@ -23,7 +23,6 @@ import LoadModule (loadModule')
 import ModuleInfo
 import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
-import System.FilePath ((</>))
 import System.Process (readProcessWithExitCode)
 import Symbols (foldDeclared)
 import Test.HUnit
