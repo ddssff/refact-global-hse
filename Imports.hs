@@ -35,7 +35,7 @@ import System.Process (readProcessWithExitCode, showCommandForUser)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
-cleanImports :: MonadIO m => FilePath -> GHCOpts -> [ModuleInfo] -> m ()
+cleanImports :: MonadIO m => FilePath -> GHCOpts -> [ModuleInfo SrcSpanInfo] -> m ()
 cleanImports _ _ [] = trace ("cleanImports - no modules") (pure ())
 cleanImports scratch opts info =
     dump >> mapM_ (\x -> do newText <- doModule scratch opts x
@@ -63,7 +63,7 @@ cleanImports scratch opts info =
 -- source file.  We also need to modify the imports of any names
 -- that are types that appear in standalone instance derivations so
 -- their members are imported too.
-doModule :: MonadIO m => FilePath -> GHCOpts -> ModuleInfo -> m (Maybe String)
+doModule :: MonadIO m => FilePath -> GHCOpts -> ModuleInfo SrcSpanInfo -> m (Maybe String)
 doModule scratch opts info@(ModuleInfo {_module = A.Module _ mh _ oldImports _}) =
     do let name = maybe "Main" (\ (A.ModuleHead _ (A.ModuleName _ s) _ _) -> s) mh
        let importsPath = scratch </> name ++ ".imports"
@@ -84,14 +84,14 @@ doModule _ _ _ = error "Unsupported module type"
 
 -- | If all the parsing went well and the new imports differ from the
 -- old, update the source file with the new imports.
-updateSource :: Bool -> ModuleInfo -> A.Module SrcSpanInfo -> [A.ImportDecl SrcSpanInfo] -> Maybe String
+updateSource :: Bool -> ModuleInfo SrcSpanInfo -> A.Module SrcSpanInfo -> [A.ImportDecl SrcSpanInfo] -> Maybe String
 updateSource removeEmptyImports info@(ModuleInfo {_module = A.Module _ _ _ oldImports _, _moduleKey = _key}) (A.Module _ _ _ newImports _) extraImports =
     replaceImports (fixNewImports removeEmptyImports info oldImports (newImports ++ extraImports)) info
 updateSource _ _ _ _ = error "updateSource"
 
 -- | Compare the old and new import sets and if they differ clip out
 -- the imports from the sourceText and insert the new ones.
-replaceImports :: [A.ImportDecl SrcSpanInfo] -> ModuleInfo -> Maybe String
+replaceImports :: [A.ImportDecl SrcSpanInfo] -> ModuleInfo SrcSpanInfo -> Maybe String
 replaceImports newImports (ModuleInfo {_module = A.Module _l _mh _ps is _ds})
     | map sImportDecl is == map sImportDecl newImports =
         Nothing
@@ -107,7 +107,7 @@ prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
 
 -- | Final touch-ups - sort and merge similar imports.
 fixNewImports :: Bool         -- ^ If true, imports that turn into empty lists will be removed
-              -> ModuleInfo
+              -> ModuleInfo l
               -> [A.ImportDecl SrcSpanInfo]
               -> [A.ImportDecl SrcSpanInfo]
               -> [A.ImportDecl SrcSpanInfo]
@@ -216,7 +216,7 @@ compareSpecs a b =
       EQ -> compare (sImportSpec a) (sImportSpec b)
       x -> x
 
-standaloneDerivingTypes :: ModuleInfo -> Set (Maybe S.ModuleName, S.Name)
+standaloneDerivingTypes :: ModuleInfo l -> Set (Maybe S.ModuleName, S.Name)
 standaloneDerivingTypes (ModuleInfo {_module = A.XmlPage _ _ _ _ _ _ _}) = error "standaloneDerivingTypes A.XmlPage"
 standaloneDerivingTypes (ModuleInfo {_module = A.XmlHybrid _ _ _ _ _ _ _ _ _}) = error "standaloneDerivingTypes A.XmlHybrid"
 standaloneDerivingTypes (ModuleInfo {_module = A.Module _ _ _ _ decls}) =

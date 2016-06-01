@@ -12,19 +12,19 @@ import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import ModuleKey (moduleFullPath, ModuleKey)
 import Utils (EZPrint(ezPrint))
 
-data ModuleInfo =
+data ModuleInfo l =
     ModuleInfo { _moduleKey :: ModuleKey
-               , _module :: A.Module SrcSpanInfo
+               , _module :: A.Module l
                , _moduleComments :: [Comment]
                , _modulePath :: FilePath
                , _moduleText :: String
                , _moduleSpan :: SrcSpanInfo
                }
 
-instance EZPrint ModuleInfo where
+instance EZPrint (ModuleInfo l) where
     ezPrint (ModuleInfo {_module = A.Module _ (Just (A.ModuleHead _ n _ _)) _ _ _}) = prettyPrint n
     ezPrint (ModuleInfo {_module = A.Module _ Nothing _ _ _}) = "Main"
     ezPrint (ModuleInfo {_module = _}) = error "ezPrint: unexpected module"
 
-fullPathOfModuleInfo :: ModuleInfo -> FilePath
+fullPathOfModuleInfo :: ModuleInfo l -> FilePath
 fullPathOfModuleInfo = moduleFullPath . _moduleKey

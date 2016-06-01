@@ -235,7 +235,7 @@ fixSpan sp =
 
 type ScanM = RWS () String St
 
-scanModule :: ScanM () -> ModuleInfo -> String
+scanModule :: ScanM () -> ModuleInfo l -> String
 scanModule action m@(ModuleInfo {_module = A.Module _ _ _ _ _}) =
     snd $ evalRWS action () (St { _point = SrcLoc (_modulePath m) 1 1
                                 , _remaining = _moduleText m

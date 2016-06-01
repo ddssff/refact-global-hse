@@ -30,16 +30,16 @@ import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension
 import Text.PrettyPrint.HughesPJClass as PP (prettyShow)
 import Utils (EZPrint(ezPrint))
 
-loadModules :: GHCOpts -> [FilePath] -> IO [ModuleInfo]
+loadModules :: GHCOpts -> [FilePath] -> IO [ModuleInfo SrcSpanInfo]
 loadModules opts paths = t1 <$> mapM (loadModule' opts) paths
     where
-      t1 :: [ModuleInfo] -> [ModuleInfo]
+      t1 :: [ModuleInfo l] -> [ModuleInfo l]
       t1 modules = trace ("modules loaded: " ++ show (map ezPrint modules)) modules
 
-loadModule' :: GHCOpts -> FilePath -> IO ModuleInfo
-loadModule' opts path = either (error . show) id <$> (loadModule opts path :: IO (Either SomeException ModuleInfo))
+loadModule' :: GHCOpts -> FilePath -> IO (ModuleInfo SrcSpanInfo)
+loadModule' opts path = either (error . show) id <$> (loadModule opts path :: IO (Either SomeException (ModuleInfo SrcSpanInfo)))
 
-loadModule :: Exception e => GHCOpts -> FilePath -> IO (Either e ModuleInfo)
+loadModule :: Exception e => GHCOpts -> FilePath -> IO (Either e (ModuleInfo SrcSpanInfo))
 loadModule opts path = try $ do
   moduleText <- liftIO $ readFile path
   (parsed', comments, processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions mode path
