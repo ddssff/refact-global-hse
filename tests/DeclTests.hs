@@ -24,7 +24,7 @@ import Language.Haskell.Exts.Extension (KnownExtension(CPP, OverloadedStrings, E
 import Language.Haskell.Exts.Annotated.Simplify (sName, sQName)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import qualified Language.Haskell.Exts.Syntax as S
-import LoadModule (loadModule')
+import LoadModule (Annot, loadModule')
 import ModuleInfo
 import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
@@ -86,7 +86,7 @@ decl2 :: Test
 decl2 = TestLabel "decl2" $ TestCase $ do
           let input = "tests/input/decl-mover"
           testMoveSpec' "tests/expected/decl2" input
-            (runSimpleMoveUnsafe input (moveDeclsByName "withCurrentDirectory" "IO" "Tmp" :: MoveSpec SrcSpanInfo))
+            (runSimpleMoveUnsafe input (moveDeclsByName "withCurrentDirectory" "IO" "Tmp" :: MoveSpec Annot))
 
 -- Test moving a declaration to a module that does *not* currently
 -- import it.  Now we don't know whether it leaves behind uses for
@@ -97,15 +97,15 @@ decl3 :: Test
 decl3 = TestLabel "decl3" $ TestCase $ do
           let input = "tests/input/decl-mover"
           testMoveSpec' "tests/expected/decl3" input
-            (runSimpleMoveUnsafe input (moveDeclsByName "lines'" "SrcLoc" "Tmp" :: MoveSpec SrcSpanInfo) >>
-             runSimpleMoveUnsafe input (moveDeclsByName "lines'" "Tmp" "Utils" :: MoveSpec SrcSpanInfo))
+            (runSimpleMoveUnsafe input (moveDeclsByName "lines'" "SrcLoc" "Tmp" :: MoveSpec Annot) >>
+             runSimpleMoveUnsafe input (moveDeclsByName "lines'" "Tmp" "Utils" :: MoveSpec Annot))
 
 decl4 :: Test
 decl4 = TestLabel "decl4" $ TestCase $ do
           let input = "tests/input/decl-mover"
           testMoveSpec' "tests/expected/decl4" input (runSimpleMoveUnsafe input spec)
     where
-      spec :: MoveSpec SrcSpanInfo
+      spec :: MoveSpec Annot
       spec = foldl1' (<>) [moveDeclsByName "withTempDirectory" "IO" "Utils",
                            moveDeclsByName "ignoringIOErrors" "IO" "Utils",
                            moveDeclsByName "FoldDeclared" "Symbols" "Tmp",
@@ -118,7 +118,7 @@ decl4 = TestLabel "decl4" $ TestCase $ do
 decl5 :: Test
 decl5 = TestLabel "decl5" $ TestCase $ testMoveSpec "tests/expected/decl5" "tests/input/decl-mover" spec
     where
-      spec :: MoveSpec SrcSpanInfo
+      spec :: MoveSpec Annot
       spec = foldl1' (<>) [moveDeclsByName "ModuleKey" "Types" "ModuleKey",
                            moveDeclsByName "fullPathOfModuleKey" "Types" "ModuleKey",
                            moveDeclsByName "moduleKey" "Types" "ModuleKey"]
@@ -126,7 +126,7 @@ decl5 = TestLabel "decl5" $ TestCase $ testMoveSpec "tests/expected/decl5" "test
 decl6 :: Test
 decl6 = TestLabel "decl6" $ TestCase $ testMoveSpec "tests/expected/decl6" "tests/input/decl-mover" spec
     where
-      spec :: MoveSpec SrcSpanInfo
+      spec :: MoveSpec Annot
       spec = foldl1' (<>) [moveDeclsByName "MoveSpec" "Decls" "MoveSpec",
                            moveDeclsByName "moveDeclsByName" "Decls" "MoveSpec",
                            moveDeclsByName "appendMoveSpecs" "Decls" "MoveSpec",
@@ -137,7 +137,7 @@ decl7 :: Test
 decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tests/input/rgh" $
           runMoveUnsafe "tests/input/rgh" [".", "tests"] spec
     where
-      spec :: MoveSpec SrcSpanInfo
+      spec :: MoveSpec Annot
       spec = foldl1' (<>) [moveDeclsByName "textOfSpan" "SrcLoc" "Scan",
                            moveDeclsByName "srcLoc" "SrcLoc" "Scan",
                            moveDeclsByName "endLoc" "SrcLoc" "Scan",
@@ -156,10 +156,10 @@ decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tes
                            moveDeclsByName "St" "SrcLoc" "Scan",
                            moveSpliceDecls testSplice]
       -- testSplice key@(ModuleKey {_moduleName = S.ModuleName "SrcLoc"}) _ = key {_moduleName = S.ModuleName "Scan"}
-      testSplice :: ModuleKey -> A.Exp SrcSpanInfo -> ModuleKey
+      testSplice :: ModuleKey -> A.Exp Annot -> ModuleKey
       testSplice key@(ModuleKey {_moduleName = A.ModuleName () "SrcLoc"}) exp' =
           case unfoldApply exp' of
-            (x : _) | (map simplify (gFind x :: [A.Name SrcSpanInfo])) == [A.Ident () "makeLenses"] -> key {_moduleName = A.ModuleName () "Scan"}
+            (x : _) | (map simplify (gFind x :: [A.Name Annot])) == [A.Ident () "makeLenses"] -> key {_moduleName = A.ModuleName () "Scan"}
             _ -> key
       testSplice key _ = key
       unfoldApply (A.App _ a b) = unfoldApply a ++ [b]
@@ -188,7 +188,7 @@ load8 = TestLabel "load8" $ TestCase $
     where
       expected = "/home/dsf/git/refact-global-hse/tests/expected/decl8"
       actual = "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client"
-      spec :: MoveSpec SrcSpanInfo
+      spec :: MoveSpec Annot
       spec = foldl1' (<>) [moveDeclsByName "foo" "Bar" "Baz"]
 
 load9 :: Test
@@ -210,16 +210,16 @@ load9 = TestLabel "load9" $ TestCase $
     where
       expected = "/home/dsf/git/refact-global-hse/tests/expected/decl8"
       actual = "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client"
-      spec :: MoveSpec SrcSpanInfo
+      spec :: MoveSpec Annot
       spec = foldl1' (<>) [moveDeclsByName "foo" "Bar" "Baz"]
 
 simple1 :: Test
 simple1 =
      TestLabel "simple1" $ TestCase $
       testMoveSpec' "tests/expected/simple1" "tests/input/simple" $
-        runSimpleMoveUnsafe "tests/input/simple" (moveDeclsByName "listPairs" "A" "B" :: MoveSpec SrcSpanInfo)
+        runSimpleMoveUnsafe "tests/input/simple" (moveDeclsByName "listPairs" "A" "B" :: MoveSpec Annot)
 
-testMoveSpec :: FilePath -> FilePath -> MoveSpec SrcSpanInfo -> IO ()
+testMoveSpec :: FilePath -> FilePath -> MoveSpec Annot -> IO ()
 testMoveSpec expected actual moveSpec =
     testMoveSpec' expected actual $ runSimpleMoveUnsafe actual moveSpec
 

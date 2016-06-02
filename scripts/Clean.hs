@@ -10,6 +10,7 @@ import Data.Monoid ((<>))
 import Debug.Trace
 import GHC (hsSourceDirs)
 import Imports (cleanImports)
+import Language.Haskell.Names (Scoped(Scoped))
 import LoadModule (loadModules)
 import Utils (withCleanRepo, withCurrentDirectory, withTempDirectory)
 import System.Directory
@@ -86,4 +87,4 @@ main = do
   params <- buildParams >>= finalParams
   (if (view unsafe params) then id else withCleanRepo) $ withTempDirectory True "." "scratch" $ \scratch -> do
     modules <- loadModules def (view moduverse params)
-    cleanImports scratch (def {hsSourceDirs = view topDirs params})  modules
+    cleanImports scratch (def {hsSourceDirs = view topDirs params}) (map (fmap (\(Scoped _ x) -> x)) modules)

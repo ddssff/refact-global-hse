@@ -17,7 +17,7 @@ import Data.Set as Set (empty, fromList, member, Set, singleton, union, unions)
 import qualified Data.Set as Set (map)
 import Debug.Trace (trace)
 import GHC (GHCOpts(..), ghcProcessArgs, extensionsForHSEParser)
-import qualified Language.Haskell.Exts.Annotated as A (Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Name(Ident, Symbol), Pretty, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
+import qualified Language.Haskell.Exts.Annotated as A (ann, Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Name(Ident, Symbol), Pretty, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import LoadModule (loadModule)
@@ -173,7 +173,7 @@ importMergable a b =
       -- source locations.  This will distinguish "import Foo as F" from
       -- "import Foo", but will let us group imports that can be merged.
       -- Don't merge hiding imports with regular imports.
-      A.SrcLoc _path _ _ = srcLoc a
+      A.SrcLoc _path _ _ = srcLoc (A.ann a)
       noSpecs :: A.ImportDecl l -> A.ImportDecl l
       noSpecs x = x { A.importSpecs = case A.importSpecs x of
                                         Just (A.ImportSpecList l True _) -> Just (A.ImportSpecList l True []) -- hiding

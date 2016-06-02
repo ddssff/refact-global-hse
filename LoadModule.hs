@@ -4,6 +4,7 @@ module LoadModule
     ( loadModule
     , loadModule'
     , loadModules
+    , Annot
     , addScoping
     -- , hseExtensions
     -- , hsFlags
@@ -31,9 +32,11 @@ import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension
 import Text.PrettyPrint.HughesPJClass as PP (prettyShow)
 import Utils (EZPrint(ezPrint))
 
-loadModules :: GHCOpts -> [FilePath] -> IO [ModuleInfo ({-Scoped-} SrcSpanInfo)]
+type Annot = Scoped SrcSpanInfo
+
+loadModules :: GHCOpts -> [FilePath] -> IO [ModuleInfo Annot]
 loadModules opts paths = do
-  t1 <$> {-addScoping <$>-} mapM (loadModule' opts) paths
+  t1 <$> addScoping <$> mapM (loadModule' opts) paths
     where
       t1 :: [ModuleInfo l] -> [ModuleInfo l]
       t1 modules = trace ("modules loaded: " ++ show (map ezPrint modules)) modules

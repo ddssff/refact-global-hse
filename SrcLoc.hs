@@ -3,7 +3,7 @@
 module SrcLoc
     ( -- * SpanInfo queries
       srcLoc
-    , endLoc
+    , EndLoc(endLoc)
     -- * Location and span info for a piece of text
     , spanOfText
     , endLocOfText
@@ -53,7 +53,8 @@ import Data.List (dropWhileEnd)
 import Data.Monoid ((<>))
 import Language.Haskell.Exts.Annotated.Syntax as A -- (Annotated(ann), Module(..))
 import Language.Haskell.Exts.Comments (Comment(..))
-import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
+import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcInfo(..), SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
+import Language.Haskell.Names
 import ModuleInfo
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)
 import Utils (EZPrint(ezPrint), lines')
@@ -91,10 +92,15 @@ instance SpanInfo (SrcLoc, SrcLoc) where
     srcSpan (b, e) = mkSrcSpan (SrcLoc (srcFilename b) (srcLine b) (srcColumn b))
                                (SrcLoc (srcFilename e) (srcLine e) (srcColumn e))
 
+srcLoc :: SrcInfo a => a -> SrcLoc
+srcLoc = getPointLoc
+
+{-
 srcLoc :: SpanInfo a => a -> SrcLoc
 srcLoc x = let (SrcSpan f b e _ _) = srcSpan x in SrcLoc f b e
 endLoc :: SpanInfo a => a -> SrcLoc
 endLoc x = let (SrcSpan f _ _ b e) = srcSpan x in SrcLoc f b e
+-}
 
 locDiff :: SrcLoc -> SrcLoc -> SrcLoc
 locDiff (SrcLoc file l1 c1) (SrcLoc _ l2 c2) =
@@ -124,19 +130,19 @@ spanOfText path s =
                  srcInfoPoints = []}
 
 -- | Return the text before, within, and after a span
-textTripleOfSpan :: SpanInfo a => a -> String -> (String, String, String)
+textTripleOfSpan :: (SrcInfo a, EndLoc a) => a -> String -> (String, String, String)
 textTripleOfSpan sp s =
     let (pref, s') = splitText (srcLoc sp) s in
     let (s'', suff) = splitText (locDiff (endLoc sp) (srcLoc sp)) s' in
     (pref, s'', suff)
 
-textOfSpan :: SpanInfo a => a -> String -> String
+textOfSpan :: (SrcInfo a, EndLoc a) => a -> String -> String
 textOfSpan sp s =
     let (_, s') = splitText (srcLoc sp) s in
     let (s'', _) = splitText (locDiff (endLoc sp) (srcLoc sp)) s' in
     s''
 
-testSpan :: SpanInfo a => String -> a -> a
+testSpan :: (SrcInfo a, EndLoc a) => String -> a -> a
 testSpan msg sp =
     case (srcLoc sp, endLoc sp) of
       (SrcLoc _ _ c1, SrcLoc _ _ c2) | c1 < 1 || c2 < 1 -> error ("testSpan - " ++ msg)
@@ -329,7 +335,7 @@ keepAll = do
 skip :: SrcLoc -> ScanM ()
 skip loc = do
   p <- use point
-  pure $ testSpan "skip" (p, loc)
+  pure $ testSpan "skip" (SrcSpan (srcFilename loc) (srcLine p) (srcColumn p) (srcLine loc) (srcColumn loc))
   t' <- use remaining
   let (_, t'') = splitText (locDiff loc p) t'
   remaining .= t''
@@ -419,34 +425,40 @@ mapTopAnnotations fn (A.Module loc mh ps is ds) =
       fixDecl (MinimalPragma l a) = (MinimalPragma (fn l) a)
       fixDecl (RoleAnnotDecl l a b) = (RoleAnnotDecl (fn l) a b)
 
-endOfDecls :: A.Module SrcSpanInfo -> SrcLoc
-endOfDecls m@(A.Module _l _mh _ps _ []) = endOfImports m
-endOfDecls (A.Module _l _mh _ps _is ds) = endLoc (A.ann (last ds))
+class EndLoc a where endLoc :: a -> SrcLoc
+instance EndLoc SrcSpan where endLoc x = SrcLoc (fileName x) (srcSpanEndLine x) (srcSpanEndColumn x)
+instance EndLoc SrcSpanInfo where endLoc = endLoc . srcInfoSpan
+instance EndLoc a => EndLoc (Scoped a) where endLoc (Scoped _ x) = endLoc x
+instance EndLoc (SrcLoc, SrcLoc) where endLoc = snd
 
-endOfImports :: A.Module SrcSpanInfo -> SrcLoc
+endOfDecls :: EndLoc l => A.Module l -> SrcLoc
+endOfDecls m@(A.Module _l _mh _ps _ []) = endOfImports m
+endOfDecls m@(A.Module _l _mh _ps _is ds) = endLoc (A.ann (last ds))
+
+endOfImports :: EndLoc l => A.Module l -> SrcLoc
 endOfImports m@(A.Module _l _mh _ps [] _) = endOfHeader m
 endOfImports (A.Module _l _mh _ps is _) = endLoc (A.ann (last is))
 
-endOfHeader :: A.Module SrcSpanInfo -> SrcLoc
+endOfHeader :: EndLoc l => A.Module l -> SrcLoc
 endOfHeader m@(A.Module _l Nothing _ps _ _) = endOfPragmas m
 endOfHeader (A.Module _l (Just h) _ps _is _) = endLoc (A.ann h)
 
-endOfPragmas :: A.Module SrcSpanInfo -> SrcLoc
+endOfPragmas :: EndLoc l => A.Module l -> SrcLoc
 endOfPragmas (A.Module l _ [] _ _) = endLoc l
 endOfPragmas (A.Module _l _ ps _ _) = endLoc (A.ann (last ps))
 
-startOfDecls :: A.Module SrcSpanInfo -> SrcLoc
+startOfDecls :: SrcInfo l => A.Module l -> SrcLoc
 startOfDecls m@(A.Module _l _mh _ps _is []) = startOfImports m
 startOfDecls (A.Module _l _mh _ps _is (d : _)) = srcLoc (A.ann d)
 
-startOfImports :: A.Module SrcSpanInfo -> SrcLoc
+startOfImports :: SrcInfo l => A.Module l -> SrcLoc
 startOfImports m@(A.Module _l _mh _ps [] _) = startOfHeader m
 startOfImports (A.Module _l _mh _ps (i : _) _) = srcLoc (A.ann i)
 
-startOfHeader :: A.Module SrcSpanInfo -> SrcLoc
+startOfHeader :: SrcInfo l => A.Module l -> SrcLoc
 startOfHeader m@(A.Module _l Nothing _ps _ _) = startOfPragmas m
 startOfHeader (A.Module _l (Just h) _ps _is _) = srcLoc (A.ann h)
 
-startOfPragmas :: A.Module SrcSpanInfo -> SrcLoc
+startOfPragmas :: SrcInfo l => A.Module l -> SrcLoc
 startOfPragmas (A.Module l _ [] _ _) = srcLoc l
 startOfPragmas (A.Module _l _ (p : _) _ _) = srcLoc (A.ann p)
