@@ -18,6 +18,7 @@ import Imports (cleanImports)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A
 import Language.Haskell.Exts.Extension (KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules))
 import Language.Haskell.Exts.Annotated.Simplify (sName, sQName)
+import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import qualified Language.Haskell.Exts.Syntax as S
 import LoadModule (loadModule')
 import ModuleInfo
@@ -219,7 +220,7 @@ testMoveSpec' expected actual action = do
   when (code == ExitSuccess) (gitResetSubdir actual)
   assertString diff
 
-testSpec :: MoveSpec -> ModuleInfo -> IO ModuleInfo
+testSpec :: MoveSpec -> ModuleInfo SrcSpanInfo -> IO (ModuleInfo SrcSpanInfo)
 testSpec moveSpec m@(ModuleInfo {_moduleKey = k, _module = A.Module _ _ _ _ ds}) = do
   putStrLn ("---- module " ++ show (moduleName k) ++ " ----")
   mapM_ (\d -> let k' = applyMoveSpec moveSpec k d in

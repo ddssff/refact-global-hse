@@ -25,6 +25,8 @@
    28. Should there be options to modify imports of library modules that were
        previously changed using Move.hs?  You could use them to document how
        to upgrade clients of your library.  Eh.
+   29. Use fmap (const ()) instead of the simplify types
+   30. Add Scoped to SrcSpanInfo
 
 DONE
 

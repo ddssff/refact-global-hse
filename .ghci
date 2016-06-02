@@ -3,6 +3,7 @@
 :load tests/Tests
 :m +Data.Monoid System.Process
 :m +Language.Haskell.Exts.Annotated
+:m +Language.Haskell.Names
 :m +Test.HUnit
 :m +Decls
 :m +LoadModule

@@ -1,4 +1,4 @@
-{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
 
 module ModuleKey
     ( ModuleKey(ModuleKey, _moduleTop, _moduleName, _moduleExt, ModuleFullPath, _moduleFullPath)
@@ -7,6 +7,7 @@ module ModuleKey
     , moduleTop
     ) where
 
+import Data.Generics
 import Data.List (groupBy, intercalate)
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.Syntax as S (ModuleName(..))
@@ -34,7 +35,7 @@ data ModuleKey
     | ModuleFullPath
       { -- | The full path to the module file, canonicalized.
         _moduleFullPath :: FilePath }
-    deriving (Eq, Ord, Show)
+    deriving (Eq, Ord, Show, Data, Typeable)
 
 moduleFullPath :: ModuleKey -> FilePath
 moduleFullPath (ModuleFullPath {_moduleFullPath = x}) = x
