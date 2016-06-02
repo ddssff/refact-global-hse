@@ -9,8 +9,8 @@ module ModuleKey
 
 import Data.Generics
 import Data.List (groupBy, intercalate)
+import Language.Haskell.Exts.Annotated as A (ModuleName(..))
 import Language.Haskell.Exts.Pretty (prettyPrint)
-import Language.Haskell.Exts.Syntax as S (ModuleName(..))
 import System.FilePath ((<.>), (</>))
 import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), text)
 import Utils (EZPrint(ezPrint))
@@ -29,7 +29,7 @@ data ModuleKey
         -- finds this module (canonicalized)
         _moduleTop :: FilePath,
         -- | The module name, if it has one.
-        _moduleName :: S.ModuleName,
+        _moduleName :: A.ModuleName (),
         -- | The extension, including the dot
         _moduleExt :: String }
     | ModuleFullPath
@@ -39,12 +39,12 @@ data ModuleKey
 
 moduleFullPath :: ModuleKey -> FilePath
 moduleFullPath (ModuleFullPath {_moduleFullPath = x}) = x
-moduleFullPath (ModuleKey {_moduleTop = top, _moduleName = S.ModuleName mname}) =
+moduleFullPath (ModuleKey {_moduleTop = top, _moduleName = A.ModuleName () mname}) =
     top </>
     (intercalate "/" . filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))) mname <.>
     "hs"
 
-moduleName :: ModuleKey -> Maybe S.ModuleName
+moduleName :: ModuleKey -> Maybe (A.ModuleName ())
 moduleName (ModuleKey {_moduleName = name}) = Just name
 moduleName (ModuleFullPath {}) = Nothing
 
@@ -57,5 +57,5 @@ instance EZPrint ModuleKey where
     ezPrint (ModuleFullPath p) = p
 
 instance Pretty ModuleKey where
-    pPrint (ModuleKey {_moduleName = S.ModuleName m}) = text m
+    pPrint (ModuleKey {_moduleName = A.ModuleName () m}) = text m
     pPrint (ModuleFullPath p) = text ("Main (in " ++ p ++ ")")

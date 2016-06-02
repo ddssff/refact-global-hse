@@ -151,3 +151,6 @@ listTriples l = zip3 ([Nothing] ++ map Just l) l (tail (map Just l ++ [Nothing])
 --   dropWhileNext even [2,4,6,1,3,5,8] -> [6,1,3,5,8]
 dropWhileNext :: (a -> Bool) -> [a] -> [a]
 dropWhileNext p xs = mapMaybe fst $ dropWhile (\(_,x) -> maybe True p x) $ listPairs xs
+
+simplify :: Functor f => f a -> f ()
+simplify = fmap (const ())

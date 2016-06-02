@@ -1,10 +1,11 @@
 -- Example:
 -- runhaskell scripts/Move.hs --move=FoldDeclared,Symbols,Tmp --unsafe
 
-{-# LANGUAGE RankNTypes, TemplateHaskell #-}
+{-# LANGUAGE RankNTypes, ScopedTypeVariables, TemplateHaskell #-}
 import Control.Lens
 import Control.Monad (foldM)
 import Data.Default (def)
+import Data.Data (Data)
 import Data.List (groupBy, stripPrefix)
 import Data.Monoid ((<>), mempty)
 import Debug.Trace
@@ -16,8 +17,8 @@ import System.FilePath.Find ((&&?), (==?), always, depth, extension, fileType, F
 import System.Console.GetOpt
 import Utils (withCleanRepo, withCurrentDirectory, withTempDirectory)
 
-data Params
-    = Params { _moveSpec :: MoveSpec
+data Params l
+    = Params { _moveSpec :: MoveSpec l
              , _topDir :: FilePath
              , _hsDirs :: [FilePath]
              , _lsDirs :: [FilePath]
@@ -27,10 +28,10 @@ data Params
 
 $(makeLenses ''Params)
 
-params0 :: Params
+params0 :: Data l => Params l
 params0 = Params {_moveSpec = mempty, _topDir = ".", _hsDirs = [], _findDirs = [], _lsDirs = [], _moduverse = [], _unsafe = False}
 
-options :: [OptDescr (Params -> Params)]
+options :: forall l. Data l => [OptDescr (Params l -> Params l)]
 options =
     [ Option "" ["decl"] (ReqArg (\s -> case filter (not . elem ',') (groupBy (\a b -> (a == ',') == (b == ',')) s) of
                                           [name, depart, arrive] -> over moveSpec ((<>) (moveDeclsByName name depart arrive))
@@ -48,14 +49,14 @@ options =
     , Option "" ["find"] (ReqArg (\s -> over findDirs (s :)) "DIR") "Directory relative to top to search (recursively) for .hs files to add to the moduverse"
     , Option "" ["unsafe"] (NoArg (set unsafe True)) "Skip the safety check - allow uncommitted edits in repo where clean is performed" ]
 
-buildParams :: [String] -> IO Params
+buildParams :: forall l. Data l => [String] -> IO (Params l)
 buildParams args = do
   case getOpt' Permute options args of
     (fns, [], [], []) -> finalize (foldr ($) params0 fns)
-    (x, y, z, w) -> error (usageInfo ("error: " ++ show (y, z, w) ++ "\nspecify modules and at least one move spec") options)
+    (x, y, z, w) -> error (usageInfo ("error: " ++ show (y, z, w) ++ "\nspecify modules and at least one move spec") (options :: [OptDescr (Params l -> Params l)]))
     where
       -- Search the findDir directories for paths and add them to moduverse.
-      finalize :: Params -> IO Params
+      finalize :: Params l -> IO (Params l)
       finalize params = do
         paths1 <- mapM (\dir -> map (makeRelative (view topDir params))
                                               <$> (find (depth ==? 0)

@@ -17,22 +17,20 @@ import Data.Set as Set (empty, fromList, member, Set, singleton, union, unions)
 import qualified Data.Set as Set (map)
 import Debug.Trace (trace)
 import GHC (GHCOpts(..), ghcProcessArgs, extensionsForHSEParser)
-import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Pretty, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
-import Language.Haskell.Exts.Annotated.Simplify as S (sImportDecl, sImportSpec, sModuleName, sName)
-import Language.Haskell.Exts.Extension (Extension(EnableExtension))
+import qualified Language.Haskell.Exts.Annotated as A (Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Name(Ident, Symbol), Pretty, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
-import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(importLoc, importModule, importSpecs), ModuleName(..), Name(..))
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath)
-import SrcLoc (endLoc, endOfHeader, keep, keepAll, scanModule, skip, srcLoc, startOfDecls)
+import SrcLoc (endOfHeader, keep, keepAll, scanModule, skip, srcLoc, startOfDecls)
 import Symbols (symbolsDeclaredBy)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
 import System.FilePath.Extra2 (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
+import Utils (simplify)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> GHCOpts -> [ModuleInfo SrcSpanInfo] -> m ()
@@ -93,9 +91,9 @@ updateSource _ _ _ _ = error "updateSource"
 -- the imports from the sourceText and insert the new ones.
 replaceImports :: [A.ImportDecl SrcSpanInfo] -> ModuleInfo SrcSpanInfo -> Maybe String
 replaceImports newImports (ModuleInfo {_module = A.Module _l _mh _ps is _ds})
-    | map sImportDecl is == map sImportDecl newImports =
+    | map simplify is == map simplify newImports =
         Nothing
-replaceImports newImports info@(ModuleInfo {_module = m@(A.Module _l _mh _ps is@(i : _) _ds)}) =
+replaceImports newImports info@(ModuleInfo {_module = m@(A.Module _l _mh _ps (_ : _) _ds)}) =
     Just $ scanModule (do keep (endOfHeader m)-- (srcLoc (A.ann i))
                           tell ("\n\n" ++ intercalate "\n" (map prettyPrint' newImports))
                           skip (startOfDecls m) -- (endLoc (A.ann (last is)))
@@ -128,9 +126,9 @@ fixNewImports remove m oldImports imports =
           i {A.importSpecs = Just (A.ImportSpecList l f (Prelude.map (expandSpec i) specs))}
       expandSDTypes i = i
       expandSpec i s =
-          if not (A.importQualified i) && member (Nothing, sName n) sdTypes ||
-             maybe False (\ mn -> (member (Just (sModuleName mn), sName n) sdTypes)) (A.importAs i) ||
-             member (Just (sModuleName (A.importModule i)), sName n) sdTypes
+          if not (A.importQualified i) && member (Nothing, simplify n) sdTypes ||
+             maybe False (\ mn -> (member (Just (simplify mn), simplify n) sdTypes)) (A.importAs i) ||
+             member (Just (simplify (A.importModule i)), simplify n) sdTypes
           then s'
           else s
           where
@@ -148,13 +146,13 @@ fixNewImports remove m oldImports imports =
       -- Eliminate imports that became empty
       -- importPred :: ImportDecl -> Bool
       importPred (A.ImportDecl _ mn _ _ _ _ _ (Just (A.ImportSpecList _ _ []))) =
-          not remove || maybe False (isEmptyImport . A.importSpecs) (find ((== (sModuleName mn)) . sModuleName . A.importModule) oldImports)
+          not remove || maybe False (isEmptyImport . A.importSpecs) (find ((== (simplify mn)) . simplify . A.importModule) oldImports)
           where
             isEmptyImport (Just (A.ImportSpecList _ _ [])) = True
             isEmptyImport _ = False
       importPred _ = True
 
-      sdTypes :: Set (Maybe S.ModuleName, S.Name)
+      sdTypes :: Set (Maybe (A.ModuleName ()), A.Name ())
       sdTypes = standaloneDerivingTypes m
 
 -- | Compare the two import declarations ignoring the things that are
@@ -165,22 +163,21 @@ importMergable a b =
     case (compare `on` noSpecs) a' b' of
       EQ -> EQ
       specOrdering ->
-          case (compare `on` S.importModule) a' b' of
+          case (compare `on` (A.importModule . simplify)) a' b' of
             EQ -> specOrdering
             moduleNameOrdering -> moduleNameOrdering
     where
-      a' = sImportDecl a
-      b' = sImportDecl b
+      a' = simplify a
+      b' = simplify b
       -- Return a version of an ImportDecl with an empty spec list and no
       -- source locations.  This will distinguish "import Foo as F" from
       -- "import Foo", but will let us group imports that can be merged.
       -- Don't merge hiding imports with regular imports.
-      A.SrcLoc path _ _ = srcLoc a
-      noSpecs :: S.ImportDecl -> S.ImportDecl
-      noSpecs x = x { S.importLoc = A.SrcLoc path 1 1, -- can we just use srcLoc a?
-                      S.importSpecs = case S.importSpecs x of
-                                        Just (True, _) -> Just (True, []) -- hiding
-                                        Just (False, _) -> Nothing
+      A.SrcLoc _path _ _ = srcLoc a
+      noSpecs :: A.ImportDecl l -> A.ImportDecl l
+      noSpecs x = x { A.importSpecs = case A.importSpecs x of
+                                        Just (A.ImportSpecList l True _) -> Just (A.ImportSpecList l True []) -- hiding
+                                        Just (A.ImportSpecList _ False _) -> Nothing
                                         Nothing -> Nothing }
 
 -- Merge elements of a sorted spec list as possible
@@ -213,22 +210,22 @@ compareSpecs :: A.ImportSpec SrcSpanInfo -> A.ImportSpec SrcSpanInfo -> Ordering
 compareSpecs a b =
     case compare (Set.map (Prelude.map toLower . nameString) $ Set.fromList $ symbolsDeclaredBy a)
                  (Set.map (Prelude.map toLower . nameString) $ Set.fromList $ symbolsDeclaredBy b) of
-      EQ -> compare (sImportSpec a) (sImportSpec b)
+      EQ -> compare (simplify a) (simplify b)
       x -> x
 
-standaloneDerivingTypes :: ModuleInfo l -> Set (Maybe S.ModuleName, S.Name)
+standaloneDerivingTypes :: ModuleInfo l -> Set (Maybe (A.ModuleName ()), A.Name ())
 standaloneDerivingTypes (ModuleInfo {_module = A.XmlPage _ _ _ _ _ _ _}) = error "standaloneDerivingTypes A.XmlPage"
 standaloneDerivingTypes (ModuleInfo {_module = A.XmlHybrid _ _ _ _ _ _ _ _ _}) = error "standaloneDerivingTypes A.XmlHybrid"
 standaloneDerivingTypes (ModuleInfo {_module = A.Module _ _ _ _ decls}) =
     unions (Prelude.map derivDeclTypes decls)
 
-nameString :: S.Name -> String
-nameString (S.Ident s) = s
-nameString (S.Symbol s) = s
+nameString :: A.Name l -> String
+nameString (A.Ident _ s) = s
+nameString (A.Symbol _ s) = s
 
 -- | Collect the declared types of a standalone deriving declaration.
 class DerivDeclTypes a where
-    derivDeclTypes :: a -> Set (Maybe S.ModuleName, S.Name)
+    derivDeclTypes :: a -> Set (Maybe (A.ModuleName ()), A.Name ())
 
 instance DerivDeclTypes (A.Decl l) where
     derivDeclTypes (A.DerivDecl _ _ x) = derivDeclTypes x
@@ -251,9 +248,9 @@ instance DerivDeclTypes (A.Type l) where
     derivDeclTypes (A.TyList _ x) =  derivDeclTypes x -- list syntax, e.g. [a], as opposed to [] a
     derivDeclTypes (A.TyApp _ x y) = union (derivDeclTypes x) (derivDeclTypes y) -- application of a type constructor
     derivDeclTypes (A.TyVar _ _) = empty -- type variable
-    derivDeclTypes (A.TyCon _ (A.Qual _ m n)) = singleton (Just (sModuleName m), sName n) -- named type or type constructor
+    derivDeclTypes (A.TyCon _ (A.Qual _ m n)) = singleton (Just (simplify m), simplify n) -- named type or type constructor
        -- Unqualified names refer to imports without "qualified" or "as" values.
-    derivDeclTypes (A.TyCon _ (A.UnQual _ n)) = singleton (Nothing, sName n)
+    derivDeclTypes (A.TyCon _ (A.UnQual _ n)) = singleton (Nothing, simplify n)
     derivDeclTypes (A.TyCon _ _) = empty
     derivDeclTypes (A.TyParen _ x) = derivDeclTypes x -- type surrounded by parentheses
     derivDeclTypes (A.TyInfix _ x _op y) = union (derivDeclTypes x) (derivDeclTypes y) -- infix type constructor

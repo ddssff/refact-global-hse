@@ -259,28 +259,32 @@ instance FoldDeclared (A.ExportSpec l) where
 -- Return the set of symbols appearing in a construct.  Some
 -- constructs, such as instance declarations, declare no symbols, in
 -- which case Nothing is returned.  Some declare more than one.
-symbolsDeclaredBy :: FoldDeclared a => a -> [S.Name]
-symbolsDeclaredBy = reverse . foldDeclared (:) mempty
+symbolsDeclaredBy :: FoldDeclared a => a -> [A.Name ()]
+symbolsDeclaredBy = map aNameFromSName . reverse . foldDeclared (:) mempty
 
-members :: FoldMembers a => a -> [S.Name]
-members = foldMembers (:) mempty
+aNameFromSName :: S.Name -> A.Name ()
+aNameFromSName (S.Ident s) = A.Ident () s
+aNameFromSName (S.Symbol s) = A.Symbol () s
 
-exports :: (FoldDeclared a, FoldMembers a) => a -> [S.ExportSpec]
+members :: FoldMembers a => a -> [A.Name ()]
+members = map aNameFromSName . foldMembers (:) mempty
+
+exports :: (FoldDeclared a, FoldMembers a) => a -> [A.ExportSpec ()]
 exports x = case (symbolsDeclaredBy x, members x) of
-              ([n], []) -> [S.EVar (S.UnQual n)]
-              ([n], ms) -> [S.EThingWith (S.UnQual n) (Prelude.map S.VarName ms)]
+              ([n], []) -> [A.EVar () (A.UnQual () n)]
+              ([n], ms) -> [A.EThingWith () (A.UnQual () n) (Prelude.map (A.VarName ()) ms)]
               ([], []) -> []
               ([], _) -> error "exports: members with no top level name"
-              (ns, []) -> Prelude.map (S.EVar . S.UnQual) ns
+              (ns, []) -> Prelude.map (A.EVar () . A.UnQual ()) ns
               y -> error $ "exports: multiple top level names and member names: " ++ show y
 
-imports :: (FoldDeclared a, FoldMembers a) => a -> [S.ImportSpec]
+imports :: (FoldDeclared a, FoldMembers a) => a -> [A.ImportSpec ()]
 imports x = case (symbolsDeclaredBy x, members x) of
-              ([n], []) -> [S.IVar n]
-              ([n], ms) -> [S.IThingWith n (Prelude.map S.VarName ms)]
+              ([n], []) -> [A.IVar () n]
+              ([n], ms) -> [A.IThingWith () n (Prelude.map (A.VarName ()) ms)]
               ([], []) -> []
               ([], _ms) -> error "exports: members with no top level name"
-              (ns, []) -> Prelude.map S.IVar ns
+              (ns, []) -> Prelude.map (A.IVar ()) ns
               y -> error $ "imports: multiple top level names and member names: " ++ show y
 
 -- | Fold over the declared members - e.g. the name and method names of a class

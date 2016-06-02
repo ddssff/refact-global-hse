@@ -4,6 +4,7 @@ module LoadModule
     ( loadModule
     , loadModule'
     , loadModules
+    , addScoping
     -- , hseExtensions
     -- , hsFlags
     -- , hsSourceDirs
@@ -21,7 +22,7 @@ import Language.Haskell.Exts.Annotated as A (Module(..), ModuleHead(ModuleHead),
 import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensions, parseFilename, fixities), fromParseResult)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo(..))
-import Language.Haskell.Exts.Syntax as S (ModuleName(ModuleName))
+import Language.Haskell.Names (annotate, resolve, Scoped)
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (ModuleKey(..))
 import SrcLoc (fixSpan, mapTopAnnotations, fixEnds, spanOfText)
@@ -30,11 +31,17 @@ import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension
 import Text.PrettyPrint.HughesPJClass as PP (prettyShow)
 import Utils (EZPrint(ezPrint))
 
-loadModules :: GHCOpts -> [FilePath] -> IO [ModuleInfo SrcSpanInfo]
-loadModules opts paths = t1 <$> mapM (loadModule' opts) paths
+loadModules :: GHCOpts -> [FilePath] -> IO [ModuleInfo ({-Scoped-} SrcSpanInfo)]
+loadModules opts paths = do
+  t1 <$> {-addScoping <$>-} mapM (loadModule' opts) paths
     where
       t1 :: [ModuleInfo l] -> [ModuleInfo l]
       t1 modules = trace ("modules loaded: " ++ show (map ezPrint modules)) modules
+
+addScoping :: [ModuleInfo SrcSpanInfo] -> [ModuleInfo (Scoped SrcSpanInfo)]
+addScoping mods =
+    map (\m -> m {_module = annotate env (_module m)}) mods
+    where env = resolve (map _module mods) mempty
 
 loadModule' :: GHCOpts -> FilePath -> IO (ModuleInfo SrcSpanInfo)
 loadModule' opts path = either (error . show) id <$> (loadModule opts path :: IO (Either SomeException (ModuleInfo SrcSpanInfo)))
@@ -93,5 +100,5 @@ moduleKey path (A.Module _ (Just (A.ModuleHead _ (A.ModuleName _ name) _ _)) _ _
               (dirs', name'') = splitAt (length dirs - length name') dirs in
           case (name'' == name') of
             False -> ModuleFullPath path'
-            True -> ModuleKey {_moduleTop = joinPath dirs', _moduleName = S.ModuleName (intercalate "." name''), _moduleExt = ext}
+            True -> ModuleKey {_moduleTop = joinPath dirs', _moduleName = A.ModuleName () (intercalate "." name''), _moduleExt = ext}
       splitModuleName = filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))
