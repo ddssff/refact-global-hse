@@ -323,7 +323,7 @@ findNewKeyOfExportSpec mv info@(ModuleInfo {_moduleKey = k}) spec =
     fmap (applyMoveSpec mv k) (findDeclOfExportSpec info spec)
 
 -- | Find the declaration that causes all the symbols in the
--- ImportSpec to come into existance.
+-- ExportSpec to come into existance.
 findDeclOfExportSpec :: forall l. (A.SrcInfo l, Show l) => ModuleInfo l -> A.ExportSpec l -> Maybe (A.Decl l)
 findDeclOfExportSpec info spec =
     findDeclOfSymbols info (foldDeclared Set.insert mempty spec)

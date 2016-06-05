@@ -6,10 +6,10 @@
 import Control.Exception (SomeException)
 import Decls (moveDeclsAndClean)
 import IO (withTempDirectory)
-import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl(FunBind, TypeSig), Name(Ident), Match(Match))
+import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl(FunBind, TypeSig), Match(Match), Name(Ident))
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import qualified Language.Haskell.Exts.Syntax as S (ModuleName(ModuleName))
-import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
+import System.FilePath.Find (always, extension, fileType, find, (&&?), (==?), FileType(RegularFile))
 import Tmp (withCurrentDirectory)
 import Types (loadModule, ModuleInfo(..), ModuleKey(..))
 

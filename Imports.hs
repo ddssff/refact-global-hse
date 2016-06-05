@@ -8,7 +8,9 @@ import Control.Exception (SomeException)
 import Control.Monad (void)
 import Control.Monad.RWS (MonadWriter(tell))
 import Control.Monad.Trans (liftIO, MonadIO)
+import Data.Char (toLower)
 import Data.Function (on)
+import Data.Generics (everywhere, mkT)
 import Data.List (find, groupBy, intercalate, nub, sort, sortBy)
 import Data.Maybe (catMaybes)
 import Data.Monoid ((<>))
@@ -207,10 +209,14 @@ mergeSpecs xs = xs
 
 -- Compare function used to sort the symbols within an import.
 compareSpecs :: A.ImportSpec SrcSpanInfo -> A.ImportSpec SrcSpanInfo -> Ordering
+-- compareSpecs a b = (compare `on` sImportSpec) a b
 compareSpecs a b =
-    case compare (sort (nub (gFind a :: [A.Name SrcSpanInfo]))) (sort (nub (gFind b :: [A.Name SrcSpanInfo]))) of
-      EQ -> compare (simplify a) (simplify b)
+    case (compare `on` (everywhere (mkT (map toLower)))) a' b' of
+      EQ -> compare b' a' -- upper case first
       x -> x
+    where
+      a' = prettyPrint' a
+      b' = prettyPrint' b
 
 standaloneDerivingTypes :: ModuleInfo l -> Set (Maybe (A.ModuleName ()), A.Name ())
 standaloneDerivingTypes (ModuleInfo {_module = A.XmlPage _ _ _ _ _ _ _}) = error "standaloneDerivingTypes A.XmlPage"
