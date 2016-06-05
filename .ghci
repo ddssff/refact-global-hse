@@ -1,4 +1,5 @@
 :set -itests
+-- :set -itests:../haskell-names/src:../haskell-names/dist/build/autogen
 :set -XScopedTypeVariables
 :load tests/Tests
 :m +Data.Monoid System.Process

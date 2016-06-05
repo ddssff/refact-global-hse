@@ -8,29 +8,26 @@ import Control.Exception (SomeException)
 import Control.Monad (void)
 import Control.Monad.RWS (MonadWriter(tell))
 import Control.Monad.Trans (liftIO, MonadIO)
-import Data.Char (toLower)
 import Data.Function (on)
-import Data.List (find, groupBy, intercalate, nub, sortBy)
+import Data.List (find, groupBy, intercalate, nub, sort, sortBy)
 import Data.Maybe (catMaybes)
 import Data.Monoid ((<>))
-import Data.Set as Set (empty, fromList, member, Set, singleton, union, unions)
-import qualified Data.Set as Set (map)
+import Data.Set as Set (empty, member, Set, singleton, union, unions)
 import Debug.Trace (trace)
 import GHC (GHCOpts(..), ghcProcessArgs, extensionsForHSEParser)
-import qualified Language.Haskell.Exts.Annotated as A (ann, Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Name(Ident, Symbol), Pretty, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
+import qualified Language.Haskell.Exts.Annotated as A (ann, Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Name, Pretty, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath)
-import SrcLoc (endOfHeader, keep, keepAll, scanModule, skip, srcLoc, startOfDecls)
-import Symbols (symbolsDeclaredBy)
+import SrcLoc ({-endOfHeader,-} endOfImports, keep, keepAll, scanModule, skip, srcLoc, {-startOfDecls,-} startOfImports)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
-import System.FilePath.Extra2 (replaceFile)
+-- import System.FilePath.Extra2 (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Utils (simplify)
+import Utils (gFind, replaceFile, simplify)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> GHCOpts -> [ModuleInfo SrcSpanInfo] -> m ()
@@ -94,11 +91,14 @@ replaceImports newImports (ModuleInfo {_module = A.Module _l _mh _ps is _ds})
     | map simplify is == map simplify newImports =
         Nothing
 replaceImports newImports info@(ModuleInfo {_module = m@(A.Module _l _mh _ps (_ : _) _ds)}) =
-    Just $ scanModule (do keep (endOfHeader m)-- (srcLoc (A.ann i))
-                          tell ("\n\n" ++ intercalate "\n" (map prettyPrint' newImports))
-                          skip (startOfDecls m) -- (endLoc (A.ann (last is)))
+    Just $ scanModule (do -- keep (endOfHeader m)
+                          keep (startOfImports m)
+                          tell (intercalate "\n" (map prettyPrint' newImports))
+                          -- skip (startOfDecls m)
+                          skip (endOfImports m)
                           keepAll)
                       info
+replaceImports _ _ = error "replaceImports"
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
@@ -208,8 +208,7 @@ mergeSpecs xs = xs
 -- Compare function used to sort the symbols within an import.
 compareSpecs :: A.ImportSpec SrcSpanInfo -> A.ImportSpec SrcSpanInfo -> Ordering
 compareSpecs a b =
-    case compare (Set.map (Prelude.map toLower . nameString) $ Set.fromList $ symbolsDeclaredBy a)
-                 (Set.map (Prelude.map toLower . nameString) $ Set.fromList $ symbolsDeclaredBy b) of
+    case compare (sort (nub (gFind a :: [A.Name SrcSpanInfo]))) (sort (nub (gFind b :: [A.Name SrcSpanInfo]))) of
       EQ -> compare (simplify a) (simplify b)
       x -> x
 
@@ -218,10 +217,6 @@ standaloneDerivingTypes (ModuleInfo {_module = A.XmlPage _ _ _ _ _ _ _}) = error
 standaloneDerivingTypes (ModuleInfo {_module = A.XmlHybrid _ _ _ _ _ _ _ _ _}) = error "standaloneDerivingTypes A.XmlHybrid"
 standaloneDerivingTypes (ModuleInfo {_module = A.Module _ _ _ _ decls}) =
     unions (Prelude.map derivDeclTypes decls)
-
-nameString :: A.Name l -> String
-nameString (A.Ident _ s) = s
-nameString (A.Symbol _ s) = s
 
 -- | Collect the declared types of a standalone deriving declaration.
 class DerivDeclTypes a where

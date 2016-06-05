@@ -37,6 +37,7 @@ Library
     LoadModule
     ModuleKey
     ModuleInfo
+    Names
     SrcLoc
     Symbols
     Utils

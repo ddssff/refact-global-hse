@@ -11,7 +11,7 @@ module CPP
 
 import Data.List (isSuffixOf)
 import Language.Haskell.Exts.Annotated (ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), Comment, KnownExtension(CPP), impliesExts, Module, parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
-import Language.Preprocessor.Cpphs (BoolOptions(..), CpphsOptions(..), runCpphs)
+-- import Language.Preprocessor.Cpphs (BoolOptions(..), CpphsOptions(..), runCpphs)
 import Language.Preprocessor.Cpphs hiding (defaultCpphsOptions)
 import qualified Language.Preprocessor.Cpphs as Orig (defaultCpphsOptions)
 import Language.Preprocessor.Unlit (unlit)

@@ -12,9 +12,9 @@ import Data.List (intercalate, stripPrefix)
 import Data.Maybe (mapMaybe)
 import Data.Sequence (Seq, (|>))
 import qualified Language.Haskell.Exts.Syntax as S (ModuleName(..))
-import System.Directory (createDirectoryIfMissing, getCurrentDirectory, removeDirectoryRecursive, removeFile, setCurrentDirectory)
+import System.Directory -- (createDirectoryIfMissing, getCurrentDirectory, removeDirectoryRecursive, removeFile, setCurrentDirectory)
 import System.Exit (ExitCode(..))
-import System.FilePath (splitFileName)
+import System.FilePath (takeDirectory)
 import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError)
 import qualified System.IO.Temp as Temp (createTempDirectory)
@@ -111,11 +111,24 @@ ignoringIOErrors ioe = ioe `IO.catch` (\e -> const (return ()) (e :: IOError))
 
 replaceFile :: FilePath -> String -> IO ()
 replaceFile path text = do
-  createDirectoryIfMissing True (fst (splitFileName path))
+  createDirectoryIfMissing True (takeDirectory path)
   removeFile path `IO.catch` (\e -> if isDoesNotExistError e then return () else ioError e)
-  writeFile path ({-trace (path ++ " text: " ++ show text)-} text)
-  text' <- readFile path
-  when (text /= text') (error $ "Failed to replace " ++ show path)
+  writeFile path text
+  -- text' <- readFile path
+  -- when (text /= text') (error $ "Failed to replace " ++ show path)
+
+replaceFileWithBackup :: FilePath -> String -> IO ()
+replaceFileWithBackup path text = do
+  removeIfExists (path ++ "~")
+  renameIfExists path (path ++ "~")
+  writeFile path text
+    where
+      removeIfExists x =
+          do exists <- doesFileExist x
+             when exists (removeFile x)
+      renameIfExists src dst =
+          do exists <- doesFileExist src
+             when exists (System.Directory.renameFile src dst)
 
 -- | Slightly modified lines function from Data.List (aka
 -- Data.OldList).  It preserves the presence or absence of a

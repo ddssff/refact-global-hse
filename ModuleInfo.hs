@@ -10,6 +10,7 @@ import qualified Language.Haskell.Exts.Annotated as A (Module(Module), ModuleHea
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
+import Language.Haskell.Names.GlobalSymbolTable as Global (Table)
 import ModuleKey (moduleFullPath, ModuleKey)
 import Utils (EZPrint(ezPrint))
 
@@ -20,6 +21,7 @@ data ModuleInfo l =
                , _modulePath :: FilePath
                , _moduleText :: String
                , _moduleSpan :: SrcSpanInfo
+               , _moduleGlobals :: Global.Table
                } deriving (Data, Typeable, Functor)
 
 instance EZPrint (ModuleInfo l) where

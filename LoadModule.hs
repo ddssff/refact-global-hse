@@ -24,12 +24,14 @@ import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensions, parseFilename, fixities), fromParseResult)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo(..))
 import Language.Haskell.Names (annotate, resolve, Scoped)
+import Language.Haskell.Names.Imports (importTable)
+import Language.Haskell.Names.ModuleSymbols (moduleTable)
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (ModuleKey(..))
 import SrcLoc (fixSpan, mapTopAnnotations, fixEnds, spanOfText)
 import System.Directory (canonicalizePath)
 import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
-import Text.PrettyPrint.HughesPJClass as PP (prettyShow)
+-- import Text.PrettyPrint.HughesPJClass as PP (prettyShow)
 import Utils (EZPrint(ezPrint))
 
 type Annot = Scoped SrcSpanInfo
@@ -43,7 +45,8 @@ loadModules opts paths = do
 
 addScoping :: [ModuleInfo SrcSpanInfo] -> [ModuleInfo (Scoped SrcSpanInfo)]
 addScoping mods =
-    map (\m -> m {_module = annotate env (_module m)}) mods
+    map (\m -> m {_module = annotate env (_module m),
+                  _moduleGlobals = moduleTable (importTable env (_module m)) (_module m)}) mods
     where env = resolve (map _module mods) mempty
 
 loadModule' :: GHCOpts -> FilePath -> IO (ModuleInfo SrcSpanInfo)
@@ -52,13 +55,13 @@ loadModule' opts path = either (error . show) id <$> (loadModule opts path :: IO
 loadModule :: Exception e => GHCOpts -> FilePath -> IO (Either e (ModuleInfo SrcSpanInfo))
 loadModule opts path = try $ do
   moduleText <- liftIO $ readFile path
-  (parsed', comments, processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions mode path
+  (parsed', comments, _processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions mode path
   let parsed = mapTopAnnotations (fixEnds comments moduleText) $ everywhere (mkT fixSpan) parsed'
   -- liftIO $ writeFile (path ++ ".cpp") processed
   -- putStr processed
   -- validateParseResults parsed comments processed -- moduleText
   key <- moduleKey path parsed
-  putStrLn ("loaded " ++ prettyShow key)
+  -- putStrLn ("loaded " ++ prettyShow key)
   pure $ ModuleInfo { _moduleKey = key
                     , _module = parsed
                     , _moduleComments = comments
@@ -66,7 +69,8 @@ loadModule opts path = try $ do
                                                     ModuleKey {_moduleTop = top} -> top
                                                     ModuleFullPath p -> takeDirectory p) path
                     , _moduleText = moduleText
-                    , _moduleSpan = spanOfText path moduleText }
+                    , _moduleSpan = spanOfText path moduleText
+                    , _moduleGlobals = mempty }
     where
       mode = Exts.defaultParseMode {Exts.extensions = map EnableExtension (GHC.extensions opts ++ extensionsForHSEParser),
                                     Exts.parseFilename = path,

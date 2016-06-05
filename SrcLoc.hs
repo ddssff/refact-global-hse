@@ -166,6 +166,7 @@ splitText loc@(SrcLoc _ l0 c0) s0 =
                                   -- was present.
                                   "" -> pure (r, s)
                                   (ch : s') -> put (l, c + 1, r ++ [ch], s') >> f
+                     _ -> error "splitText"
                (_, LT) ->
                    case s of
                      [] -> error ("splitText " ++ ", loc=" ++ show loc ++ ", s=" ++ show s)
@@ -187,6 +188,7 @@ splits offset0@(SrcLoc file _ _) locs0@(_ : _) s0 =
       f offset (loc : locs) s =
           let (pre, suf) = splitText (locDiff loc offset) s in
           pre : f loc locs suf
+splits (SrcLoc _ _ _) [] _ = error "splits"
 
 
 data Seg
@@ -246,6 +248,7 @@ scanModule action m@(ModuleInfo {_module = A.Module _ _ _ _ _}) =
     snd $ evalRWS action () (St { _point = SrcLoc (_modulePath m) 1 1
                                 , _remaining = _moduleText m
                                 , _comments = _moduleComments m })
+scanModule _ _ = error "scanModule"
 
 instance EZPrint SrcLoc where
     ezPrint = prettyShow
@@ -380,6 +383,7 @@ debugRender m@(A.Module _ mh ps is ds) cs s =
         mapM_ (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") ds
         keep (endLoc (A.ann m))
         tell "]"
+debugRender _ _ _ = error "debugRender"
 
 void :: Monad m => m ()
 void = pure ()
@@ -424,6 +428,7 @@ mapTopAnnotations fn (A.Module loc mh ps is ds) =
       fixDecl (AnnPragma l a) = (AnnPragma (fn l) a)
       fixDecl (MinimalPragma l a) = (MinimalPragma (fn l) a)
       fixDecl (RoleAnnotDecl l a b) = (RoleAnnotDecl (fn l) a b)
+mapTopAnnotations _ _ = error "mapTopAnnotations"
 
 class EndLoc a where endLoc :: a -> SrcLoc
 instance EndLoc SrcSpan where endLoc x = SrcLoc (fileName x) (srcSpanEndLine x) (srcSpanEndColumn x)
@@ -433,32 +438,40 @@ instance EndLoc (SrcLoc, SrcLoc) where endLoc = snd
 
 endOfDecls :: EndLoc l => A.Module l -> SrcLoc
 endOfDecls m@(A.Module _l _mh _ps _ []) = endOfImports m
-endOfDecls m@(A.Module _l _mh _ps _is ds) = endLoc (A.ann (last ds))
+endOfDecls (A.Module _l _mh _ps _is ds) = endLoc (A.ann (last ds))
+endOfDecls _ = error "endOfDecls"
 
 endOfImports :: EndLoc l => A.Module l -> SrcLoc
 endOfImports m@(A.Module _l _mh _ps [] _) = endOfHeader m
 endOfImports (A.Module _l _mh _ps is _) = endLoc (A.ann (last is))
+endOfImports _ = error "endOfImports"
 
 endOfHeader :: EndLoc l => A.Module l -> SrcLoc
 endOfHeader m@(A.Module _l Nothing _ps _ _) = endOfPragmas m
 endOfHeader (A.Module _l (Just h) _ps _is _) = endLoc (A.ann h)
+endOfHeader _ = error "endOfHeader"
 
 endOfPragmas :: EndLoc l => A.Module l -> SrcLoc
 endOfPragmas (A.Module l _ [] _ _) = endLoc l
 endOfPragmas (A.Module _l _ ps _ _) = endLoc (A.ann (last ps))
+endOfPragmas _ = error "endOfPragmas"
 
 startOfDecls :: SrcInfo l => A.Module l -> SrcLoc
 startOfDecls m@(A.Module _l _mh _ps _is []) = startOfImports m
 startOfDecls (A.Module _l _mh _ps _is (d : _)) = srcLoc (A.ann d)
+startOfDecls _ = error "startOfDecls"
 
 startOfImports :: SrcInfo l => A.Module l -> SrcLoc
 startOfImports m@(A.Module _l _mh _ps [] _) = startOfHeader m
 startOfImports (A.Module _l _mh _ps (i : _) _) = srcLoc (A.ann i)
+startOfImports _ = error "startOfImports"
 
 startOfHeader :: SrcInfo l => A.Module l -> SrcLoc
 startOfHeader m@(A.Module _l Nothing _ps _ _) = startOfPragmas m
 startOfHeader (A.Module _l (Just h) _ps _is _) = srcLoc (A.ann h)
+startOfHeader _ = error "startOfHeader"
 
 startOfPragmas :: SrcInfo l => A.Module l -> SrcLoc
 startOfPragmas (A.Module l _ [] _ _) = srcLoc l
 startOfPragmas (A.Module _l _ (p : _) _ _) = srcLoc (A.ann p)
+startOfPragmas _ = error "startOfPragmas"
