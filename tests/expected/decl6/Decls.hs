@@ -19,11 +19,11 @@ import Language.Haskell.Exts.Annotated.Simplify (sCName, sModuleName, sName)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..))
-import MoveSpec (MoveSpec)
+import MoveSpec (MoveSpec())
 import SrcLoc (endLoc, spanText, srcLoc, textSpan)
 import Symbols (FoldDeclared(foldDeclared))
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Types (ModuleKey(ModuleKey, _moduleName), fullPathOfModuleKey, loadModule, ModuleInfo(..))
+import Types (fullPathOfModuleKey, loadModule, ModuleInfo(..), ModuleKey(ModuleKey, _moduleName))
 import Utils (dropWhile2)
 
 -- | Declaration moves can be characterized as one of two types, Down

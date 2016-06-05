@@ -23,7 +23,7 @@ import SrcLoc (endLoc, spanText, srcLoc, textSpan)
 import Symbols ()
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Tmp (FoldDeclared(foldDeclared))
-import Types (ModuleKey(ModuleKey, _moduleName), fullPathOfModuleKey, loadModule, ModuleInfo(..))
+import Types (fullPathOfModuleKey, loadModule, ModuleInfo(..), ModuleKey(ModuleKey, _moduleName))
 import Utils (dropWhile2)
 
 -- | Specifies where to move each declaration of each module.  Given a

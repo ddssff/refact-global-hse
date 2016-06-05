@@ -4,7 +4,7 @@
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
-module MoveSpec(MoveSpec
+module MoveSpec(MoveSpec()
     , appendMoveSpecs
     , identityMoveSpec
     ) where

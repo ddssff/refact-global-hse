@@ -7,20 +7,22 @@ import Data.Data (Data)
 import Data.List (nub, partition)
 import Data.Map as Map (lookup)
 import Data.Maybe (mapMaybe)
+import Debug.Trace
 import qualified Language.Haskell.Exts.Annotated as A
 import Language.Haskell.Exts.Annotated.Simplify (sName)
+import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.Syntax (ExportSpec(..), QName(..), CName(..))
 import Language.Haskell.Names (Symbol(..))
-import Language.Haskell.Names.GetBound (GetBound(getBound))
+import Language.Haskell.Names.ModuleSymbols (getTopDeclSymbols)
 import Language.Haskell.Names.GlobalSymbolTable as Global
 import LoadModule (Annot)
 
 -- | Build an export spec for the symbols created by a Decl.  The
 -- getBound function returns the names, and we can get the module
 -- name from the decl
-exportSpec :: (Eq l, Data l) => Global.Table -> A.Decl l -> Maybe ExportSpec
-exportSpec gtable d =
-    case partition isThing (concat (mapMaybe (`Map.lookup` gtable) (map (UnQual . sName) (nub (getBound gtable d)) :: [QName]))) of
+exportSpec :: Global.Table -> A.ModuleName () -> A.Decl () -> Maybe ExportSpec
+exportSpec gtable m d =
+    case partition isThing (getTopDeclSymbols gtable m d) of
       ([], [x]) -> Just (EVar (toQName x))
       ([], []) -> Nothing
       ([x], xs) -> Just (EThingWith (toQName x) (map toCName xs))
