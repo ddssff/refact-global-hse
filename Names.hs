@@ -3,6 +3,7 @@ module Names
     ( exportSpec
     ) where
 
+import Data.Data (Data)
 import Data.List (nub, partition)
 import Data.Map as Map (lookup)
 import Data.Maybe (mapMaybe)
@@ -17,7 +18,7 @@ import LoadModule (Annot)
 -- | Build an export spec for the symbols created by a Decl.  The
 -- getBound function returns the names, and we can get the module
 -- name from the decl
-exportSpec :: Global.Table -> A.Decl Annot -> Maybe ExportSpec
+exportSpec :: (Eq l, Data l) => Global.Table -> A.Decl l -> Maybe ExportSpec
 exportSpec gtable d =
     case partition isThing (concat (mapMaybe (`Map.lookup` gtable) (map (UnQual . sName) (nub (getBound gtable d)) :: [QName]))) of
       ([], [x]) -> Just (EVar (toQName x))
