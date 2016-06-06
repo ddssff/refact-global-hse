@@ -11,25 +11,24 @@ import Control.Monad.Trans (liftIO, MonadIO)
 import Data.Char (toLower)
 import Data.Function (on)
 import Data.Generics (everywhere, mkT)
-import Data.List (find, groupBy, intercalate, nub, sort, sortBy)
+import Data.List (find, groupBy, intercalate, nub, sortBy)
 import Data.Maybe (catMaybes)
 import Data.Monoid ((<>))
 import Data.Set as Set (empty, member, Set, singleton, union, unions)
 import Debug.Trace (trace)
-import GHC (GHCOpts(..), ghcProcessArgs, extensionsForHSEParser)
+import GHC (extensionsForHSEParser, GHCOpts(..), ghcProcessArgs)
 import qualified Language.Haskell.Exts.Annotated as A (ann, Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Name, Pretty, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath)
-import SrcLoc ({-endOfHeader,-} endOfImports, keep, keepAll, scanModule, skip, srcLoc, {-startOfDecls,-} startOfImports)
+import SrcLoc (endOfImports, keep, keepAll, scanModule, skip, srcLoc, startOfImports)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
--- import System.FilePath.Extra2 (replaceFile)
 import System.Process (readProcessWithExitCode, showCommandForUser)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Utils (gFind, replaceFile, simplify)
+import Utils (replaceFile, simplify)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> GHCOpts -> [ModuleInfo SrcSpanInfo] -> m ()
@@ -38,7 +37,7 @@ cleanImports scratch opts info =
     dump >> mapM_ (\x -> do newText <- doModule scratch opts x
                             let path = moduleFullPath (_moduleKey x)
                             liftIO $ case newText of
-                                       Nothing -> putStrLn (path <> ": unable to clean imports")
+                                       Nothing -> putStrLn (path <> " - imports already clean")
                                        Just s | _moduleText x /= s ->
                                                         do putStrLn (path ++ " imports changed")
                                                            -- let (path', ext) = splitExtension path in
