@@ -9,11 +9,12 @@ module GHC
     , extensionsForHSEParser
     ) where
 
-import CPP
+import CPP (defaultCpphsOptions)
 import Data.Default (Default(def))
 import Data.List (intercalate)
 import Data.Monoid ((<>))
 import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
+import Language.Preprocessor.Cpphs
 
 -- | Support a tiny subset of the GHC command line options.
 data GHCOpts =
@@ -28,7 +29,7 @@ instance Default GHCOpts where
     def = GHCOpts
           { hc = "ghc"
           , hsSourceDirs = []
-          , cppOptions = defaultCpphsOptions
+          , cppOptions = CPP.defaultCpphsOptions
           , extensions = [] }
 
 ghcProcessArgs :: GHCOpts -> [String]

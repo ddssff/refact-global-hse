@@ -74,6 +74,7 @@ Test-Suite refact-global-hse-tests
   Build-Depends:
     base,
     containers,
+    cpphs,
     data-default,
     filepath,
     filemanip > 0.3.6.3,

@@ -12,7 +12,7 @@
 module DeclTests where
 
 import Control.Monad (when)
-import CPP (CpphsOptions(..), defaultCpphsOptions)
+import CPP (defaultCpphsOptions)
 import Data.Data (Data)
 import Data.List hiding (find)
 import Data.Monoid ((<>))
@@ -24,6 +24,7 @@ import Language.Haskell.Exts.Extension (KnownExtension(CPP, OverloadedStrings, E
 import Language.Haskell.Exts.Annotated.Simplify (sName, sQName)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import qualified Language.Haskell.Exts.Syntax as S
+import Language.Preprocessor.Cpphs (CpphsOptions(..))
 import LoadModule (Annot, loadModule')
 import ModuleInfo
 import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)

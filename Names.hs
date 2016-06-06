@@ -3,19 +3,12 @@ module Names
     ( exportSpec
     ) where
 
-import Data.Data (Data)
-import Data.List (nub, partition)
-import Data.Map as Map (lookup)
-import Data.Maybe (mapMaybe)
-import Debug.Trace
-import qualified Language.Haskell.Exts.Annotated as A
-import Language.Haskell.Exts.Annotated.Simplify (sName)
-import Language.Haskell.Exts.Pretty (prettyPrint)
-import Language.Haskell.Exts.Syntax (ExportSpec(..), QName(..), CName(..))
+import Data.List (partition)
+import qualified Language.Haskell.Exts.Annotated as A (Decl, ModuleName)
+import Language.Haskell.Exts.Syntax (CName(..), ExportSpec(..), QName(..))
 import Language.Haskell.Names (Symbol(..))
+import Language.Haskell.Names.GlobalSymbolTable as Global (Table)
 import Language.Haskell.Names.ModuleSymbols (getTopDeclSymbols)
-import Language.Haskell.Names.GlobalSymbolTable as Global
-import LoadModule (Annot)
 
 -- | Build an export spec for the symbols created by a Decl.  The
 -- getBound function returns the names, and we can get the module

@@ -7,7 +7,7 @@ module ModuleKey
     , moduleTop
     ) where
 
-import Data.Generics
+import Data.Generics (Data, Typeable)
 import Data.List (groupBy, intercalate)
 import Language.Haskell.Exts.Annotated as A (ModuleName(..))
 import Language.Haskell.Exts.Pretty (prettyPrint)

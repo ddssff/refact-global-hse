@@ -5,7 +5,7 @@ module ModuleInfo
     , fullPathOfModuleInfo
     ) where
 
-import Data.Generics
+import Data.Generics (Data, Typeable)
 import qualified Language.Haskell.Exts.Annotated as A (Module(Module), ModuleHead(ModuleHead))
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.Pretty (prettyPrint)

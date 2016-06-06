@@ -5,13 +5,9 @@ module LoadModule
     , loadModule'
     , loadModules
     , Annot
-    , addScoping
-    -- , hseExtensions
-    -- , hsFlags
-    -- , hsSourceDirs
     ) where
 
-import qualified CPP (BoolOptions(locations), CpphsOptions(boolopts), defaultCpphsOptions, parseFileWithCommentsAndCPP)
+import qualified CPP (defaultCpphsOptions, parseFileWithCommentsAndCPP)
 import Control.Exception (Exception, SomeException)
 import Control.Exception.Lifted as IO (try)
 import Control.Monad.Trans (MonadIO(liftIO))
@@ -21,17 +17,17 @@ import Debug.Trace (trace)
 import GHC (extensionsForHSEParser, GHCOpts(..))
 import Language.Haskell.Exts.Annotated as A (Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName))
 import Language.Haskell.Exts.Extension (Extension(EnableExtension))
-import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensions, parseFilename, fixities), fromParseResult)
+import Language.Haskell.Exts.Parser as Exts (defaultParseMode, fromParseResult, ParseMode(extensions, parseFilename, fixities))
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo(..))
 import Language.Haskell.Names (annotate, resolve, Scoped)
 import Language.Haskell.Names.Imports (importTable)
 import Language.Haskell.Names.ModuleSymbols (moduleTable)
+import Language.Preprocessor.Cpphs (BoolOptions(locations), CpphsOptions(..))
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (ModuleKey(..))
-import SrcLoc (fixSpan, mapTopAnnotations, fixEnds, spanOfText)
+import SrcLoc (fixEnds, fixSpan, mapTopAnnotations, spanOfText)
 import System.Directory (canonicalizePath)
 import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
--- import Text.PrettyPrint.HughesPJClass as PP (prettyShow)
 import Utils (EZPrint(ezPrint))
 
 type Annot = Scoped SrcSpanInfo
@@ -81,12 +77,12 @@ loadModule opts path = try $ do
 -- affect the line numbers of the output text, so we can use the
 -- resulting SrcSpan info on the original text.  Macro expansions
 -- could still mess this up.
-cpphsOptions :: CPP.CpphsOptions
+cpphsOptions :: CpphsOptions
 cpphsOptions =
     CPP.defaultCpphsOptions
-    { CPP.boolopts =
-          (CPP.boolopts CPP.defaultCpphsOptions)
-          { CPP.locations = False
+    { boolopts =
+          ( boolopts CPP.defaultCpphsOptions )
+          { locations = False
       }
     }
 
