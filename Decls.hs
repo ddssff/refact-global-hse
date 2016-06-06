@@ -20,18 +20,18 @@ import Debug.Trace (trace)
 import GHC (GHCOpts(hsSourceDirs))
 import Imports (cleanImports)
 import qualified Language.Haskell.Exts.Annotated as A -- (Annotated(ann), Decl(InstDecl, TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), InstHead(..), InstRule(IParen, IRule), Module(Module), ModuleHead(ModuleHead), ModulePragma(..), Pretty, QName, Type)
+import Language.Haskell.Exts.Annotated.Simplify (sName)
 import Language.Haskell.Exts.Annotated.Simplify (sExportSpec, sModuleName, sModulePragma)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), ModulePragma(..), Name(..), QName(Qual, Special, UnQual))
-import Language.Haskell.Names (Environment, resolve)
+import Language.Haskell.Names (Environment, resolve, symbolName)
 -- import Language.Haskell.Names.GlobalSymbolTable as Global (Table)
 import LoadModule (Annot, loadModule, loadModules)
-import ModuleInfo (ModuleInfo(..))
+import ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
 import Names (exportSpec)
 import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, keep, keepAll, scanModule, skip, textOfSpan, srcLoc, ScanM, withTrailingWhitespace)
-import Symbols (FoldDeclared(foldDeclared))
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Utils (dropWhile2, EZPrint(ezPrint), gFind, listPairs, replaceFile, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
@@ -94,7 +94,7 @@ data MoveType
 moveDeclsByName :: String -> String -> String -> MoveSpec
 moveDeclsByName symname departMod arriveMod = MoveSpec $
     \i decl ->
-        let syms = foldDeclared Set.insert mempty decl in
+        let syms = (Set.fromList . map symbolName) (getTopDeclSymbols' i decl) in
         case _moduleKey i of
           ModuleKey {_moduleName = A.ModuleName l name}
               | name == departMod && (Set.member (S.Ident symname) syms || Set.member (S.Symbol symname) syms) ->
@@ -309,7 +309,8 @@ newExports mv mods thisKey =
       -- found, transfer the export from there to here.
       newExportsFromModule :: ModuleInfo l -> [S.ExportSpec]
       newExportsFromModule i'@(ModuleInfo {_moduleKey = (ModuleKey {_moduleName = mn}), _module = A.Module _ _ _ _ ds, _moduleGlobals = gs}) =
-          mapMaybe (\(d :: A.Decl ()) -> if (applyMoveSpec mv (simplify i') (d :: A.Decl ()) == thisKey) then exportSpec gs (simplify mn) d else Nothing) (map simplify ds)
+          let i = simplify i' in
+          mapMaybe (\(d :: A.Decl ()) -> if (applyMoveSpec mv i (d :: A.Decl ()) == thisKey) then exportSpec i d else Nothing) (map simplify ds)
       -- We can't import from a module without an explicit name in its header
       newExportsFromModule (ModuleInfo {_moduleKey = k'@(ModuleFullPath {}), _module = A.Module _ _ _ _ ds, _moduleGlobals = gs}) = []
       newExportsFromModule x = error $ "newExports - unexpected module: " ++ show (_module x)
@@ -320,18 +321,19 @@ findNewKeyOfExportSpec mv info@(ModuleInfo {_moduleKey = k}) spec =
 
 -- | Find the declaration that causes all the symbols in the
 -- ExportSpec to come into existance.
-findDeclOfExportSpec :: forall l. (A.SrcInfo l, Show l) => ModuleInfo l -> A.ExportSpec l -> Maybe (A.Decl l)
+findDeclOfExportSpec :: forall l. (A.SrcInfo l, Data l, Show l) => ModuleInfo l -> A.ExportSpec l -> Maybe (A.Decl l)
 findDeclOfExportSpec info spec =
-    findDeclOfSymbols info (foldDeclared Set.insert mempty spec)
+    findDeclOfSymbols info (Set.fromList (map sName (gFind spec :: [A.Name l])))
     where
       findDeclOfSymbols :: ModuleInfo l -> Set S.Name -> Maybe (A.Decl l)
       findDeclOfSymbols (ModuleInfo {_module = A.Module _ _ _ _ _}) syms | null syms = Nothing
       findDeclOfSymbols (ModuleInfo {_module = A.Module _ _ _ _ decls}) syms =
-          case filter (isSubsetOf syms . foldDeclared Set.insert mempty) (filter notSig decls) of
+          case filter (isSubsetOf syms . symset) (filter notSig decls) of
             [d] -> Just d
             [] -> Nothing
             ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (map (srcLoc . A.ann) ds)
       findDeclOfSymbols x _ = error $ "findDeclOfExportSpec - unexpected module: " ++ show (_module x)
+      symset = Set.fromList . map symbolName . getTopDeclSymbols' info
 
 -- Find the declaration of the symbols of an import spec.  If that
 -- declaration moved, update the module name.
@@ -427,7 +429,7 @@ importsForDepartingDecls rd@(Rd mods _env) mv (Just thisMod@(ModuleInfo {_module
                        _ -> "") ds
     where
       t2 d someKey x =
-          trace ("departing: " ++ ezPrint d ++ " from " ++ ezPrint thisKey ++ " -> " ++ ezPrint someKey ++ ", " ++ moveType' rd thisKey someKey) x
+          trace ("departing: " ++ ezPrint (thisMod, d) ++ " from " ++ ezPrint thisKey ++ " -> " ++ ezPrint someKey ++ ", " ++ moveType' rd thisKey someKey) x
 
 importsForDepartingDecls _ _ _ = ""
 
@@ -538,7 +540,7 @@ importsSymbolsFrom imports importee = any (\i -> simplify (A.importModule i) == 
 -- | Build an ImportDecl that imports the symbols of d from m.
 importSpecFromDecl :: forall l. (A.SrcInfo l, Eq l, Data l, Show l) => ModuleInfo l -> A.ModuleName () -> A.Decl l -> Maybe S.ImportDecl
 importSpecFromDecl thisMod newModName d =
-    case map exportToImport (maybeToList (exportSpec (_moduleGlobals thisMod) (_moduleName (_moduleKey thisMod)) (simplify d))) of
+    case map exportToImport (maybeToList (exportSpec (simplify thisMod) (simplify d))) of
       [] -> Nothing
       imports -> Just (S.ImportDecl { S.importLoc = srcLoc (A.ann d)
                                     , S.importModule = sModuleName newModName
@@ -580,17 +582,18 @@ findModuleByName mods oldModname =
 
 -- | Find the declaration in a module that causes all the symbols in
 -- the ImportSpec to come into existance.
-findDeclOfImportSpec :: forall l. (A.SrcInfo l, Show l) => ModuleInfo l -> A.ImportSpec l -> Maybe (A.Decl l)
-findDeclOfImportSpec info spec = findDeclOfSymbols info (foldDeclared Set.insert mempty spec)
+findDeclOfImportSpec :: forall l. (A.SrcInfo l, Data l, Show l) => ModuleInfo l -> A.ImportSpec l -> Maybe (A.Decl l)
+findDeclOfImportSpec info spec = findDeclOfSymbols info (Set.fromList (map sName (gFind spec :: [A.Name l])))
     where
       findDeclOfSymbols :: ModuleInfo l -> Set S.Name -> Maybe (A.Decl l)
       findDeclOfSymbols (ModuleInfo {_module = A.Module _ _ _ _ _}) syms | null syms = Nothing
       findDeclOfSymbols (ModuleInfo {_module = A.Module _ _ _ _ decls}) syms =
-          case filter (isSubsetOf syms . foldDeclared Set.insert mempty) (filter notSig decls) of
+          case filter (isSubsetOf syms . symset) (filter notSig decls) of
             [d] -> Just d
             [] -> Nothing
             ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (map (srcLoc . A.ann) ds)
       findDeclOfSymbols x _ = error $ "findDeclOfImportSpec - unexpected module: " ++ show (_module x)
+      symset = Set.fromList . map symbolName . getTopDeclSymbols' info
 
 notSig :: A.Decl t -> Bool
 notSig (A.TypeSig {}) = False
@@ -601,7 +604,7 @@ notSig _ = True
 -- some export spec info?
 isReexport :: ModuleInfo -> A.ImportSpec SrcSpanInfo -> Bool
 isReexport info@(ModuleInfo {_module = A.Module _ (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList _ especs)))) _ _ _}) ispec =
-    let syms = foldDeclared Set.insert mempty ispec in
+    let syms = Set.fromList (gFind ispec :: [A.name SrcSpanInfo]) in
     all (isReexported especs) syms
     -- not (null (filter (isReexported syms) especs))
     -- (not . null . filter (isReexport' syms . foldDeclared Set.insert mempty)) specs
@@ -615,7 +618,7 @@ isReexported specs sym = any (reexports sym) specs
 reexports :: S.Name -> A.ExportSpec SrcSpanInfo -> Bool
 reexports sym e@(A.EThingAll _ qname) = trace ("EThingAll") $ Set.member sym (foldDeclared Set.insert mempty e)
 reexports sym (A.EModuleContents _ _mname) = False
-reexports sym e = Set.member sym (foldDeclared Set.insert mempty e)
+reexports sym e = Set.member sym (Set.fromList (gFind e :: [A.Name SrcSpanInfo]))
 #endif
 
 -- | Look through a module's imports, using findDeclOfImportSpec and
@@ -639,7 +642,7 @@ updateDecls (Rd mods _env) mv thisMod@(ModuleInfo {_module = (A.Module _ _ _ _ d
       doDecl (Just d, next) =
           case applyMoveSpec mv thisMod d of
             someKey | someKey /= thisKey -> do
-              trace ("Moving " ++ ezPrint (foldDeclared (:) [] d) ++ " to " ++ ezPrint someKey ++ " from " ++ ezPrint thisKey) (pure ())
+              trace ("Moving " ++ ezPrint (map symbolName (getTopDeclSymbols' thisMod d)) ++ " to " ++ ezPrint someKey ++ " from " ++ ezPrint thisKey) (pure ())
               skip (endLoc (A.ann d))
               withTrailingWhitespace skip (fmap (srcLoc . A.ann) next)
             _ -> do

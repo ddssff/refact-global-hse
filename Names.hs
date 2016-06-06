@@ -4,18 +4,17 @@ module Names
     ) where
 
 import Data.List (partition)
-import qualified Language.Haskell.Exts.Annotated as A (Decl, ModuleName)
+import qualified Language.Haskell.Exts.Annotated as A (Decl)
 import Language.Haskell.Exts.Syntax (CName(..), ExportSpec(..), QName(..))
 import Language.Haskell.Names (Symbol(..))
-import Language.Haskell.Names.GlobalSymbolTable as Global (Table)
-import Language.Haskell.Names.ModuleSymbols (getTopDeclSymbols)
+import ModuleInfo (getTopDeclSymbols', ModuleInfo)
 
 -- | Build an export spec for the symbols created by a Decl.  The
 -- getBound function returns the names, and we can get the module
 -- name from the decl
-exportSpec :: Global.Table -> A.ModuleName () -> A.Decl () -> Maybe ExportSpec
-exportSpec gtable m d =
-    case partition isThing (getTopDeclSymbols gtable m d) of
+exportSpec :: ModuleInfo () -> A.Decl () -> Maybe ExportSpec
+exportSpec m d =
+    case partition isThing (getTopDeclSymbols' m d) of
       ([], [x]) -> Just (EVar (toQName x))
       ([], []) -> Nothing
       ([x], xs) -> Just (EThingWith (toQName x) (map toCName xs))

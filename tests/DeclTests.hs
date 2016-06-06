@@ -30,7 +30,6 @@ import ModuleInfo
 import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.Process (readProcessWithExitCode)
-import Symbols (foldDeclared)
 import Test.HUnit
 import Utils (dropWhile2, EZPrint(ezPrint), gFind, gitResetSubdir, listPairs, replaceFile, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
@@ -236,6 +235,6 @@ testSpec :: forall l. Data l => MoveSpec -> ModuleInfo l -> IO (ModuleInfo l)
 testSpec moveSpec i@(ModuleInfo {_moduleKey = k, _module = A.Module _ _ _ _ ds}) = do
   putStrLn ("---- module " ++ show (moduleName k) ++ " ----")
   mapM_ (\d -> let k' = applyMoveSpec moveSpec i d in
-               putStrLn (show (foldDeclared (:) [] d) ++ ": " ++ if k /= k' then show k ++ " " ++  " -> " ++ show k' else "unchanged")) ds
+               putStrLn (ezPrint (i, d) ++ ": " ++ if k /= k' then show k ++ " " ++  " -> " ++ show k' else "unchanged")) ds
   return i
 testSpec _ _ = error "Unexpected module"

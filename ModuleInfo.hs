@@ -1,18 +1,22 @@
-{-# LANGUAGE DeriveDataTypeable, DeriveFunctor, ScopedTypeVariables, TemplateHaskell #-}
+{-# LANGUAGE DeriveDataTypeable, DeriveFunctor, FlexibleInstances, ScopedTypeVariables, TemplateHaskell #-}
 
 module ModuleInfo
     ( ModuleInfo(..)
     , fullPathOfModuleInfo
+    , getTopDeclSymbols'
     ) where
 
 import Data.Generics (Data, Typeable)
-import qualified Language.Haskell.Exts.Annotated as A (Module(Module), ModuleHead(ModuleHead))
+import qualified Language.Haskell.Exts.Annotated as A (Decl(TypeSig), Module(Module), ModuleHead(ModuleHead), Name)
+import Language.Haskell.Exts.Annotated.Simplify (sModuleName, sName)
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
+import Language.Haskell.Names (Symbol(Value))
 import Language.Haskell.Names.GlobalSymbolTable as Global (Table)
-import ModuleKey (moduleFullPath, ModuleKey)
-import Utils (EZPrint(ezPrint))
+import Language.Haskell.Names.ModuleSymbols (getTopDeclSymbols)
+import ModuleKey (moduleFullPath, ModuleKey, moduleName')
+import Utils (EZPrint(ezPrint), gFind, simplify)
 
 data ModuleInfo l =
     ModuleInfo { _moduleKey :: ModuleKey
@@ -31,3 +35,16 @@ instance EZPrint (ModuleInfo l) where
 
 fullPathOfModuleInfo :: ModuleInfo l -> FilePath
 fullPathOfModuleInfo = moduleFullPath . _moduleKey
+
+-- | Workaround pending pull request https://github.com/haskell-suite/haskell-names/pull/72
+getTopDeclSymbols' :: ModuleInfo l -> A.Decl l -> [Symbol]
+getTopDeclSymbols' i decl =
+    getTopDeclSymbols (_moduleGlobals i) modulename (simplify decl) ++
+    case decl of
+      A.TypeSig _ names _ -> map (Value (sModuleName modulename) . sName) names
+      _ -> []
+    where
+      modulename = (moduleName' (_moduleKey i))
+
+instance Typeable l => EZPrint (ModuleInfo l, A.Decl l) where
+    ezPrint (i, d) = ezPrint (map sName (gFind (getTopDeclSymbols' i d) :: [A.Name l]))

@@ -1,7 +1,7 @@
 {-# LANGUAGE BangPatterns, CPP, FlexibleInstances, OverloadedLists, ScopedTypeVariables #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 module Symbols
-    ( FoldDeclared(foldDeclared)
+    ( {-FoldDeclared(foldDeclared)-}
     ) where
 
 import Data.List (foldl')
@@ -169,12 +169,3 @@ instance FoldDeclared (A.FieldDecl l) where
 instance FoldDeclared (A.GadtDecl l) where
     foldDeclared f r (A.GadtDecl _ x xs _) = let r' = foldDeclared f r x in maybe r' (foldl' (foldDeclared f) r') xs
 
-instance EZPrint S.Name where
-    ezPrint = prettyPrint
-
-instance EZPrint (Maybe S.ModuleName) where
-    ezPrint (Just x) = prettyPrint x
-    ezPrint Nothing = "Main"
-
-instance EZPrint (A.Decl l) where
-    ezPrint d = ezPrint (foldDeclared (:) [] d)

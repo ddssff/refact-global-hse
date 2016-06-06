@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, RankNTypes, ScopedTypeVariables #-}
+{-# LANGUAGE FlexibleContexts, FlexibleInstances, RankNTypes, ScopedTypeVariables #-}
 module Utils where
 
 import Control.Exception (SomeException, throw)
@@ -11,7 +11,8 @@ import Data.Generics (Data(gmapM), GenericM, listify, Typeable)
 import Data.List (intercalate, stripPrefix)
 import Data.Maybe (mapMaybe)
 import Data.Sequence (Seq, (|>))
-import qualified Language.Haskell.Exts.Syntax as S (ModuleName(..))
+import Language.Haskell.Exts.Pretty (prettyPrint)
+import qualified Language.Haskell.Exts.Syntax as S
 import System.Directory -- (createDirectoryIfMissing, getCurrentDirectory, removeDirectoryRecursive, removeFile, setCurrentDirectory)
 import System.Exit (ExitCode(..))
 import System.FilePath (takeDirectory)
@@ -82,6 +83,13 @@ instance EZPrint a => EZPrint [a] where
 
 instance EZPrint S.ModuleName where
     ezPrint (S.ModuleName s) = s
+
+instance EZPrint S.Name where
+    ezPrint = prettyPrint
+
+instance EZPrint (Maybe S.ModuleName) where
+    ezPrint (Just x) = prettyPrint x
+    ezPrint Nothing = "Main"
 
 maybeStripPrefix :: Eq a => [a] -> [a] -> [a]
 maybeStripPrefix pre lst = maybe lst id (stripPrefix pre lst)
