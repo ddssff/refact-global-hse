@@ -260,20 +260,29 @@ updateImports rd@(Rd mods _env) mv (ModuleInfo {_moduleKey = thisKey, _module = 
       doImportDecl Nothing Nothing = pure ()
       doImportDecl Nothing (Just first) = keep (srcLoc (A.ann first))
       doImportDecl (Just x) next = do
+        let iname = simplify (A.importModule x)
         case A.importSpecs x of
           Nothing -> do
             keep (endLoc (A.ann x))
             withTrailingWhitespace keep (fmap (srcLoc . A.ann) next)
           Just (A.ImportSpecList l hiding specs) -> do
-            keep $ case specs of
-                     (spec : _) -> srcLoc (A.ann spec)
-                     [] -> srcLoc l
-            mapM_ (uncurry (doImportSpec (simplify (A.importModule x)) hiding)) (listPairs specs)
-            keep (endLoc l)
-            withTrailingWhitespace keep (fmap (srcLoc . A.ann) next)
-            -- Some of the specs may be of declarations that moved out of thisKey,
-            -- output new imports for these.
-            mapM_ (importsForMovingDecls (simplify (A.importModule x)) hiding) specs
+            let dests = map (newModuleOfImportSpec rd mv iname) specs
+            case not (null specs) && all (/= (Just iname)) dests of
+              -- Discard the import if it becomes empty, but not if
+              -- it was empty to begin with.
+              True ->
+                withTrailingWhitespace skip (fmap (srcLoc . A.ann) next)
+              False -> do
+                keep $ case specs of
+                         (spec : _) -> srcLoc (A.ann spec)
+                         [] -> srcLoc l
+                mapM_ (uncurry (doImportSpec iname hiding)) (listPairs specs)
+                keep (endLoc l)
+                withTrailingWhitespace keep (fmap (srcLoc . A.ann) next)
+            -- If declarations move from "here" to "there", import
+            -- "there" in case declarations remaining "here" still use
+            -- declarations now in "there".
+            mapM_ (importsForMovingDecls iname hiding) specs
 
       doImportSpec :: A.ModuleName () -> Bool -> Maybe (A.ImportSpec l) -> Maybe (A.ImportSpec l) -> ScanM ()
       doImportSpec _ _ Nothing _ = pure ()

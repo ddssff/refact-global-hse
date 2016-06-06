@@ -20,7 +20,6 @@ import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleM
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), Name(..))
 import SrcLoc (endLoc, spanText, srcLoc, textSpan)
-import Symbols ()
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 import Tmp (FoldDeclared(foldDeclared))
 import Types (fullPathOfModuleKey, loadModule, ModuleInfo(..), ModuleKey(ModuleKey, _moduleName))
