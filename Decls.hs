@@ -38,17 +38,17 @@ import Utils (dropWhile2, EZPrint(ezPrint), gFind, listPairs, replaceFile, simpl
 
 -- | Specifies where to move each declaration of each module.  Given a
 -- departure module key and a declaration, return an arrival module key.
-newtype MoveSpec = MoveSpec (ModuleKey -> A.Decl () -> ModuleKey)
+newtype MoveSpec = MoveSpec (ModuleInfo () -> A.Decl () -> ModuleKey)
 
 instance Monoid MoveSpec where
-    mempty = MoveSpec $ \k _ -> k
+    mempty = MoveSpec $ \i _ -> _moduleKey i
     mappend (MoveSpec f) (MoveSpec g) = MoveSpec $
-      \k0 d ->
-        let k1 = f k0 d
-            k2 = g k0 d in
-        if k1 == k0
+      \i d ->
+        let k1 = f i d
+            k2 = g i d in
+        if k1 == _moduleKey i
         then k2
-        else if k2 == k0
+        else if k2 == _moduleKey i
              then k1
              else if k1 == k2
                   then k1
@@ -60,14 +60,14 @@ data Rd l
 
 $(makeLenses ''Rd)
 
-applyMoveSpec :: Data l => MoveSpec -> ModuleKey -> A.Decl l -> ModuleKey
-applyMoveSpec (MoveSpec f) k d = f k (simplify d)
+applyMoveSpec :: Data l => MoveSpec -> ModuleInfo l -> A.Decl l -> ModuleKey
+applyMoveSpec (MoveSpec f) i d = f (simplify i) (simplify d)
 
 traceMoveSpec :: MoveSpec -> MoveSpec
-traceMoveSpec (MoveSpec f) = MoveSpec $ \k d ->
-  let k' = f k d in
-  if k /= k'
-  then (trace ("moveSpec " ++ show k ++ " d -> " ++ show k') k')
+traceMoveSpec (MoveSpec f) = MoveSpec $ \i d ->
+  let k' = f i d in
+  if _moduleKey i /= k'
+  then (trace ("moveSpec " ++ show (_moduleKey i) ++ " d -> " ++ show k') k')
   else k'
 
 -- | Declaration moves can be characterized as one of two types, Down
@@ -92,61 +92,53 @@ data MoveType
 
 -- A simple MoveSpec builder.
 moveDeclsByName :: String -> String -> String -> MoveSpec
-moveDeclsByName symname modname modname' = MoveSpec $
-    \mkey decl ->
+moveDeclsByName symname departMod arriveMod = MoveSpec $
+    \i decl ->
         let syms = foldDeclared Set.insert mempty decl in
-        case mkey of
+        case _moduleKey i of
           ModuleKey {_moduleName = A.ModuleName l name}
-              | name == modname && (Set.member (S.Ident symname) syms || Set.member (S.Symbol symname) syms) ->
-                  mkey {_moduleName = A.ModuleName l modname'}
-          _ -> mkey
+              | name == departMod && (Set.member (S.Ident symname) syms || Set.member (S.Symbol symname) syms) ->
+                  (_moduleKey i) {_moduleName = A.ModuleName l arriveMod}
+          _ -> _moduleKey i
 
-moveInstDecls :: (ModuleKey -> A.QName () -> [A.Type ()] -> ModuleKey) -> MoveSpec
+moveInstDecls :: (ModuleInfo () -> A.QName () -> [A.Type ()] -> ModuleKey) -> MoveSpec
 moveInstDecls instpred =
     MoveSpec f
     where
-      f :: ModuleKey -> A.Decl () -> ModuleKey
-      f mkey (A.InstDecl _ _ irule _) = g mkey irule
-      f mkey _ = mkey
-      g :: ModuleKey -> A.InstRule () -> ModuleKey
-      g mkey (A.IParen _ irule) = g mkey irule
-      g mkey (A.IRule _ _ _ ihead) = uncurry (instpred mkey) (h [] ihead)
+      f :: ModuleInfo () -> A.Decl () -> ModuleKey
+      f i (A.InstDecl _ _ irule _) = g i irule
+      f i _ = _moduleKey i
+      g :: ModuleInfo () -> A.InstRule () -> ModuleKey
+      g i (A.IParen _ irule) = g i irule
+      g i (A.IRule _ _ _ ihead) = uncurry (instpred i) (h [] ihead)
       h :: [A.Type ()] -> A.InstHead () -> (A.QName (), [A.Type ()])
       h types (A.IHParen _ ihead) = h types ihead
       h types (A.IHApp _ ihead typ) = h (typ : types) ihead
       h types (A.IHCon _ name) = (name, types)
       h types (A.IHInfix _ typ name) = (name, typ : types)
-{-
-        let syms = foldDeclared Set.insert mempty decl in
-        case mkey of
-          ModuleKey {_moduleName = S.ModuleName aname}
-              | aname == mname && (Set.member (S.Ident fname) syms || Set.member (S.Symbol fname) syms) ->
-                  mkey {_moduleName = S.ModuleName mname'}
-          _ -> mkey
--}
 
-moveSpliceDecls :: (ModuleKey -> A.Exp () -> ModuleKey) -> MoveSpec
+moveSpliceDecls :: (ModuleInfo () -> A.Exp () -> ModuleKey) -> MoveSpec
 moveSpliceDecls exppred =
     MoveSpec f
     where
-      f :: ModuleKey -> A.Decl () -> ModuleKey
-      f mkey (A.SpliceDecl _ exp') = g mkey exp'
-      f mkey _ = mkey
-      g :: ModuleKey -> A.Exp () -> ModuleKey
-      g mkey (A.SpliceExp _ splice) = h mkey splice
-      g mkey _ = mkey
-      h :: ModuleKey -> A.Splice () -> ModuleKey
-      h mkey (A.IdSplice _ _) = mkey
-      h mkey (A.ParenSplice _ exp') = exppred mkey exp'
+      f :: ModuleInfo () -> A.Decl () -> ModuleKey
+      f i (A.SpliceDecl _ exp') = g i exp'
+      f i _ = _moduleKey i
+      g :: ModuleInfo () -> A.Exp () -> ModuleKey
+      g i (A.SpliceExp _ splice) = h i splice
+      g i _ = _moduleKey i
+      h :: ModuleInfo () -> A.Splice () -> ModuleKey
+      h i (A.IdSplice _ _) = _moduleKey i
+      h i (A.ParenSplice _ exp') = exppred i exp'
 
 -- | Build the argument to moveInstDecls
 instClassPred :: forall l. Data l => String -> String -> String ->
-                 ModuleKey -> A.QName l -> [A.Type l] -> ModuleKey
-instClassPred classname depart arrive key@(ModuleKey {_moduleName = mname}) qname _ts
+                 ModuleInfo l -> A.QName l -> [A.Type l] -> ModuleKey
+instClassPred classname depart arrive i@(ModuleInfo {_moduleKey = key@ModuleKey {_moduleName = mname}}) qname _ts
     | simplify mname == A.ModuleName () depart &&
       (gFind qname :: [A.Name ()]) == [A.Ident () classname] =
         key {_moduleName = A.ModuleName () arrive}
-instClassPred _ _ _ key _ _ = key
+instClassPred _ _ _ i _ _ = _moduleKey i
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
@@ -249,10 +241,10 @@ newModuleMap rd@(Rd mods _env) mv =
       declMap = foldl' doModule mempty mods
           where
             doModule :: Map ModuleKey [(ModuleKey, A.Decl l)] -> ModuleInfo l -> Map ModuleKey [(ModuleKey, A.Decl l)]
-            doModule mp (ModuleInfo {_module = A.Module _ _ _ _ ds, _moduleKey = k}) = foldl' (doDecl k) mp ds
+            doModule mp i@(ModuleInfo {_module = A.Module _ _ _ _ ds}) = foldl' (doDecl i) mp ds
             doModule mp _ = mp
-            doDecl k mp d = let k' = applyMoveSpec mv k d in
-                            if Set.member k' oldKeys then mp else Map.insertWith (++) k' [(k, d)] mp
+            doDecl i mp d = let k' = applyMoveSpec mv i d in
+                            if Set.member k' oldKeys then mp else Map.insertWith (++) k' [(_moduleKey i, d)] mp
       oldKeys :: Set ModuleKey
       oldKeys = Set.fromList (map _moduleKey mods)
 
@@ -269,11 +261,11 @@ defaultHsSourceDir mods =
 newPragmas :: forall l. (A.SrcInfo l, Data l) => Rd l -> MoveSpec -> ModuleKey -> [A.ModulePragma l] -> String
 newPragmas (Rd mods _env) mv thisKey thesePragmas =
   let (arriving :: Set S.ModulePragma) =
-          execState (mapM_ (\(ModuleInfo {_moduleKey = someKey,_module = (A.Module _ _mh somePragmas _is someDecls)}) ->
+          execState (mapM_ (\someMod@(ModuleInfo {_moduleKey = someKey,_module = (A.Module _ _mh somePragmas _is someDecls)}) ->
                                 when
                                   (someKey /= thisKey)
                                   (mapM_ (\d -> when
-                                                  (applyMoveSpec mv someKey d == thisKey)
+                                                  (applyMoveSpec mv someMod d == thisKey)
                                                   (mapM_ addPragma (pragmaDiff somePragmas thesePragmas))) someDecls)) mods) mempty in
   unlines (map prettyPrint' (Set.toList arriving))
     where
@@ -316,15 +308,15 @@ newExports mv mods thisKey =
       -- Scan a module other than thisKey for declarations moving to thisKey.  If
       -- found, transfer the export from there to here.
       newExportsFromModule :: ModuleInfo l -> [S.ExportSpec]
-      newExportsFromModule (ModuleInfo {_moduleKey = k'@(ModuleKey {_moduleName = mn}), _module = A.Module _ _ _ _ ds, _moduleGlobals = gs}) =
-          mapMaybe (\(d :: A.Decl ()) -> if (applyMoveSpec mv k' (d :: A.Decl ()) == thisKey) then exportSpec gs (simplify mn) d else Nothing) (map simplify ds)
+      newExportsFromModule i'@(ModuleInfo {_moduleKey = (ModuleKey {_moduleName = mn}), _module = A.Module _ _ _ _ ds, _moduleGlobals = gs}) =
+          mapMaybe (\(d :: A.Decl ()) -> if (applyMoveSpec mv (simplify i') (d :: A.Decl ()) == thisKey) then exportSpec gs (simplify mn) d else Nothing) (map simplify ds)
       -- We can't import from a module without an explicit name in its header
       newExportsFromModule (ModuleInfo {_moduleKey = k'@(ModuleFullPath {}), _module = A.Module _ _ _ _ ds, _moduleGlobals = gs}) = []
       newExportsFromModule x = error $ "newExports - unexpected module: " ++ show (_module x)
 
 findNewKeyOfExportSpec :: (A.SrcInfo l, Data l, Show l) => MoveSpec -> ModuleInfo l -> A.ExportSpec l -> Maybe ModuleKey
 findNewKeyOfExportSpec mv info@(ModuleInfo {_moduleKey = k}) spec =
-    fmap (applyMoveSpec mv k) (findDeclOfExportSpec info spec)
+    fmap (applyMoveSpec mv info) (findDeclOfExportSpec info spec)
 
 -- | Find the declaration that causes all the symbols in the
 -- ExportSpec to come into existance.
@@ -417,7 +409,7 @@ updateImports _ _ x = error $ "updateImports - unexpected module: " ++ show (_mo
 -- exports of someModule into imports in thisModule.
 importsForDepartingDecls :: (A.SrcInfo l, Data l, Eq l, Show l) => Rd l -> MoveSpec -> Maybe (ModuleInfo l) -> String
 importsForDepartingDecls rd@(Rd mods _env) mv (Just thisMod@(ModuleInfo {_moduleKey = thisKey@(ModuleKey {_moduleName = thisModuleName}), _module = A.Module _ _ _ _ ds})) =
-    concatMap (\d -> case applyMoveSpec mv thisKey d of
+    concatMap (\d -> case applyMoveSpec mv thisMod d of
                        someKey@(ModuleKey {_moduleName = someModuleName})
                            | someKey /= thisKey ->
                                case t2 d someKey (findModuleByKey mods someKey) of
@@ -474,14 +466,14 @@ moveType arrivalModuleImports departureModuleName =
 -- departure module itself.  If it is a down move the departure module
 -- will be importing the arriving declaration.
 importsForArrivingDecls :: (A.SrcInfo l, Data l, Show l) => MoveSpec -> ModuleKey -> [A.ImportDecl l] -> ModuleInfo l -> String
-importsForArrivingDecls mv thisKey thisModuleImports someModule@(ModuleInfo {_moduleKey = someKey, _module = A.Module _ _ _ someModuleImports ds}) =
-    if any (\d -> applyMoveSpec mv someKey d == thisKey) ds
+importsForArrivingDecls mv thisKey thisModuleImports someMod@(ModuleInfo {_moduleKey = someKey, _module = A.Module _ _ _ someModuleImports ds}) =
+    if any (\d -> applyMoveSpec mv someMod d == thisKey) ds
     then concatMap
              (\i -> prettyPrint' i ++ "\n")
              (filter (\i -> moduleName thisKey /= Just (simplify (A.importModule i))) someModuleImports) ++
          concatMap
              (\i -> prettyPrint' i ++ "\n")
-             (maybeToList (importDeclFromExportSpecs mv thisModuleImports someModule)) ++
+             (maybeToList (importDeclFromExportSpecs mv thisModuleImports someMod)) ++
          case (fmap (moveType someModuleImports) (moduleName thisKey), moduleName someKey) of
            (Just Up, Just someName) -> "import " ++ prettyPrint someName ++ "\n"
            _ -> ""
@@ -564,7 +556,7 @@ newModuleOfImportSpec :: (A.SrcInfo l, Data l, Show l) => Rd l -> MoveSpec -> A.
 newModuleOfImportSpec (Rd mods _env) mv oldModname spec =
     case findModuleByName mods oldModname of
       Just info -> case findDeclOfImportSpec info spec of
-                     Just d -> moduleName (applyMoveSpec mv (_moduleKey info) d)
+                     Just d -> moduleName (applyMoveSpec mv info d)
                      -- Everything else we can leave alone - even if we can't
                      -- find a declaration, they might be re-exported.
                      Nothing {- | isReexport info spec -} -> Just oldModname
@@ -635,7 +627,7 @@ reexports sym e = Set.member sym (foldDeclared Set.insert mempty e)
 -- name is added.  The final case is invalid - a module that imported
 -- itself.
 updateDecls :: (Data l, A.SrcInfo l, EndLoc l, Show l) => Rd l -> MoveSpec -> ModuleInfo l -> ScanM ()
-updateDecls (Rd mods _env) mv (ModuleInfo {_module = (A.Module _ _ _ _ decls), _moduleKey = thisKey}) = do
+updateDecls (Rd mods _env) mv thisMod@(ModuleInfo {_module = (A.Module _ _ _ _ decls), _moduleKey = thisKey}) = do
   -- keep (endOfImports m)
   -- Declarations that were already here and are to remain
   mapM_ doDecl (listPairs decls)
@@ -645,7 +637,7 @@ updateDecls (Rd mods _env) mv (ModuleInfo {_module = (A.Module _ _ _ _ decls), _
       doDecl (Nothing, Nothing) = pure ()
       doDecl (Nothing, Just _first) = pure () -- keep (srcLoc first)
       doDecl (Just d, next) =
-          case applyMoveSpec mv thisKey d of
+          case applyMoveSpec mv thisMod d of
             someKey | someKey /= thisKey -> do
               trace ("Moving " ++ ezPrint (foldDeclared (:) [] d) ++ " to " ++ ezPrint someKey ++ " from " ++ ezPrint thisKey) (pure ())
               skip (endLoc (A.ann d))
@@ -661,20 +653,20 @@ newDecls mv mods thisKey =
     concatMap doModule mods
     where
       -- Scan the declarations of all the modules except this one
-      doModule info@(ModuleInfo {_module = (A.Module _l _mh _ps _is decls),
-                                 _moduleKey = someKey})
+      doModule someMod@(ModuleInfo {_module = (A.Module _l _mh _ps _is decls),
+                                    _moduleKey = someKey})
           | someKey /= thisKey =
-              scanModule (do skip (endOfImports (_module info))
-                             mapM_ (uncurry (doDecl someKey)) (listPairs decls))
-                         info
+              scanModule (do skip (endOfImports (_module someMod))
+                             mapM_ (uncurry (doDecl someMod)) (listPairs decls))
+                         someMod
       doModule _ = ""
 
       -- If a declaration is to be moved to this module, extract its
       -- text and add it to the result.
-      doDecl :: ModuleKey -> Maybe (A.Decl l) -> Maybe (A.Decl l) -> ScanM ()
+      doDecl :: ModuleInfo l -> Maybe (A.Decl l) -> Maybe (A.Decl l) -> ScanM ()
       doDecl _ Nothing _ = pure ()
-      doDecl someKey (Just d) next =
-          case applyMoveSpec mv someKey d == thisKey of
+      doDecl someMod (Just d) next =
+          case applyMoveSpec mv someMod d == thisKey of
             False -> do
               skip (endLoc (A.ann d))
               withTrailingWhitespace skip (fmap (srcLoc . A.ann) next)

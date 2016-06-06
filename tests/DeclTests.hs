@@ -54,16 +54,16 @@ decl1 = TestLabel "decl1" $ TestCase $ testMoveSpec "tests/expected/decl1" "test
 moveSpec1 :: MoveSpec
 moveSpec1 = MoveSpec f
     where
-      f key (A.TypeSig _ [A.Ident _ s] _)
+      f i (A.TypeSig _ [A.Ident _ s] _)
           | s == "tryfindM" {-|| s == "failing"-} =
-              key {_moduleName = A.ModuleName () "Data.Logic.ATP.Tableaux"}
-      f key (A.FunBind _ ms)
+              (_moduleKey i) {_moduleName = A.ModuleName () "Data.Logic.ATP.Tableaux"}
+      f i (A.FunBind _ ms)
           | any (`elem` [S.Ident "tryfindM" {-, S.Ident "failing"-}])
                 (map (\match -> case match of
                                   A.Match _ name _ _ _ -> sName name
                                   A.InfixMatch _ _ name _ _ _ -> sName name) ms) =
-              key {_moduleName = A.ModuleName () "Data.Logic.ATP.Tableaux"}
-      f key __ = key
+              (_moduleKey i) {_moduleName = A.ModuleName () "Data.Logic.ATP.Tableaux"}
+      f i __ = _moduleKey i
 {-
 moveSpec1 k d | Set.member (S.Ident "tryfindM") (foldDeclared Set.insert mempty d) =
                   trace ("Expected TypeSig or FunBind: " ++ show d)
@@ -111,10 +111,10 @@ decl4 = TestLabel "decl4" $ TestCase $ do
                            moveDeclsByName "ignoringIOErrors" "IO" "Utils",
                            moveDeclsByName "FoldDeclared" "Symbols" "Tmp",
                            moveInstDecls instpred]
-      instpred key name _types
+      instpred i name _types
           | (gFind name :: [A.Name ()]) == [A.Ident () "FoldDeclared"] =
-              key {_moduleName = A.ModuleName () "Tmp"}
-      instpred key _ _ = key
+              (_moduleKey i) {_moduleName = A.ModuleName () "Tmp"}
+      instpred i _ _ = _moduleKey i
 
 decl5 :: Test
 decl5 = TestLabel "decl5" $ TestCase $ testMoveSpec "tests/expected/decl5" "tests/input/decl-mover" spec
@@ -157,18 +157,18 @@ decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tes
                            moveDeclsByName "St" "SrcLoc" "Scan",
                            moveSpliceDecls testSplice]
       -- testSplice key@(ModuleKey {_moduleName = S.ModuleName "SrcLoc"}) _ = key {_moduleName = S.ModuleName "Scan"}
-      testSplice :: ModuleKey -> A.Exp () -> ModuleKey
-      testSplice key@(ModuleKey {_moduleName = A.ModuleName () "SrcLoc"}) exp' =
+      testSplice :: ModuleInfo () -> A.Exp () -> ModuleKey
+      testSplice (ModuleInfo {_moduleKey = key@(ModuleKey {_moduleName = A.ModuleName () "SrcLoc"})}) exp' =
           case unfoldApply exp' of
             (x : _) | (map simplify (gFind x :: [A.Name Annot])) == [A.Ident () "makeLenses"] -> key {_moduleName = A.ModuleName () "Scan"}
             _ -> key
-      testSplice key _ = key
+      testSplice i _ = _moduleKey i
       unfoldApply (A.App _ a b) = unfoldApply a ++ [b]
       unfoldApply x = [x]
-      instPred key@(ModuleKey {_moduleName = A.ModuleName () "SrcLoc"}) name _types
+      instPred (ModuleInfo {_moduleKey = key@(ModuleKey {_moduleName = A.ModuleName () "SrcLoc"})}) name _types
           | (gFind (sQName name) :: [A.Name ()]) == [A.Ident () "SpanInfo"] =
               key {_moduleName = A.ModuleName () "Scan"}
-      instPred key _ _ = key
+      instPred i _ _ = _moduleKey i
 
 load8 :: Test
 load8 = TestLabel "load8" $ TestCase $
@@ -233,9 +233,9 @@ testMoveSpec' expected actual action = do
   assertString diff
 
 testSpec :: forall l. Data l => MoveSpec -> ModuleInfo l -> IO (ModuleInfo l)
-testSpec moveSpec m@(ModuleInfo {_moduleKey = k, _module = A.Module _ _ _ _ ds}) = do
+testSpec moveSpec i@(ModuleInfo {_moduleKey = k, _module = A.Module _ _ _ _ ds}) = do
   putStrLn ("---- module " ++ show (moduleName k) ++ " ----")
-  mapM_ (\d -> let k' = applyMoveSpec moveSpec k d in
+  mapM_ (\d -> let k' = applyMoveSpec moveSpec i d in
                putStrLn (show (foldDeclared (:) [] d) ++ ": " ++ if k /= k' then show k ++ " " ++  " -> " ++ show k' else "unchanged")) ds
-  return m
+  return i
 testSpec _ _ = error "Unexpected module"

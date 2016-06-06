@@ -4,11 +4,13 @@ module ModuleKey
     ( ModuleKey(ModuleKey, _moduleTop, _moduleName, _moduleExt, ModuleFullPath, _moduleFullPath)
     , moduleFullPath
     , moduleName
+    , moduleName'
     , moduleTop
     ) where
 
 import Data.Generics (Data, Typeable)
 import Data.List (groupBy, intercalate)
+import Data.Maybe (fromMaybe)
 import Language.Haskell.Exts.Annotated as A (ModuleName(..))
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import System.FilePath ((<.>), (</>))
@@ -47,6 +49,9 @@ moduleFullPath (ModuleKey {_moduleTop = top, _moduleName = A.ModuleName () mname
 moduleName :: ModuleKey -> Maybe (A.ModuleName ())
 moduleName (ModuleKey {_moduleName = name}) = Just name
 moduleName (ModuleFullPath {}) = Nothing
+
+moduleName' :: ModuleKey -> A.ModuleName ()
+moduleName' = fromMaybe (A.ModuleName () "Main") . moduleName
 
 moduleTop :: ModuleKey -> Maybe FilePath
 moduleTop (ModuleKey {_moduleTop = x}) = Just x
