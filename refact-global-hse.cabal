@@ -39,7 +39,6 @@ Library
     ModuleInfo
     Names
     SrcLoc
-    Symbols
     Utils
   GHC-options: -Wall -O2
 

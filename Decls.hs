@@ -249,7 +249,7 @@ newModuleMap rd@(Rd mods _env) mv =
       oldKeys = Set.fromList (map _moduleKey mods)
 
 -- | What is the best place to put a newly created module?
-defaultHsSourceDir :: forall l. [ModuleInfo l] -> FilePath
+defaultHsSourceDir :: [ModuleInfo l] -> FilePath
 defaultHsSourceDir mods =
     let countMap = foldl' (\mp path -> Map.insertWith (+) path (1 :: Int) mp)
                           (Map.singleton "." 0)
