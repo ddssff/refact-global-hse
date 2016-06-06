@@ -37,6 +37,7 @@ Library
     LoadModule
     ModuleKey
     ModuleInfo
+    MoveSpec
     Names
     SrcLoc
     Utils

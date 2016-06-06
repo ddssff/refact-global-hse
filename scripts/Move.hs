@@ -2,20 +2,20 @@
 -- runhaskell scripts/Move.hs --move=FoldDeclared,Symbols,Tmp --unsafe
 
 {-# LANGUAGE RankNTypes, ScopedTypeVariables, TemplateHaskell #-}
-import Control.Lens
-import Control.Monad (foldM)
+import Control.Lens (makeLenses, over, set, view)
 import Data.Default (def)
-import Data.Data (Data)
-import Data.List (groupBy, stripPrefix)
-import Data.Monoid ((<>), mempty)
-import Debug.Trace
-import Decls (instClassPred, moveDeclsByName, moveDeclsAndClean, moveInstDecls, MoveSpec, traceMoveSpec)
+import Data.List (groupBy)
+import Data.Monoid ((<>))
+import Decls (moveDeclsAndClean)
+
+import MoveSpec (instClassPred)
 import LoadModule (loadModules)
-import System.Environment
+import MoveSpec (moveDeclsByName, moveInstDecls, MoveSpec, traceMoveSpec)
+import System.Console.GetOpt (ArgDescr(NoArg, ReqArg), ArgOrder(Permute), getOpt', OptDescr(..), usageInfo)
+import System.Environment (getArgs)
 import System.FilePath ((</>), makeRelative)
-import System.FilePath.Find ((&&?), (==?), always, depth, extension, fileType, FileType(RegularFile), find)
-import System.Console.GetOpt
-import Utils (withCleanRepo, withCurrentDirectory, withTempDirectory)
+import System.FilePath.Find ((&&?), (==?), depth, extension, fileType, FileType(RegularFile), find)
+import Utils (withCleanRepo, withTempDirectory)
 
 data Params
     = Params { _moveSpec :: MoveSpec

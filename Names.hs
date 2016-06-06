@@ -1,6 +1,6 @@
 {-#LANGUAGE CPP, RecordWildCards #-}
 module Names
-    ( exportSpec
+    ( topDeclExportSpec
     ) where
 
 import Data.List (partition)
@@ -12,29 +12,27 @@ import ModuleInfo (getTopDeclSymbols', ModuleInfo)
 -- | Build an export spec for the symbols created by a Decl.  The
 -- getBound function returns the names, and we can get the module
 -- name from the decl
-exportSpec :: ModuleInfo () -> A.Decl () -> Maybe ExportSpec
-exportSpec m d =
+topDeclExportSpec :: ModuleInfo () -> A.Decl () -> Maybe ExportSpec
+topDeclExportSpec m d =
     case partition isThing (getTopDeclSymbols' m d) of
-      ([], [x]) -> Just (EVar (toQName x))
+      ([], [x]) -> (Just . EVar . UnQual . symbolName) x
       ([], []) -> Nothing
-      ([x], xs) -> Just (EThingWith (toQName x) (map toCName xs))
+      ([x], xs) -> Just (EThingWith (UnQual (symbolName x)) (map symbolCName xs))
       x -> error $ "unexpected decl symbols: " ++ show x
     where
-      toQName :: Symbol -> QName
-      toQName x = UnQual (symbolName x)
-      toCName :: Symbol -> CName
-      toCName x@(Value {}) = varName (UnQual (symbolName x))
-      toCName x@(Method {}) = varName (UnQual (symbolName x))
-      toCName x@(Selector {}) = varName (UnQual (symbolName x))
-      toCName x@(Constructor {}) = conName (UnQual (symbolName x))
-      toCName x = error $ "toCName: " ++ show x
+      isThing :: Symbol -> Bool
+      isThing (Type {}) = True
+      isThing (Data {}) = True
+      isThing (NewType {}) = True
+      isThing (Class {}) = True
+      isThing _ = False
 
-isThing :: Symbol -> Bool
-isThing (Type {}) = True
-isThing (Data {}) = True
-isThing (NewType {}) = True
-isThing (Class {}) = True
-isThing _ = False
+symbolCName :: Symbol -> CName
+symbolCName x@(Value {}) = varName (UnQual (symbolName x))
+symbolCName x@(Method {}) = varName (UnQual (symbolName x))
+symbolCName x@(Selector {}) = varName (UnQual (symbolName x))
+symbolCName x@(Constructor {}) = conName (UnQual (symbolName x))
+symbolCName x = error $ "toCName: " ++ show x
 
 varName :: QName -> CName
 varName (UnQual name) = VarName name

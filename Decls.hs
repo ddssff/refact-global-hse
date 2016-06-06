@@ -1,7 +1,5 @@
 {-# LANGUAGE CPP, FlexibleContexts, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections, TypeFamilies #-}
-module Decls (moveDeclsByName, moveInstDecls, moveSpliceDecls, instClassPred,
-              runSimpleMove, runSimpleMoveUnsafe, runMoveUnsafe, moveDeclsAndClean, moveDecls,
-              MoveSpec(MoveSpec), applyMoveSpec, traceMoveSpec) where
+module Decls (runSimpleMove, runSimpleMoveUnsafe, runMoveUnsafe, moveDeclsAndClean, moveDecls) where
 
 import Control.Exception (SomeException)
 import Control.Lens (makeLenses, view)
@@ -12,63 +10,33 @@ import Data.Default (def)
 import Data.Foldable as Foldable (find)
 import Data.Generics (Data)
 import Data.List ((\\), foldl', intercalate, nub, stripPrefix)
-import Data.Map as Map (insertWith, Map, mapWithKey, singleton, toList)
+import Data.Map as Map (insertWith, Map, mapWithKey, toList)
 import Data.Maybe (catMaybes, listToMaybe, mapMaybe, maybeToList)
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, toList)
-import Data.Tuple (swap)
 import Debug.Trace (trace)
 import GHC (GHCOpts(hsSourceDirs))
 import Imports (cleanImports)
-import qualified Language.Haskell.Exts.Annotated as A -- (Annotated(ann), Decl(InstDecl, TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), InstHead(..), InstRule(IParen, IRule), Module(Module), ModuleHead(ModuleHead), ModulePragma(..), Pretty, QName, Type)
-import Language.Haskell.Exts.Annotated.Simplify (sName)
-import Language.Haskell.Exts.Annotated.Simplify (sExportSpec, sModuleName, sModulePragma)
+import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), Module(Module), ModuleHead(ModuleHead), ModuleName(..), ModulePragma, Name, Pretty, SrcInfo)
+import Language.Haskell.Exts.Annotated.Simplify (sExportSpec, sModuleName, sModulePragma, sName)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
-import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcLoc(..), SrcSpanInfo(..))
+import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), ModulePragma(..), Name(..), QName(Qual, Special, UnQual))
 import Language.Haskell.Names (Environment, resolve, symbolName)
--- import Language.Haskell.Names.GlobalSymbolTable as Global (Table)
 import LoadModule (Annot, loadModule, loadModules)
 import ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
-import Names (exportSpec)
-import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, keep, keepAll, scanModule, skip, textOfSpan, srcLoc, ScanM, withTrailingWhitespace)
+import MoveSpec (applyMoveSpec, MoveSpec)
+import Names (topDeclExportSpec)
+import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, keep, keepAll, ScanM, scanModule, skip, srcLoc, withTrailingWhitespace)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Utils (dropWhile2, EZPrint(ezPrint), gFind, listPairs, replaceFile, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
-
--- | Specifies where to move each declaration of each module.  Given a
--- departure module key and a declaration, return an arrival module key.
-newtype MoveSpec = MoveSpec (ModuleInfo () -> A.Decl () -> ModuleKey)
-
-instance Monoid MoveSpec where
-    mempty = MoveSpec $ \i _ -> _moduleKey i
-    mappend (MoveSpec f) (MoveSpec g) = MoveSpec $
-      \i d ->
-        let k1 = f i d
-            k2 = g i d in
-        if k1 == _moduleKey i
-        then k2
-        else if k2 == _moduleKey i
-             then k1
-             else if k1 == k2
-                  then k1
-                  else error "Conflicting move specs"
+import Utils (EZPrint(ezPrint), gFind, listPairs, replaceFile, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 data Rd l
     = Rd { _modules :: [ModuleInfo l]
          , _environment :: Environment }
 
 $(makeLenses ''Rd)
-
-applyMoveSpec :: Data l => MoveSpec -> ModuleInfo l -> A.Decl l -> ModuleKey
-applyMoveSpec (MoveSpec f) i d = f (simplify i) (simplify d)
-
-traceMoveSpec :: MoveSpec -> MoveSpec
-traceMoveSpec (MoveSpec f) = MoveSpec $ \i d ->
-  let k' = f i d in
-  if _moduleKey i /= k'
-  then (trace ("moveSpec " ++ show (_moduleKey i) ++ " d -> " ++ show k') k')
-  else k'
 
 -- | Declaration moves can be characterized as one of two types, Down
 -- or Up.  This must be computed by scanning the parsed code of the
@@ -89,56 +57,6 @@ data MoveType
     -- exports of the departure module into imports and add them to
     -- the arrival module.
     deriving Show
-
--- A simple MoveSpec builder.
-moveDeclsByName :: String -> String -> String -> MoveSpec
-moveDeclsByName symname departMod arriveMod = MoveSpec $
-    \i decl ->
-        let syms = (Set.fromList . map symbolName) (getTopDeclSymbols' i decl) in
-        case _moduleKey i of
-          ModuleKey {_moduleName = A.ModuleName l name}
-              | name == departMod && (Set.member (S.Ident symname) syms || Set.member (S.Symbol symname) syms) ->
-                  (_moduleKey i) {_moduleName = A.ModuleName l arriveMod}
-          _ -> _moduleKey i
-
-moveInstDecls :: (ModuleInfo () -> A.QName () -> [A.Type ()] -> ModuleKey) -> MoveSpec
-moveInstDecls instpred =
-    MoveSpec f
-    where
-      f :: ModuleInfo () -> A.Decl () -> ModuleKey
-      f i (A.InstDecl _ _ irule _) = g i irule
-      f i _ = _moduleKey i
-      g :: ModuleInfo () -> A.InstRule () -> ModuleKey
-      g i (A.IParen _ irule) = g i irule
-      g i (A.IRule _ _ _ ihead) = uncurry (instpred i) (h [] ihead)
-      h :: [A.Type ()] -> A.InstHead () -> (A.QName (), [A.Type ()])
-      h types (A.IHParen _ ihead) = h types ihead
-      h types (A.IHApp _ ihead typ) = h (typ : types) ihead
-      h types (A.IHCon _ name) = (name, types)
-      h types (A.IHInfix _ typ name) = (name, typ : types)
-
-moveSpliceDecls :: (ModuleInfo () -> A.Exp () -> ModuleKey) -> MoveSpec
-moveSpliceDecls exppred =
-    MoveSpec f
-    where
-      f :: ModuleInfo () -> A.Decl () -> ModuleKey
-      f i (A.SpliceDecl _ exp') = g i exp'
-      f i _ = _moduleKey i
-      g :: ModuleInfo () -> A.Exp () -> ModuleKey
-      g i (A.SpliceExp _ splice) = h i splice
-      g i _ = _moduleKey i
-      h :: ModuleInfo () -> A.Splice () -> ModuleKey
-      h i (A.IdSplice _ _) = _moduleKey i
-      h i (A.ParenSplice _ exp') = exppred i exp'
-
--- | Build the argument to moveInstDecls
-instClassPred :: forall l. Data l => String -> String -> String ->
-                 ModuleInfo l -> A.QName l -> [A.Type l] -> ModuleKey
-instClassPred classname depart arrive i@(ModuleInfo {_moduleKey = key@ModuleKey {_moduleName = mname}}) qname _ts
-    | simplify mname == A.ModuleName () depart &&
-      (gFind qname :: [A.Name ()]) == [A.Ident () classname] =
-        key {_moduleName = A.ModuleName () arrive}
-instClassPred _ _ _ i _ _ = _moduleKey i
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
@@ -248,14 +166,6 @@ newModuleMap rd@(Rd mods _env) mv =
       oldKeys :: Set ModuleKey
       oldKeys = Set.fromList (map _moduleKey mods)
 
--- | What is the best place to put a newly created module?
-defaultHsSourceDir :: [ModuleInfo l] -> FilePath
-defaultHsSourceDir mods =
-    let countMap = foldl' (\mp path -> Map.insertWith (+) path (1 :: Int) mp)
-                          (Map.singleton "." 0)
-                          (map _modulePath mods) in
-    snd (maximum (map swap (Map.toList countMap)))
-
 -- If a declaration is arriving in this module we need to add all the LANGUAGE
 -- pragmas from that module to this one.
 newPragmas :: forall l. (A.SrcInfo l, Data l) => Rd l -> MoveSpec -> ModuleKey -> [A.ModulePragma l] -> String
@@ -308,22 +218,21 @@ newExports mv mods thisKey =
       -- Scan a module other than thisKey for declarations moving to thisKey.  If
       -- found, transfer the export from there to here.
       newExportsFromModule :: ModuleInfo l -> [S.ExportSpec]
-      newExportsFromModule i'@(ModuleInfo {_moduleKey = (ModuleKey {_moduleName = mn}), _module = A.Module _ _ _ _ ds, _moduleGlobals = gs}) =
+      newExportsFromModule i'@(ModuleInfo {_module = A.Module _ _ _ _ ds}) =
           let i = simplify i' in
-          mapMaybe (\(d :: A.Decl ()) -> if (applyMoveSpec mv i (d :: A.Decl ()) == thisKey) then exportSpec i d else Nothing) (map simplify ds)
+          mapMaybe (\(d :: A.Decl ()) -> if (applyMoveSpec mv i (d :: A.Decl ()) == thisKey) then topDeclExportSpec i d else Nothing) (map simplify ds)
       -- We can't import from a module without an explicit name in its header
-      newExportsFromModule (ModuleInfo {_moduleKey = k'@(ModuleFullPath {}), _module = A.Module _ _ _ _ ds, _moduleGlobals = gs}) = []
+      newExportsFromModule (ModuleInfo {_moduleKey = ModuleFullPath {}}) = []
       newExportsFromModule x = error $ "newExports - unexpected module: " ++ show (_module x)
 
 findNewKeyOfExportSpec :: (A.SrcInfo l, Data l, Show l) => MoveSpec -> ModuleInfo l -> A.ExportSpec l -> Maybe ModuleKey
-findNewKeyOfExportSpec mv info@(ModuleInfo {_moduleKey = k}) spec =
-    fmap (applyMoveSpec mv info) (findDeclOfExportSpec info spec)
+findNewKeyOfExportSpec mv mi espec = fmap (applyMoveSpec mv mi) (findDeclOfExportSpec mi espec)
 
 -- | Find the declaration that causes all the symbols in the
 -- ExportSpec to come into existance.
 findDeclOfExportSpec :: forall l. (A.SrcInfo l, Data l, Show l) => ModuleInfo l -> A.ExportSpec l -> Maybe (A.Decl l)
-findDeclOfExportSpec info spec =
-    findDeclOfSymbols info (Set.fromList (map sName (gFind spec :: [A.Name l])))
+findDeclOfExportSpec mi spec =
+    findDeclOfSymbols mi (Set.fromList (map sName (gFind spec :: [A.Name l])))
     where
       findDeclOfSymbols :: ModuleInfo l -> Set S.Name -> Maybe (A.Decl l)
       findDeclOfSymbols (ModuleInfo {_module = A.Module _ _ _ _ _}) syms | null syms = Nothing
@@ -333,7 +242,7 @@ findDeclOfExportSpec info spec =
             [] -> Nothing
             ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (map (srcLoc . A.ann) ds)
       findDeclOfSymbols x _ = error $ "findDeclOfExportSpec - unexpected module: " ++ show (_module x)
-      symset = Set.fromList . map symbolName . getTopDeclSymbols' info
+      symset = Set.fromList . map symbolName . getTopDeclSymbols' mi
 
 -- Find the declaration of the symbols of an import spec.  If that
 -- declaration moved, update the module name.
@@ -415,7 +324,7 @@ importsForDepartingDecls rd@(Rd mods _env) mv (Just thisMod@(ModuleInfo {_module
                        someKey@(ModuleKey {_moduleName = someModuleName})
                            | someKey /= thisKey ->
                                case t2 d someKey (findModuleByKey mods someKey) of
-                                 Just someMod@(ModuleInfo {_module = A.Module _ _ _ someModuleImports _}) ->
+                                 Just (ModuleInfo {_module = A.Module _ _ _ someModuleImports _}) ->
                                      case moveType someModuleImports thisModuleName of
                                        Down -> maybe "" (\i -> "\n" ++ prettyPrint' i) (importSpecFromDecl thisMod someModuleName d)
                                        Up -> ""
@@ -540,7 +449,7 @@ importsSymbolsFrom imports importee = any (\i -> simplify (A.importModule i) == 
 -- | Build an ImportDecl that imports the symbols of d from m.
 importSpecFromDecl :: forall l. (A.SrcInfo l, Eq l, Data l, Show l) => ModuleInfo l -> A.ModuleName () -> A.Decl l -> Maybe S.ImportDecl
 importSpecFromDecl thisMod newModName d =
-    case map exportToImport (maybeToList (exportSpec (simplify thisMod) (simplify d))) of
+    case map exportToImport (maybeToList (topDeclExportSpec (simplify thisMod) (simplify d))) of
       [] -> Nothing
       imports -> Just (S.ImportDecl { S.importLoc = srcLoc (A.ann d)
                                     , S.importModule = sModuleName newModName
@@ -677,6 +586,7 @@ newDecls mv mods thisKey =
               keep (endLoc (A.ann d))
               withTrailingWhitespace keep (fmap (srcLoc . A.ann) next)
 
+{-
 -- | Get the text of a declaration including the preceding whitespace
 declText :: ModuleInfo SrcSpanInfo -> A.Decl SrcSpanInfo -> String
 declText (ModuleInfo {_module = m@(A.Module _ mh ps is ds), _moduleText = mtext}) d =
@@ -691,16 +601,4 @@ declText (ModuleInfo {_module = m@(A.Module _ mh ps is ds), _moduleText = mtext}
                      [] -> srcLoc (A.ann m) in
     textOfSpan (mkSrcSpan p (endLoc (A.ann d))) mtext
 declText x _ = error $ "declText - unexpected module: " ++ show (_module x)
-
-{-
--- | Declaration predicates
-testDeclaredNameString :: (String -> Bool) -> A.Decl SrcSpanInfo -> Bool
-testDeclaredNameString p d = any p (gFind (exportSpecs (sDecl d)) :: [String])
-
-testInstanceClass :: (String -> Bool) -> A.Decl SrcSpanInfo -> Bool
-testInstanceClass p d@(A.InstDecl _mo _ir (Just idecls)) = testInstance
-
-testInstance :: (A.InstDecl SrcSpanInfo -> Bool) -> A.Decl SrcSpanInfo -> Bool
-testInstance p (A.InstDecl _mo _ir (Just idecls)) = any p idecls
-testInstance _ _ _ = False
 -}

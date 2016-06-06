@@ -11,27 +11,27 @@
 
 module DeclTests where
 
-import Control.Monad (when)
 import CPP (defaultCpphsOptions)
+import Control.Monad (when)
 import Data.Data (Data)
 import Data.List hiding (find)
 import Data.Monoid ((<>))
-import Decls (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec), moveSpliceDecls, runMoveUnsafe, runSimpleMoveUnsafe)
+import Decls (runMoveUnsafe, runSimpleMoveUnsafe)
 import GHC (GHCOpts(..))
 import Imports (cleanImports)
-import qualified Language.Haskell.Exts.Annotated.Syntax as A
-import Language.Haskell.Exts.Extension (KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules))
 import Language.Haskell.Exts.Annotated.Simplify (sName, sQName)
-import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
-import qualified Language.Haskell.Exts.Syntax as S
+import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl(FunBind, TypeSig), Exp(App), Match(InfixMatch, Match), Module(Module), ModuleName(ModuleName), Name(Ident))
+import Language.Haskell.Exts.Extension (KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules))
+import qualified Language.Haskell.Exts.Syntax as S (Name(Ident))
 import Language.Preprocessor.Cpphs (CpphsOptions(..))
 import LoadModule (Annot, loadModule')
-import ModuleInfo
+import ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
 import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
+import MoveSpec (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec), moveSpliceDecls)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.Process (readProcessWithExitCode)
-import Test.HUnit
-import Utils (dropWhile2, EZPrint(ezPrint), gFind, gitResetSubdir, listPairs, replaceFile, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
+import Test.HUnit (assertString, Test(..))
+import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 declTests :: Test
 declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, simple1]
@@ -185,6 +185,7 @@ load8 = TestLabel "load8" $ TestCase $
               ExitSuccess -> assertString diff
               ExitFailure 1 -> assertString diff
               ExitFailure 2 -> assertString err
+              ExitFailure n -> error $ "Unexpected diff(1) exit code: " ++ show n
     where
       expected = "/home/dsf/git/refact-global-hse/tests/expected/decl8"
       actual = "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client"
