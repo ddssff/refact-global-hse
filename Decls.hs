@@ -27,7 +27,7 @@ import ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
 import MoveSpec (applyMoveSpec, MoveSpec)
 import Names (topDeclExportSpec)
-import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, keep, keepAll, ScanM, scanModule, skip, srcLoc, withTrailingWhitespace)
+import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, keep, keepAll, ScanM, scanModule, skip, srcLoc, startOfImports, withTrailingWhitespace)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Utils (EZPrint(ezPrint), gFind, listPairs, prettyPrint', replaceFile, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
@@ -193,6 +193,7 @@ updateHeader (Rd _mods _env) mv
   maybe (pure ()) (keep . srcLoc . A.ann) (listToMaybe specs)
   foldM doExport False specs
   keep (endOfHeader m)
+  withTrailingWhitespace keep (startOfImports m)
     where
       doExport :: Bool -> A.ExportSpec l -> ScanM Bool
       doExport needSep spec =
@@ -202,7 +203,9 @@ updateHeader (Rd _mods _env) mv
             _ -> skip (srcLoc (A.ann spec)) >> keep (endLoc (A.ann spec)) >> pure True
 updateHeader (Rd _mods _env) mv
              i@(ModuleInfo {_moduleKey = k,
-                            _module = m@(A.Module _ (Just (A.ModuleHead _ _ _ Nothing)) _ _ _)}) = keep (endOfHeader m)
+                            _module = m@(A.Module _ (Just (A.ModuleHead _ _ _ Nothing)) _ _ _)}) =
+  do keep (endOfHeader m)
+     withTrailingWhitespace keep (startOfImports m)
 updateHeader _ _ _ = pure ()
 
 -- | Text of exports added due to arriving declarations
@@ -332,7 +335,7 @@ importsForDepartingDecls rd@(Rd mods _env) mv (Just thisMod@(ModuleInfo {_module
                                case t2 d someKey (findModuleByKey mods someKey) of
                                  Just (ModuleInfo {_module = A.Module _ _ _ someModuleImports _}) ->
                                      case moveType someModuleImports thisModuleName of
-                                       Down -> maybe "" (\i -> "\n" ++ prettyPrint' i) (importSpecFromDecl thisMod someModuleName d)
+                                       Down -> maybe "" (\i -> prettyPrint' i ++ "\n") (importSpecFromDecl thisMod someModuleName d)
                                        Up -> ""
                                  -- Moving a declaration from thisKey to someKey is a "Down"
                                  -- move if there are any remaining uses of those symbols in
@@ -340,7 +343,7 @@ importsForDepartingDecls rd@(Rd mods _env) mv (Just thisMod@(ModuleInfo {_module
                                  -- depend on exports of thisKey.  FIXME: I haven't
                                  -- implemented theses tests yet, so assume Down for now.
                                  Just _ -> error "Unexpected module"
-                                 Nothing -> maybe "" (\i -> "\n" ++ prettyPrint' i ++ "\n") (importSpecFromDecl thisMod someModuleName d)
+                                 Nothing -> maybe "" (\i -> prettyPrint' i ++ "\n") (importSpecFromDecl thisMod someModuleName d)
                        _ -> "") ds
     where
       t2 d someKey x =

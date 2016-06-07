@@ -464,22 +464,26 @@ endOfPragmas (A.Module l _ [] _ _) = endLoc l
 endOfPragmas (A.Module _l _ ps _ _) = endLoc (A.ann (last ps))
 endOfPragmas _ = error "endOfPragmas"
 
-startOfDecls :: SrcInfo l => A.Module l -> SrcLoc
-startOfDecls m@(A.Module _l _mh _ps _is []) = startOfImports m
-startOfDecls (A.Module _l _mh _ps _is (d : _)) = srcLoc (A.ann d)
+-- | The beginning of the first thing after the imports
+startOfDecls :: SrcInfo l => A.Module l -> Maybe SrcLoc
+startOfDecls (A.Module _l _mh _ps _is []) = Nothing
+startOfDecls (A.Module _l _mh _ps _is (d : _)) = Just (srcLoc (A.ann d))
 startOfDecls _ = error "startOfDecls"
 
-startOfImports :: SrcInfo l => A.Module l -> SrcLoc
-startOfImports m@(A.Module _l _mh _ps [] _) = startOfHeader m
-startOfImports (A.Module _l _mh _ps (i : _) _) = srcLoc (A.ann i)
+-- | The beginning of the first thing after the header.
+startOfImports :: SrcInfo l => A.Module l -> Maybe SrcLoc
+startOfImports m@(A.Module _l _mh _ps [] _) = startOfDecls m
+startOfImports (A.Module _l _mh _ps (i : _) _) = Just (srcLoc (A.ann i))
 startOfImports _ = error "startOfImports"
 
-startOfHeader :: SrcInfo l => A.Module l -> SrcLoc
-startOfHeader m@(A.Module _l Nothing _ps _ _) = startOfPragmas m
-startOfHeader (A.Module _l (Just h) _ps _is _) = srcLoc (A.ann h)
+-- | The beginning of the first thing after the pragmas.
+startOfHeader :: SrcInfo l => A.Module l -> Maybe SrcLoc
+startOfHeader m@(A.Module _l Nothing _ps _ _) = startOfImports m
+startOfHeader (A.Module _l (Just h) _ps _is _) = Just (srcLoc (A.ann h))
 startOfHeader _ = error "startOfHeader"
 
-startOfPragmas :: SrcInfo l => A.Module l -> SrcLoc
-startOfPragmas (A.Module l _ [] _ _) = srcLoc l
-startOfPragmas (A.Module _l _ (p : _) _ _) = srcLoc (A.ann p)
+-- | The beginning of the first thing
+startOfPragmas :: SrcInfo l => A.Module l -> Maybe SrcLoc
+startOfPragmas (A.Module _l _ [] _ _) = Nothing
+startOfPragmas (A.Module _l _ (p : _) _ _) = Just (srcLoc (A.ann p))
 startOfPragmas _ = error "startOfPragmas"

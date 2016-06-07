@@ -91,7 +91,7 @@ replaceImports newImports (ModuleInfo {_module = A.Module _l _mh _ps is _ds})
         Nothing
 replaceImports newImports info@(ModuleInfo {_module = m@(A.Module _l _mh _ps (_ : _) _ds)}) =
     Just $ scanModule (do -- keep (endOfHeader m)
-                          keep (startOfImports m)
+                          maybe (pure ()) keep (startOfImports m)
                           tell (intercalate "\n" (map prettyPrint' newImports))
                           -- skip (startOfDecls m)
                           skip (endOfImports m)
