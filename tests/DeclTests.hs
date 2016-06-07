@@ -35,7 +35,7 @@ import Test.HUnit (assertString, Test(..))
 import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 declTests :: Test
-declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, simple1]
+declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, decl7, decl8, simple1]
 
 -- Test moving a declaration to a module that currently imports it
 decl1 :: Test
@@ -169,6 +169,19 @@ decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tes
           | (gFind (sQName name) :: [A.Name ()]) == [A.Ident () "SpanInfo"] =
               key {_moduleName = A.ModuleName () "Scan"}
       instPred i _ _ = _moduleKey i
+
+decl8 :: Test
+decl8 = TestLabel "decl8 - up move" $ TestCase $ do
+          let input = "tests/input/decl-mover"
+          testMoveSpec' "tests/expected/decl8" input (runSimpleMoveUnsafe input spec)
+    where
+      spec :: MoveSpec
+      spec = foldl1' (<>) [-- moveDeclsByName "defaultCpphsOptions" "CPP" "Types"
+                           -- moveDeclsByName "parseFileWithCommentsAndCPP" "CPP" "Types"
+                            moveDeclsByName "symbolsDeclaredBy" "Symbols" "Imports"
+                          , moveDeclsByName "imports" "Symbols" "Imports"
+                          , moveDeclsByName "exports" "Symbols" "Imports"
+                          ]
 
 load8 :: Test
 load8 = TestLabel "load8" $ TestCase $

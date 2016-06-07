@@ -16,6 +16,7 @@
  * Find symbols that are exported but never imported and make them local
  * Minimize LANGUAGE directives by trial and error
  * Remove modules that become empty
+ * Fix up qualified references to declarations that moved
 
 # What it might do eventually
 
