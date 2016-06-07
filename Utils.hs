@@ -1,3 +1,8 @@
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, RankNTypes, ScopedTypeVariables #-}
 module Utils where
 
@@ -7,19 +12,22 @@ import Control.Monad (MonadPlus, msum, when)
 import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Bool (bool)
-import Data.Generics (Data(gmapM), GenericM, listify, Typeable, toConstr)
+import Data.Generics (Data(gmapM), GenericM, listify, toConstr, Typeable)
 import Data.List (intercalate, stripPrefix)
 import Data.Maybe (mapMaybe)
-import Data.Sequence (Seq, (|>))
-import Language.Haskell.Exts.Pretty (prettyPrint)
-import qualified Language.Haskell.Exts.Syntax as S
-import System.Directory -- (createDirectoryIfMissing, getCurrentDirectory, removeDirectoryRecursive, removeFile, setCurrentDirectory)
+import Data.Sequence ((|>), Seq)
+import qualified Language.Haskell.Exts.Annotated as A -- (Pretty)
+import Language.Haskell.Exts.Annotated.Simplify (sType)
+import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
+import qualified Language.Haskell.Exts.Syntax as S (ModuleName(..), Name)
+import System.Directory (createDirectoryIfMissing, doesFileExist, getCurrentDirectory, removeDirectoryRecursive, removeFile, renameFile, setCurrentDirectory)
 import System.Exit (ExitCode(..))
 import System.FilePath (takeDirectory)
 import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError)
 import qualified System.IO.Temp as Temp (createTempDirectory)
 import System.Process (readProcess, readProcessWithExitCode)
+import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 
 -- | dropWhile where predicate operates on two list elements.
 dropWhile2 :: (a -> Maybe a -> Bool) -> [a] -> [a]
@@ -85,11 +93,33 @@ instance EZPrint S.ModuleName where
     ezPrint (S.ModuleName s) = s
 
 instance EZPrint S.Name where
-    ezPrint = prettyPrint
+    ezPrint = prettyPrint'
 
 instance EZPrint (Maybe S.ModuleName) where
     ezPrint (Just x) = prettyPrint x
     ezPrint Nothing = "Main"
+
+instance A.SrcInfo l => EZPrint (A.InstRule l) where
+    ezPrint (A.IParen _ r) = ezPrint r
+    ezPrint (A.IRule _ _ _ h) = "instance " ++ ezPrint h
+
+instance A.SrcInfo l => EZPrint (A.InstHead l) where
+    ezPrint (A.IHParen _ h) = ezPrint h
+    ezPrint (A.IHInfix _ t n) = "(" ++ ezPrint n ++ ") " ++ ezPrint t
+    ezPrint (A.IHCon _ n) = ezPrint n
+    ezPrint (A.IHApp _ h t) = ezPrint h ++ " " ++ ezPrint t
+
+instance EZPrint (A.QName l) where
+    ezPrint = prettyPrint'
+
+instance EZPrint (A.Name l) where
+    ezPrint = prettyPrint'
+
+instance A.SrcInfo l => EZPrint (A.Type l) where
+    ezPrint = prettyPrint' . sType
+
+instance A.SrcInfo l => EZPrint (A.Exp l) where
+    ezPrint = prettyPrint'
 
 maybeStripPrefix :: Eq a => [a] -> [a] -> [a]
 maybeStripPrefix pre lst = maybe lst id (stripPrefix pre lst)
@@ -178,3 +208,6 @@ simplify = fmap (const ())
 
 con :: (Typeable a, Data a) => a -> String
 con = show . toConstr
+
+prettyPrint' :: A.Pretty a => a -> String
+prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode

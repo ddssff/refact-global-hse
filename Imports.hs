@@ -17,8 +17,7 @@ import Data.Monoid ((<>))
 import Data.Set as Set (empty, member, Set, singleton, union, unions)
 import Debug.Trace (trace)
 import GHC (extensionsForHSEParser, GHCOpts(..), ghcProcessArgs)
-import qualified Language.Haskell.Exts.Annotated as A (ann, Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Name, Pretty, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
-import Language.Haskell.Exts.Pretty (defaultMode, prettyPrintStyleMode)
+import qualified Language.Haskell.Exts.Annotated as A (ann, Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Name, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(..))
@@ -27,8 +26,7 @@ import SrcLoc (endOfImports, keep, keepAll, scanModule, skip, srcLoc, startOfImp
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.FilePath ((</>))
 import System.Process (readProcessWithExitCode, showCommandForUser)
-import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Utils (replaceFile, simplify)
+import Utils (prettyPrint', replaceFile, simplify)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: MonadIO m => FilePath -> GHCOpts -> [ModuleInfo SrcSpanInfo] -> m ()
@@ -100,9 +98,6 @@ replaceImports newImports info@(ModuleInfo {_module = m@(A.Module _l _mh _ps (_ 
                           keepAll)
                       info
 replaceImports _ _ = error "replaceImports"
-
-prettyPrint' :: A.Pretty a => a -> String
-prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
 
 -- | Final touch-ups - sort and merge similar imports.
 fixNewImports :: Bool         -- ^ If true, imports that turn into empty lists will be removed

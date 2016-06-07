@@ -16,10 +16,11 @@ import Control.Monad (when)
 import Data.Data (Data)
 import Data.List hiding (find)
 import Data.Monoid ((<>))
+import Debug.Trace
 import Decls (runMoveUnsafe, runSimpleMoveUnsafe)
 import GHC (GHCOpts(..))
 import Imports (cleanImports)
-import Language.Haskell.Exts.Annotated.Simplify (sName, sQName)
+import Language.Haskell.Exts.Annotated.Simplify (sExp, sName, sQName)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl(FunBind, TypeSig), Exp(App), Match(InfixMatch, Match), Module(Module), ModuleName(ModuleName), Name(Ident))
 import Language.Haskell.Exts.Extension (KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules))
 import Language.Haskell.Exts.SrcLoc (SrcInfo)
@@ -32,7 +33,7 @@ import MoveSpec (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpe
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.Process (readProcessWithExitCode)
 import Test.HUnit (assertString, Test(..))
-import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
+import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, prettyPrint', simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 declTests :: Test
 declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, decl7, decl8, simple1]
@@ -150,8 +151,8 @@ decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tes
                            moveDeclsByName "SpanM" "SrcLoc" "Scan",
                            moveDeclsByName "skip" "SrcLoc" "Scan",
                            moveDeclsByName "keep" "SrcLoc" "Scan",
-                           moveDeclsByName "trailingWhiteSpace" "SrcLoc" "Scan",
-                           moveDeclsByName "withTrailingWhiteSpace" "SrcLoc" "Scan",
+                           moveDeclsByName "trailingWhitespace" "SrcLoc" "Scan",
+                           moveDeclsByName "withTrailingWhitespace" "SrcLoc" "Scan",
                            moveDeclsByName "debugRender" "SrcLoc" "Scan",
                            moveDeclsByName "void" "SrcLoc" "Scan",
                            moveDeclsByName "St" "SrcLoc" "Scan",
@@ -160,13 +161,13 @@ decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tes
       testSplice :: ModuleInfo () -> A.Exp () -> ModuleKey
       testSplice (ModuleInfo {_moduleKey = key@(ModuleKey {_moduleName = A.ModuleName () "SrcLoc"})}) exp' =
           case unfoldApply exp' of
-            (x : _) | (map simplify (gFind x :: [A.Name Annot])) == [A.Ident () "makeLenses"] -> key {_moduleName = A.ModuleName () "Scan"}
+            (x : _) | map simplify (gFind x :: [A.Name ()]) == [A.Ident () "makeLenses"] -> key {_moduleName = A.ModuleName () "Scan"}
             _ -> key
       testSplice i _ = _moduleKey i
       unfoldApply (A.App _ a b) = unfoldApply a ++ [b]
       unfoldApply x = [x]
       instPred (ModuleInfo {_moduleKey = key@(ModuleKey {_moduleName = A.ModuleName () "SrcLoc"})}) name _types
-          | (gFind (sQName name) :: [A.Name ()]) == [A.Ident () "SpanInfo"] =
+          | (gFind name :: [A.Name ()]) == [A.Ident () "SpanInfo"] =
               key {_moduleName = A.ModuleName () "Scan"}
       instPred i _ _ = _moduleKey i
 

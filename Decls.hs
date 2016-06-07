@@ -16,9 +16,9 @@ import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, toList)
 import Debug.Trace (trace)
 import GHC (GHCOpts(hsSourceDirs))
 import Imports (cleanImports)
-import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), Module(Module), ModuleHead(ModuleHead), ModuleName(..), ModulePragma, Name, Pretty, SrcInfo)
+import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), Module(Module), ModuleHead(ModuleHead), ModuleName(..), ModulePragma, Name, SrcInfo)
 import Language.Haskell.Exts.Annotated.Simplify (sExportSpec, sModuleName, sModulePragma, sName)
-import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
+import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), ModulePragma(..), Name(..), QName(Qual, Special, UnQual))
 import Language.Haskell.Names (Environment, resolve, symbolName)
@@ -29,8 +29,7 @@ import MoveSpec (applyMoveSpec, MoveSpec)
 import Names (topDeclExportSpec)
 import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, keep, keepAll, ScanM, scanModule, skip, srcLoc, withTrailingWhitespace)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
-import Text.PrettyPrint (mode, Mode(OneLineMode), style)
-import Utils (EZPrint(ezPrint), gFind, listPairs, replaceFile, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
+import Utils (EZPrint(ezPrint), gFind, listPairs, prettyPrint', replaceFile, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 data Rd l
     = Rd { _modules :: [ModuleInfo l]
@@ -57,9 +56,6 @@ data MoveType
     -- exports of the departure module into imports and add them to
     -- the arrival module.
     deriving Show
-
-prettyPrint' :: A.Pretty a => a -> String
-prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
 
 -- | Run moveDeclsAndClean on all the .hs files in the given
 -- directory.

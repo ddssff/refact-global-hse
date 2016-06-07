@@ -8,7 +8,7 @@ module ModuleInfo
 
 import Data.Generics (Data, Typeable)
 import qualified Language.Haskell.Exts.Annotated as A -- (Decl(TypeSig), Module(Module), ModuleHead(ModuleHead), Name)
-import Language.Haskell.Exts.Annotated.Simplify (sModuleName, sName, sType)
+import Language.Haskell.Exts.Annotated.Simplify (sModuleName, sName)
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
@@ -49,29 +49,11 @@ getTopDeclSymbols' i decl =
       modulename = (moduleName' (_moduleKey i))
 
 instance (A.SrcInfo l, Typeable l, Data l) => EZPrint (ModuleInfo l, A.Decl l) where
-    ezPrint (i, A.InstDecl _ _ r _) = ezPrint r
+    ezPrint (_, A.InstDecl _ _ r _) = ezPrint r
+    ezPrint (_, A.SpliceDecl _ e) = ezPrint e
     ezPrint (i, d) =
         case gFind (getTopDeclSymbols' i d) :: [S.Name] of
           [] -> case (getBound (_moduleGlobals i) d) of
                   [] -> "(con=" ++ con d ++ ") " ++ show (getTopDeclSymbols' i d)
                   xs -> ezPrint xs
           ns -> ezPrint ns
-
-instance A.SrcInfo l => EZPrint (A.InstRule l) where
-    ezPrint (A.IParen _ r) = ezPrint r
-    ezPrint (A.IRule _ _ _ h) = "instance " ++ ezPrint h
-
-instance A.SrcInfo l => EZPrint (A.InstHead l) where
-    ezPrint (A.IHParen _ h) = ezPrint h
-    ezPrint (A.IHInfix _ t n) = "(" ++ ezPrint n ++ ") " ++ ezPrint t
-    ezPrint (A.IHCon _ n) = ezPrint n
-    ezPrint (A.IHApp _ h t) = ezPrint h ++ " " ++ ezPrint t
-
-instance EZPrint (A.QName l) where
-    ezPrint = prettyPrint
-
-instance EZPrint (A.Name l) where
-    ezPrint = prettyPrint
-
-instance A.SrcInfo l => EZPrint (A.Type l) where
-    ezPrint = prettyPrint . sType

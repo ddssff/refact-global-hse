@@ -27,6 +27,7 @@
        to upgrade clients of your library.  Eh.
    31. Use Scoped info instead of FoldDeclared, HasSymbols, HasCNames, and to implement moveType
    32. Change qualified uses of the symbols of moving declarations
+   33. Global symbol rename
 
 DONE
 

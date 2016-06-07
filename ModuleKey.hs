@@ -58,7 +58,7 @@ moduleTop (ModuleKey {_moduleTop = x}) = Just x
 moduleTop _ = Nothing
 
 instance EZPrint ModuleKey where
-    ezPrint (ModuleKey {_moduleName = n, _moduleTop = top}) = prettyPrint n {-++ " (top=" ++ show top ++ ")"-}
+    ezPrint (ModuleKey {_moduleName = n{-, _moduleTop = top-}}) = prettyPrint n {-++ " (top=" ++ show top ++ ")"-}
     ezPrint (ModuleFullPath p) = p
 
 instance Pretty ModuleKey where
