@@ -182,8 +182,7 @@ newPragmas (Rd mods _env) mv thisKey thesePragmas =
       addPragma :: MonadState (Set S.ModulePragma) m => S.Name -> m ()
       addPragma name = modify (Set.insert (S.LanguagePragma (SrcLoc "" 1 1) [name]))
       pragmaDiff :: [A.ModulePragma l] -> [A.ModulePragma l] -> [S.Name]
-      pragmaDiff ps qs = t1 (concatMap pragmaLanguageNames (map sModulePragma ps) \\ concatMap pragmaLanguageNames (map sModulePragma qs))
-          where t1 x = trace ("pragmaDiff " ++ show (map sModulePragma ps) ++ " " ++ show (map sModulePragma qs) ++ " -> " ++ show x) x
+      pragmaDiff ps qs = concatMap pragmaLanguageNames (map sModulePragma ps) \\ concatMap pragmaLanguageNames (map sModulePragma qs)
       pragmaLanguageNames :: S.ModulePragma -> [S.Name]
       pragmaLanguageNames (S.LanguagePragma _l names) = names
       pragmaLanguageNames _ = []
@@ -347,7 +346,7 @@ importsForDepartingDecls rd@(Rd mods _env) mv (Just thisMod@(ModuleInfo {_module
                        _ -> "") ds
     where
       t2 d someKey x =
-          trace ("departing: " ++ ezPrint (thisMod, d) ++ " from " ++ ezPrint thisKey ++ " -> " ++ ezPrint someKey ++ ", " ++ moveType' rd thisKey someKey) x
+          trace ("import departing: " ++ ezPrint (thisMod, d) ++ " from " ++ ezPrint thisKey ++ " -> " ++ ezPrint someKey ++ ", moveType=" ++ moveType' rd thisKey someKey) x
 
 importsForDepartingDecls _ _ _ = ""
 
@@ -560,7 +559,7 @@ updateDecls (Rd mods _env) mv thisMod@(ModuleInfo {_module = (A.Module _ _ _ _ d
       doDecl (Just d, next) =
           case applyMoveSpec mv thisMod d of
             someKey | someKey /= thisKey -> do
-              trace ("Moving " ++ ezPrint (map symbolName (getTopDeclSymbols' thisMod d)) ++ " to " ++ ezPrint someKey ++ " from " ++ ezPrint thisKey) (pure ())
+              trace ("decl departing: " ++ ezPrint (thisMod, d) ++ " from " ++ ezPrint thisKey ++ " to " ++ ezPrint someKey) (pure ())
               skip (endLoc (A.ann d))
               withTrailingWhitespace skip (fmap (srcLoc . A.ann) next)
             _ -> do

@@ -22,6 +22,7 @@ import Imports (cleanImports)
 import Language.Haskell.Exts.Annotated.Simplify (sName, sQName)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl(FunBind, TypeSig), Exp(App), Match(InfixMatch, Match), Module(Module), ModuleName(ModuleName), Name(Ident))
 import Language.Haskell.Exts.Extension (KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules))
+import Language.Haskell.Exts.SrcLoc (SrcInfo)
 import qualified Language.Haskell.Exts.Syntax as S (Name(Ident))
 import Language.Preprocessor.Cpphs (CpphsOptions(..))
 import LoadModule (Annot, loadModule')
@@ -232,7 +233,7 @@ testMoveSpec' expected actual action = do
   when (code == ExitSuccess) (gitResetSubdir actual)
   assertString diff
 
-testSpec :: forall l. Data l => MoveSpec -> ModuleInfo l -> IO (ModuleInfo l)
+testSpec :: forall l. (SrcInfo l, Data l) => MoveSpec -> ModuleInfo l -> IO (ModuleInfo l)
 testSpec moveSpec i@(ModuleInfo {_moduleKey = k, _module = A.Module _ _ _ _ ds}) = do
   putStrLn ("---- module " ++ show (moduleName k) ++ " ----")
   mapM_ (\d -> let k' = applyMoveSpec moveSpec i d in

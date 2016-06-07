@@ -7,7 +7,7 @@ import Control.Monad (MonadPlus, msum, when)
 import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Bool (bool)
-import Data.Generics (Data(gmapM), GenericM, listify, Typeable)
+import Data.Generics (Data(gmapM), GenericM, listify, Typeable, toConstr)
 import Data.List (intercalate, stripPrefix)
 import Data.Maybe (mapMaybe)
 import Data.Sequence (Seq, (|>))
@@ -175,3 +175,6 @@ dropWhileNext p xs = mapMaybe fst $ dropWhile (\(_,x) -> maybe True p x) $ listP
 
 simplify :: Functor f => f a -> f ()
 simplify = fmap (const ())
+
+con :: (Typeable a, Data a) => a -> String
+con = show . toConstr

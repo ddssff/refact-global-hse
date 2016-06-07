@@ -5,11 +5,10 @@
 {-# LANGUAGE TypeOperators #-}
 
 import Data.Default (def)
-import Data.List (intercalate, sort)
+import Data.List (intercalate)
 import Data.Map as Map (fromList)
 import DeclTests
 import Language.Haskell.Exts.Annotated -- (parseModule, ParseResult(ParseOk))
-import Language.Haskell.Exts.SrcLoc
 import qualified Language.Haskell.Exts.Syntax as S
 import Language.Haskell.Names
 import Language.Haskell.Names.ModuleSymbols (moduleTable)
