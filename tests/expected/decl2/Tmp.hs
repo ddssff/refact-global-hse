@@ -17,3 +17,4 @@ withCurrentDirectory path action =
     IO.bracket (liftIO getCurrentDirectory >>= \save -> liftIO (setCurrentDirectory path) >> return save)
                (liftIO . setCurrentDirectory)
                (const (action `IO.catch` (\(e :: SomeException) -> liftIO (putStrLn ("in " ++ path)) >> throw e)) :: String -> m a)
+               -- (const action `catch` (\e -> liftIO (putStrLn ("in " ++ path) >> throw e)))

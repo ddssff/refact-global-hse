@@ -119,7 +119,9 @@ locSum (SrcLoc f l1 c1) (SrcLoc _ l2 c2) =
 
 endLocOfText :: FilePath -> String -> SrcLoc
 endLocOfText path x =
-    SrcLoc {srcFilename = path, srcLine = length ls, srcColumn = length (last ls) + 1}
+    case ls of
+      [] -> SrcLoc {srcFilename = path, srcLine = 1, srcColumn = 1}
+      _ -> SrcLoc {srcFilename = path, srcLine = length ls, srcColumn = length (last ls) + 1}
     where ls = lines' x
 
 -- | Return a span that exactly covers the string s
@@ -359,9 +361,15 @@ trailingWhitespace next = do
     False -> error $ "trailingWhitespace: " ++ show loc'' ++ " < " ++ show loc
     True -> do
       let (s', _) = splitText (locDiff loc'' loc) t
-      case span (/= '\n') s' of
-        (pre, '\n' : _suf) -> pure (pre ++ ['\n'])
-        _ -> pure ""
+      case lines' s' of
+        [] -> pure s'
+        (x : xs) ->
+            -- x is the end of the last line of the declaration (or
+            -- whatever), so we always keep that.  Also keep subsequent
+            -- nonblank lines.
+            case break (all isSpace) xs of
+              (_, []) -> pure s'
+              (comments', _) -> pure (unlines (x : comments'))
 
 withTrailingWhitespace :: (SrcLoc -> ScanM ()) -> Maybe SrcLoc -> ScanM ()
 withTrailingWhitespace fn next = do
