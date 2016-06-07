@@ -11,8 +11,9 @@ module MoveSpec(MoveSpec(MoveSpec)
     , traceMoveSpec
     , moveDeclsByName
     , moveInstDecls
-    , moveSpliceDecls
     , instClassPred
+    , moveSpliceDecls
+    , splicePred
     ) where
 
 import Data.Generics (Data)
@@ -99,6 +100,15 @@ instClassPred :: forall l. Data l => String -> String -> String ->
                  ModuleInfo l -> A.QName l -> [A.Type l] -> ModuleKey
 instClassPred classname depart arrive (ModuleInfo {_moduleKey = key@ModuleKey {_moduleName = mname}}) qname _ts
     | simplify mname == A.ModuleName () depart &&
-      (gFind qname :: [A.Name ()]) == [A.Ident () classname] =
+      (gFind (simplify qname) :: [A.Name ()]) == [A.Ident () classname] =
         key {_moduleName = A.ModuleName () arrive}
 instClassPred _ _ _ i _ _ = _moduleKey i
+
+-- | Build the argument to moveInstDecls
+splicePred :: forall l. Data l => String -> String -> String ->
+                 ModuleInfo l -> A.Exp l -> ModuleKey
+splicePred name depart arrive (ModuleInfo {_moduleKey = key@ModuleKey {_moduleName = mname}}) exp'
+    | simplify mname == A.ModuleName () depart &&
+      elem (A.Ident () name) (gFind (simplify exp') :: [A.Name ()]) =
+        key {_moduleName = A.ModuleName () arrive}
+splicePred _ _ _ i _ = _moduleKey i
