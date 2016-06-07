@@ -259,7 +259,7 @@ keep :: SrcLoc -> ScanM ()
 keep loc = do
   t' <- use remaining
   p <- use point
-  let (s', t'') = splitText (locDiff loc p) t'
+  let (s', t'') = splitText (locDiff (max p loc) p) t'
   tell s'
   remaining .= t''
   point .= {-trace ("keep " ++ show loc)-} loc
@@ -342,7 +342,7 @@ skip loc = do
   p <- use point
   pure $ testSpan "skip" (SrcSpan (srcFilename loc) (srcLine p) (srcColumn p) (srcLine loc) (srcColumn loc))
   t' <- use remaining
-  let (_, t'') = splitText (locDiff loc p) t'
+  let (_, t'') = splitText (locDiff (max p loc) p) t'
   remaining .= t''
   point .= {-trace ("skip " ++ show loc)-} loc
   comments %= dropWhile (\(Comment _ sp _) -> loc > srcLoc sp)
