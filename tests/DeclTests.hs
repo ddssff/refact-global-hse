@@ -37,7 +37,7 @@ import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, prettyPrint', simplify, w
 
 declTests :: Test
 declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, decl7, decl8,
-                      simple1, simple2]
+                      simple1, simple2, simple3]
 
 -- Test moving a declaration to a module that currently imports it
 decl1 :: Test
@@ -241,6 +241,12 @@ simple2 =
      TestLabel "simple2" $ TestCase $
       testMoveSpec' "tests/expected/simple2" "tests/input/simple2" $
         runSimpleMoveUnsafe "tests/input/simple2" (moveDeclsByName "MoveType" "C" "D" :: MoveSpec)
+
+simple3 :: Test
+simple3 =
+     TestLabel "simple3" $ TestCase $
+      testMoveSpec' "tests/expected/simple3" "tests/input/simple3" $
+        runSimpleMoveUnsafe "tests/input/simple3" (moveDeclsByName "MoveType" "C" "D" :: MoveSpec)
 
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
 testMoveSpec expected actual moveSpec =
