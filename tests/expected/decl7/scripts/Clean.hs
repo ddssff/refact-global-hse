@@ -4,12 +4,14 @@
 {-# LANGUAGE RankNTypes, TemplateHaskell #-}
 import Control.Lens
 import Control.Monad (foldM)
+import Data.Default (def)
 import Data.List (groupBy, stripPrefix)
 import Data.Monoid ((<>))
 import Debug.Trace
--- import Decls (appendMoveSpecs, identityMoveSpec, moveDeclsByName, moveDeclsAndClean, MoveSpec)
+import GHC (hsSourceDirs)
 import Imports (cleanImports)
-import Types (loadModules)
+import Language.Haskell.Names (Scoped(Scoped))
+import LoadModule (loadModules)
 import Utils (withCleanRepo, withCurrentDirectory, withTempDirectory)
 import System.Directory
 import System.Environment
@@ -84,5 +86,5 @@ finalParams params = do
 main = do
   params <- buildParams >>= finalParams
   (if (view unsafe params) then id else withCleanRepo) $ withTempDirectory True "." "scratch" $ \scratch -> do
-    modules <- loadModules (view moduverse params)
-    cleanImports scratch (view topDirs params)  modules
+    modules <- loadModules def (view moduverse params)
+    cleanImports scratch (def {hsSourceDirs = view topDirs params}) (map (fmap (\(Scoped _ x) -> x)) modules)

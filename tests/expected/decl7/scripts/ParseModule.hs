@@ -5,7 +5,6 @@ import Control.Monad.State
 import Data.Generics
 import Data.Set as Set (insert)
 import Debug.Trace
-import IO (withCurrentDirectory)
 import Language.Haskell.Exts.Annotated
 import Types (loadModule, ModuleInfo(..))
 -- import Text.PrettyPrint.HughesPJClass (prettyShow)
@@ -15,6 +14,7 @@ import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.Exit (ExitCode(..), exitWith)
 import Test.HUnit (errors, failures, runTestTT, Test(TestList))
+import Utils (withCurrentDirectory)
 
 data Params
     = Params { _topDir :: FilePath
@@ -35,18 +35,18 @@ buildParams :: IO Params
 buildParams = do
   args <- getArgs
   case getOpt' Permute options args of
-    (fns, [], [], []) -> foldr ($) params0 fns
+    (fns, [], [], []) -> pure $ foldr ($) params0 fns
     _ -> error (usageInfo "Specify modules to parse.  Output appears in <Modulename>.syntax and <Modulename>.symbols" options)
 
 -- | Parse a module and write its ast to /tmp/syntax
 main :: IO ()
 main = do
   params <- buildParams
-  withCurrentDirectory (view top params) $ mapM loadModule (view paths params) >>= mapM_ (either doError doModule $ path)
+  withCurrentDirectory (view top params) $
+      loadModule' (view paths params) >>= mapM_ (\path -> either (doError path) (doModule path))
     where
       doError :: FilePath -> SomeException -> IO ()
       doError path e = hPutStrLn stderr $ "Failed to load " ++ show path ++ ": " ++ show e
-      doModule :: FilePath -> SomeException -> IO ()
       doModule path info@(ModuleInfo {_module = Module _ _ _ _ ds}) = do
          writeFile (dropExtension path <.> "syntax") (show (_module info))
          writeFile (dropExtension path <.> "exports") (unlines . map prettyPrint . concatMap toExportSpecs) ds
