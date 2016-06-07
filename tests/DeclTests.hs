@@ -36,7 +36,8 @@ import Test.HUnit (assertString, Test(..))
 import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, prettyPrint', simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 declTests :: Test
-declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, decl7, decl8, simple1]
+declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, decl7, decl8,
+                      simple1, simple2]
 
 -- Test moving a declaration to a module that currently imports it
 decl1 :: Test

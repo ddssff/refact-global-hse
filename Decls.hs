@@ -200,7 +200,9 @@ updateHeader (Rd _mods _env) mv
             Just k' | k' /= k -> skip (endLoc (A.ann spec)) >> pure needSep
             _ | needSep -> keep (endLoc (A.ann spec)) >> pure True
             _ -> skip (srcLoc (A.ann spec)) >> keep (endLoc (A.ann spec)) >> pure True
-
+updateHeader (Rd _mods _env) mv
+             i@(ModuleInfo {_moduleKey = k,
+                            _module = m@(A.Module _ (Just (A.ModuleHead _ _ _ Nothing)) _ _ _)}) = keep (endOfHeader m)
 updateHeader _ _ _ = pure ()
 
 -- | Text of exports added due to arriving declarations
