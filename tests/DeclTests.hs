@@ -235,6 +235,12 @@ simple1 =
       testMoveSpec' "tests/expected/simple1" "tests/input/simple" $
         runSimpleMoveUnsafe "tests/input/simple" (moveDeclsByName "listPairs" "A" "B" :: MoveSpec)
 
+simple2 :: Test
+simple2 =
+     TestLabel "simple2" $ TestCase $
+      testMoveSpec' "tests/expected/simple2" "tests/input/simple2" $
+        runSimpleMoveUnsafe "tests/input/simple2" (moveDeclsByName "MoveType" "C" "D" :: MoveSpec)
+
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
 testMoveSpec expected actual moveSpec =
     testMoveSpec' expected actual $ runSimpleMoveUnsafe actual moveSpec
