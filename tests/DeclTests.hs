@@ -214,7 +214,7 @@ load8 = TestLabel "load8" $ TestCase $
             let opts = GHCOpts {hc = "ghcjs",
                                 hsSourceDirs=["client", "../happstack-ghcjs-webmodule"],
                                 cppOptions = defaultCpphsOptions {defines = [("CLIENT", "1"), ("SERVER", "0"), ("SERVE_DYNAMIC", "")]},
-                                extensions = [CPP, OverloadedStrings, ExtendedDefaultRules]}
+                                enabled = [CPP, OverloadedStrings, ExtendedDefaultRules]}
             m <- loadModule' opts "client/Examples/MVExample.hs"
             cleanImports scratch opts [m]
             (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
@@ -237,7 +237,7 @@ load9 = TestLabel "load9" $ TestCase $
             let opts = GHCOpts {hc = "ghc",
                                 hsSourceDirs=["client", "../happstack-ghcjs-webmodule"],
                                 cppOptions = defaultCpphsOptions {defines = [("CLIENT", "0"), ("SERVER", "1"), ("SERVE_DYNAMIC", "")]},
-                                extensions = [CPP, OverloadedStrings, ExtendedDefaultRules]}
+                                enabled = [CPP, OverloadedStrings, ExtendedDefaultRules]}
             m <- loadModule' opts"client/Examples/MVExample.hs"
             cleanImports scratch opts [m]
             (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
