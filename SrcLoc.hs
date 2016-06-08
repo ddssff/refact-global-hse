@@ -147,7 +147,8 @@ textOfSpan sp s =
 testSpan :: (SrcInfo a, EndLoc a) => String -> a -> a
 testSpan msg sp =
     case (srcLoc sp, endLoc sp) of
-      (SrcLoc _ _ c1, SrcLoc _ _ c2) | c1 < 1 || c2 < 1 -> error ("testSpan - " ++ msg)
+      (SrcLoc _ l1 c1, SrcLoc _ l2 c2) | c1 < 1 || c2 < 1 || l1 < 1 || l2 < 1 ||
+                                         l2 < l1 || (l2 == l1 && c2 < c1) -> error ("testSpan - " ++ msg)
       _ -> sp
 
 splitText :: SrcLoc -> String -> (String, String)
@@ -259,7 +260,8 @@ keep :: SrcLoc -> ScanM ()
 keep loc = do
   t' <- use remaining
   p <- use point
-  let (s', t'') = splitText (locDiff (max p loc) p) t'
+  -- pure $ testSpan "keep" (SrcSpan (srcFilename loc) (srcLine p) (srcColumn p) (srcLine loc) (srcColumn loc))
+  let (s', t'') = splitText (locDiff loc p) t'
   tell s'
   remaining .= t''
   point .= {-trace ("keep " ++ show loc)-} loc
@@ -339,10 +341,10 @@ keepAll = do
 
 skip :: SrcLoc -> ScanM ()
 skip loc = do
-  p <- use point
-  pure $ testSpan "skip" (SrcSpan (srcFilename loc) (srcLine p) (srcColumn p) (srcLine loc) (srcColumn loc))
   t' <- use remaining
-  let (_, t'') = splitText (locDiff (max p loc) p) t'
+  p <- use point
+  -- pure $ testSpan "skip" (SrcSpan (srcFilename loc) (srcLine p) (srcColumn p) (srcLine loc) (srcColumn loc))
+  let (_, t'') = splitText (locDiff loc p) t'
   remaining .= t''
   point .= {-trace ("skip " ++ show loc)-} loc
   comments %= dropWhile (\(Comment _ sp _) -> loc > srcLoc sp)

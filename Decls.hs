@@ -561,10 +561,9 @@ updateDecls (Rd mods _env) mv thisMod@(ModuleInfo {_module = (A.Module _ _ _ _ d
           case applyMoveSpec mv thisMod d of
             someKey | someKey /= thisKey -> do
               trace ("decl departing: " ++ ezPrint (thisMod, d) ++ " from " ++ ezPrint thisKey ++ " to " ++ ezPrint someKey) (pure ())
-              skip (endLoc (A.ann d))
+              -- skip (endLoc (A.ann d))
               withTrailingWhitespace skip (fmap (srcLoc . A.ann) next)
             _ -> do
-              keep (endLoc (A.ann d))
               withTrailingWhitespace keep (fmap (srcLoc . A.ann) next)
 updateDecls _ _ x = error $ "updateDecls - unexpected module: " ++ show (_module x)
 
