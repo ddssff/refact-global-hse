@@ -5,9 +5,6 @@
          move a decl to a module that didn't import it
          move a decl that is referenced
          move a decl that is unreferenced
-   15. New modules need to inherit the LANGUAGE parameters of all the
-       departure modules.
-   16. Arrival modules also need new LANGUAGE pragmas from departure modules.
    20. In decl3 a Tmp.hs file with no declarations ought to exist after the test
 
           runhaskell scripts/Clean --move=withCurrentDirectory,IO,Utils --move=replaceFile,IO,Utils --find=. --find=scripts --find=tests
@@ -15,27 +12,33 @@
    22. Make the string scanning code more efficient
    24. decl1: Why no export of tryfindM in Decls.hs?
    25. Doing decl7 in "real" source directory gives strange errors
-   26. decl5: comment of first declaration not removed on departure - point
        starts at start of first decl instead of end of last import.
-   27: decl4:
-          1. missing newline before symbolsDeclaredBy block comment
-          2. Comment of a FoldDeclaredBy instance left at EOF
-          3. extra newline before class FoldDeclared block comment
-          4. symbolsDeclaredBy block comment moved to Tmp
    28. Should there be options to modify imports of library modules that were
        previously changed using Move.hs?  You could use them to document how
        to upgrade clients of your library.  Eh.
-   31. Use Scoped info instead of FoldDeclared, HasSymbols, HasCNames, and to implement moveType
    32. Change qualified uses of the symbols of moving declarations
    33. Global symbol rename
+   34. Identity transform: Turn concrete type into a type parameter
+   35. Export symbols that arrive via Up moves
+   36: Global elimination of exports
 
 DONE
 
  * 1. Create new modules
  * 3. Make a nice executable for moving decls, including instances
  * 8. Merge IO into Utils
+ * 15. New modules need to inherit the LANGUAGE parameters of all the
+       departure modules.
+ * 16. Arrival modules also need new LANGUAGE pragmas from departure modules.
  * 17. Make sure there is at least a newline after the last import, and afer
        the end of the exports.
  * 19. Get rid of adjustSpans, FoldM module
+ * 26. decl5: comment of first declaration not removed on departure - point
+ * 27: decl4:
+          1. missing newline before symbolsDeclaredBy block comment
+          2. Comment of a FoldDeclaredBy instance left at EOF
+          3. extra newline before class FoldDeclared block comment
+          4. symbolsDeclaredBy block comment moved to Tmp
    29. Use fmap (const ()) instead of the simplify types
    30. Add Scoped to SrcSpanInfo
+ * 31. Use Scoped info instead of FoldDeclared, HasSymbols, HasCNames, and to implement moveType

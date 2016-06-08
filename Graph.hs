@@ -13,19 +13,16 @@ module Graph
     , findModuleByKey
     , findModuleByKeyUnsafe
     , moveType
-    , importsSymbolsFrom
-    , modulesImportedBy
     ) where
 
 import Data.Foldable as Foldable (find)
 import Data.Graph
 import Data.List (nub)
 import Data.Maybe (mapMaybe)
-import Debug.Trace
 import qualified Language.Haskell.Exts.Annotated as A (ImportDecl(importModule), Module(Module), ModuleName)
 import Language.Haskell.Names (Environment)
 import ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
-import ModuleKey (ModuleKey(..), moduleName)
+import ModuleKey (ModuleKey(..))
 import Utils (simplify)
 
 
@@ -65,6 +62,12 @@ makeImportGraph mods =
     graphFromEdges (mapMaybe (\m -> case _moduleKey m of
                                       ModuleKey {_moduleName = a} -> Just ((), a, modulesImportedBy m)
                                       _ -> Nothing) (map simplify mods))
+    where
+      -- What modules are imported by m?
+      modulesImportedBy :: ModuleInfo l -> [A.ModuleName ()]
+      modulesImportedBy (ModuleInfo {_module = A.Module _ _ _ imports _}) =
+          nub $ map (simplify . A.importModule) imports
+      modulesImportedBy _ = []
 
 -- | Unsafe ModuleInfo lookup
 findModuleByKey :: forall l. [ModuleInfo l] -> ModuleKey -> Maybe (ModuleInfo l)
@@ -90,21 +93,11 @@ findModuleByKeyUnsafe mods thisKey = maybe (error $ "Module not found: " ++ show
 --       computation, so for now we assume it is true unless explicitly
 --       marked "Up".
 moveType :: Rd l -> ModuleKey -> ModuleKey -> MoveType
-moveType (Rd _ _ (gr, v2k, k2v)) (ModuleKey {_moduleName = depart}) (ModuleKey {_moduleName = arrive}) =
+moveType (Rd _ _ (gr, _v2k, k2v)) (ModuleKey {_moduleName = depart}) (ModuleKey {_moduleName = arrive}) =
     case (k2v depart, k2v arrive) of
       (Just depart', Just arrive') ->
           -- If we move something from D to a module A that already
           -- imports D, that is an Up move.
           if depart' `elem` reachable gr arrive' then Up else Down
       _ -> Down -- A Down move is less likely to create an import cycle, so it is the default
-moveType _ d a = Down
-
--- | Does module m import from name?
-importsSymbolsFrom :: [A.ImportDecl l] -> A.ModuleName () -> Bool
-importsSymbolsFrom imports importee = any (\i -> simplify (A.importModule i) == importee) imports
-
--- | What modules are imported by m?
-modulesImportedBy :: ModuleInfo l -> [A.ModuleName ()]
-modulesImportedBy (ModuleInfo {_module = A.Module _ _ _ imports _}) =
-    nub $ map (simplify . A.importModule) imports
-modulesImportedBy _ = []
+moveType _ _ _ = Down

@@ -8,14 +8,13 @@ import Control.Monad.RWS (modify, MonadWriter(tell))
 import Control.Monad.State (execState, MonadState)
 import Data.Default (def)
 import Data.Generics (Data)
-import Data.Graph (Graph, Vertex, graphFromEdges)
 import Data.List ((\\), foldl', intercalate, nub, stripPrefix)
 import Data.Map as Map (insertWith, Map, mapWithKey, toList)
 import Data.Maybe (catMaybes, listToMaybe, mapMaybe, maybeToList)
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, toList)
 import Debug.Trace (trace)
 import GHC (GHCOpts(hsSourceDirs))
-import Graph (findModuleByKey, findModuleByKeyUnsafe, makeImportGraph, modulesImportedBy, moveType, MoveType(Down, Up), Rd(Rd))
+import Graph (findModuleByKey, findModuleByKeyUnsafe, makeImportGraph, moveType, MoveType(Down, Up), Rd(Rd))
 import Imports (cleanImports)
 import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), Module(Module), ModuleHead(ModuleHead), ModuleName(..), ModulePragma, Name, SrcInfo)
 import Language.Haskell.Exts.Annotated.Simplify (sExportSpec, sModuleName, sModulePragma, sName)
@@ -119,7 +118,7 @@ newModuleMap rd@(Rd mods _env _gr) mv =
                 newPragmas rd mv thisKey [] ++
                 "module " ++ maybe "Main" prettyPrint (moduleName thisKey) ++ "(" ++
                 intercalate exportSep (newExports mv mods thisKey) ++ "\n    ) where\n\n" ++
-                concatMap (\(someKey, _ds) -> importsForArrivingDecls rd mv thisKey [] (findModuleByKeyUnsafe mods someKey)) pairs ++
+                concatMap (\(someKey, _ds) -> importsForArrivingDecls rd mv thisKey (findModuleByKeyUnsafe mods someKey)) pairs ++
                 -- importsForDepartingDecls mv mods thisKey -- new module, no decls can depart
                 newDecls mv mods thisKey
       declMap :: Map ModuleKey [(ModuleKey, A.Decl l)]
@@ -172,7 +171,7 @@ updateHeader (Rd _mods _env _gr) mv
             Just k' | k' /= k -> skip (endLoc (A.ann spec)) >> pure needSep
             _ | needSep -> keep (endLoc (A.ann spec)) >> pure True
             _ -> skip (srcLoc (A.ann spec)) >> keep (endLoc (A.ann spec)) >> pure True
-updateHeader (Rd _mods _env _gr) mv
+updateHeader (Rd _mods _env _gr) _mv
              mi@(ModuleInfo {_module = m@(A.Module _ (Just (A.ModuleHead _ _ _ Nothing)) _ _ _)}) =
   do keep (endOfHeader m)
      withTrailingWhitespace keep (startOfImports mi)
@@ -282,7 +281,7 @@ updateImports rd@(Rd mods _env _gr) mv mi@(ModuleInfo {_moduleKey = thisKey, _mo
       -- here (as long as someKey doesn't import thisKey)
       doNewImports :: ModuleInfo l -> ScanM ()
       doNewImports someModule = do
-        tell $ importsForArrivingDecls rd mv thisKey thisModuleImports someModule
+        tell $ importsForArrivingDecls rd mv thisKey someModule
 updateImports _ _ x = error $ "updateImports - unexpected module: " ++ show (_module x)
 
 -- | If a decl is move from thisModule to someModule we may need to
@@ -292,12 +291,12 @@ updateImports _ _ x = error $ "updateImports - unexpected module: " ++ show (_mo
 -- thisModule a cycle can appear, because of the code that converts the
 -- exports of someModule into imports in thisModule.
 importsForDepartingDecls :: (A.SrcInfo l, Data l, Eq l, Show l) => Rd l -> MoveSpec -> Maybe (ModuleInfo l) -> String
-importsForDepartingDecls rd@(Rd mods _env _gr) mv (Just thisMod@(ModuleInfo {_moduleKey = thisKey@(ModuleKey {_moduleName = thisModuleName}), _module = A.Module _ _ _ _ ds})) =
+importsForDepartingDecls rd@(Rd mods _env _gr) mv (Just thisMod@(ModuleInfo {_moduleKey = thisKey, _module = A.Module _ _ _ _ ds})) =
     concatMap (\d -> case applyMoveSpec mv thisMod d of
                        someKey@(ModuleKey {_moduleName = someModuleName})
                            | someKey /= thisKey ->
                                case t2 d someKey (findModuleByKey mods someKey) of
-                                 Just (ModuleInfo {_module = A.Module _ _ _ someModuleImports _}) ->
+                                 Just (ModuleInfo {_module = A.Module _ _ _ _ _}) ->
                                      case moveType rd thisKey someKey of
                                        Down -> maybe "" (\i -> prettyPrint' i ++ "\n") (importSpecFromDecl thisMod someModuleName d)
                                        _ -> ""
@@ -319,9 +318,8 @@ importsForDepartingDecls _ _ _ = ""
 -- cleaned up later.  Also, if this is an Up move we can import the
 -- departure module itself.  If it is a down move the departure module
 -- will be importing the arriving declaration.
-importsForArrivingDecls :: Rd l -> (A.SrcInfo l, Data l, Show l) => MoveSpec -> ModuleKey -> [A.ImportDecl l] -> ModuleInfo l -> String
-importsForArrivingDecls rd mv thisKey thisModuleImports someMod@(ModuleInfo {_moduleKey = someKey@(ModuleKey {_moduleName = someModuleName}),
-                                                                             _module = A.Module _ _ _ someModuleImports ds}) =
+importsForArrivingDecls :: Rd l -> (A.SrcInfo l, Data l, Show l) => MoveSpec -> ModuleKey -> ModuleInfo l -> String
+importsForArrivingDecls rd mv thisKey someMod@(ModuleInfo {_moduleKey = someKey, _module = A.Module _ _ _ someModuleImports ds}) =
     if any (\d -> applyMoveSpec mv someMod d == thisKey) ds
     then concatMap
              (\i -> prettyPrint' i ++ "\n")
@@ -333,7 +331,7 @@ importsForArrivingDecls rd mv thisKey thisModuleImports someMod@(ModuleInfo {_mo
            (Up, Just someName) -> "import " ++ prettyPrint someName ++ "\n"
            _ -> ""
     else ""
-importsForArrivingDecls _ _ _ _ _ = ""
+importsForArrivingDecls _ _ _ _ = ""
 
 -- | If a declaration moves from someModule to thisModule, and nothing
 -- in thisModule is imported by someModule, add imports to thisModule
@@ -342,7 +340,7 @@ importDeclFromExportSpecs :: forall l. (A.SrcInfo l, Data l, Show l) => Rd l -> 
 importDeclFromExportSpecs rd moveSpec
                           thisKey
                           someInfo@(ModuleInfo
-                                    {_moduleKey = someKey@(ModuleKey {_moduleName = someModuleName}),
+                                    {_moduleKey = someKey,
                                      _module = someModule@(A.Module _ (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList _ especs@(_ : _))))) _ _ _)}) =
     -- Do we need to import the remaining exports from the departure
     -- module into the arrival module?  Only if we are moving the
