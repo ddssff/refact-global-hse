@@ -269,6 +269,23 @@ simple3 =
       testMoveSpec' "tests/expected/simple3" "tests/input/simple3" $
         runSimpleMoveUnsafe "tests/input/simple3" (moveDeclsByName "MoveType" "C" "D" :: MoveSpec)
 
+-- Perform the same move with these CPP flag combinations:
+--
+--    -DSERVER=1 -DCLIENT=0
+--    -DSERVER=1 -DCLIENT=0 -DSERVE_DYNAMIC
+--    -DSERVER=0 -DCLIENT=1
+--    -DSERVER=0 -DCLIENT=1 -DSERVE_DYNAMIC
+--
+-- then somehow merge the different results.  The issue I can forsee
+-- is if differing changes are produced for code that is visible from
+-- more than one of the listed combinations.  In that case new ifdefs
+-- must be generated.
+decl10 :: Test
+decl10 =
+    TestLabel "decl10" $ TestCase $
+    testMoveSpec' "tests/expected/decl10" "tests/input/decl10" $
+    runSimpleMoveUnsafe "tests/input/simple3" undefined
+
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
 testMoveSpec expected actual moveSpec =
     testMoveSpec' expected actual $ runSimpleMoveUnsafe actual moveSpec

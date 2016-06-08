@@ -19,8 +19,8 @@
    32. Change qualified uses of the symbols of moving declarations
    33. Global symbol rename
    34. Identity transform: Turn concrete type into a type parameter
-   35. Export symbols that arrive via Up moves
    36: Global elimination of exports
+   37. CPP
 
 DONE
 
@@ -42,3 +42,4 @@ DONE
    29. Use fmap (const ()) instead of the simplify types
    30. Add Scoped to SrcSpanInfo
  * 31. Use Scoped info instead of FoldDeclared, HasSymbols, HasCNames, and to implement moveType
+ * 35. Export symbols that arrive via Up moves
