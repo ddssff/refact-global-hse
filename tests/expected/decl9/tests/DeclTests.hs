@@ -36,7 +36,7 @@ import Test.HUnit (assertString, Test(..))
 import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, prettyPrint', simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 declTests :: Test
-declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, {-decl7,-} decl8, decl9,
+declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, decl7, decl8,
                       simple1, simple2, simple3]
 
 -- Test moving a declaration to a module that currently imports it
@@ -149,11 +149,7 @@ decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tes
                            moveDeclsByName "testSpan" "SrcLoc" "Scan",
                            moveDeclsByName "SpanInfo" "SrcLoc" "Scan",
                            moveInstDecls instPred,
-                           moveDeclsByName "ScanM" "SrcLoc" "Scan",
-                           moveDeclsByName "locDiff" "SrcLoc" "Scan",
-                           moveDeclsByName "locSum" "SrcLoc" "Scan",
-                           moveDeclsByName "endLocOfText" "SrcLoc" "Scan",
-                           moveDeclsByName "ScanM" "SrcLoc" "Scan",
+                           moveDeclsByName "SpanM" "SrcLoc" "Scan",
                            moveDeclsByName "skip" "SrcLoc" "Scan",
                            moveDeclsByName "keep" "SrcLoc" "Scan",
                            moveDeclsByName "trailingWhitespace" "SrcLoc" "Scan",
@@ -166,16 +162,13 @@ decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tes
       testSplice :: ModuleInfo () -> A.Exp () -> ModuleKey
       testSplice (ModuleInfo {_moduleKey = key@(ModuleKey {_moduleName = A.ModuleName () "SrcLoc"})}) exp' =
           case unfoldApply exp' of
-            (x : _) | hasName x "makeLenses" || hasName x "makeLensesFor" -> key {_moduleName = A.ModuleName () "Scan"}
+            (x : _) | map simplify (gFind x :: [A.Name ()]) == [A.Ident () "makeLenses"] -> key {_moduleName = A.ModuleName () "Scan"}
             _ -> key
       testSplice i _ = _moduleKey i
-      hasName x s = elem (A.Ident () s) (map simplify (gFind x :: [A.Name ()]))
       unfoldApply (A.App _ a b) = unfoldApply a ++ [b]
       unfoldApply x = [x]
       instPred (ModuleInfo {_moduleKey = key@(ModuleKey {_moduleName = A.ModuleName () "SrcLoc"})}) name _types
           | (gFind name :: [A.Name ()]) == [A.Ident () "SpanInfo"] =
-              key {_moduleName = A.ModuleName () "Scan"}
-          | (gFind name :: [A.Name ()]) == [A.Ident () "EndLoc"] =
               key {_moduleName = A.ModuleName () "Scan"}
       instPred i _ _ = _moduleKey i
 
@@ -191,18 +184,6 @@ decl8 = TestLabel "decl8 - up move" $ TestCase $ do
                           , moveDeclsByName "imports" "Symbols" "Imports"
                           , moveDeclsByName "exports" "Symbols" "Imports"
                           ]
-
--- Need a way to add imports of the lenses created by makeLenses
-decl9 :: Test
-decl9 = TestLabel "decl9" $ TestCase $ testMoveSpec' "tests/expected/decl9" "tests/input/rgh" $
-          runMoveUnsafe "tests/input/rgh" [".", "tests"] spec
-    where
-      spec = foldl1' (<>) [moveDeclsByName "MoveType" "Decls" "Graph",
-                           moveDeclsByName "findModuleByKey" "Decls" "Graph",
-                           moveDeclsByName "moveType" "Decls" "Graph",
-                           moveDeclsByName "moveType'" "Decls" "Graph",
-                           moveDeclsByName "importsSymbolsFrom" "Decls" "Graph",
-                           moveDeclsByName "Rd" "Decls" "Graph"]
 
 load8 :: Test
 load8 = TestLabel "load8" $ TestCase $
