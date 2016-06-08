@@ -71,7 +71,7 @@ loadModule opts path = try $ do
                     , _moduleSpan = spanOfText path moduleText
                     , _moduleGlobals = mempty }
     where
-      mode = Exts.defaultParseMode {Exts.extensions = map EnableExtension (GHC.enabled opts ++ extensionsForHSEParser),
+      mode = Exts.defaultParseMode {Exts.extensions = map EnableExtension (enabled opts ++ extensionsForHSEParser),
                                     Exts.parseFilename = path,
                                     Exts.fixities = Nothing }
   -- {- `IO.catch` (\(e :: IOError) -> if isDoesNotExistError e || isUserError e then return Nothing else throw e) -}
