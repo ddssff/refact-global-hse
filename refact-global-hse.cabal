@@ -33,6 +33,7 @@ Library
     CPP
     Decls
     GHC
+    Graph
     Imports
     LoadModule
     ModuleKey
