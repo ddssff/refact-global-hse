@@ -270,7 +270,7 @@ updateImports rd@(Rd mods _env _gr) mv mi@(ModuleInfo {_moduleKey = thisKey, _mo
                   name' /= name &&
                   -- don't generate self imports
                   name' /= thisModuleName ->
-                    tell ("\nimport " ++ prettyPrint' name' ++ " (" ++ prettyPrint' spec ++ ")" ++ "\n")
+                    tell ("import " ++ prettyPrint' name' ++ " (" ++ prettyPrint' spec ++ ")" ++ "\n")
             _ -> pure ()
 
       thisModuleName = case thisKey of
