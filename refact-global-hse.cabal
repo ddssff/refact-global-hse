@@ -32,7 +32,6 @@ Library
   Exposed-Modules:
     CPP
     Decls
-    GHC
     Graph
     Imports
     LoadModule

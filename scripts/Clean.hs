@@ -2,22 +2,18 @@
 -- runhaskell scripts/Clean.hs --top=tests --top=. --top=scripts --mod=scripts/Tests.hs --unsafe
 
 {-# LANGUAGE RankNTypes, TemplateHaskell #-}
-import Control.Lens
-import Control.Monad (foldM)
+import CPP (hsSourceDirs)
+import Control.Lens (makeLenses, over, set, view)
 import Data.Default (def)
-import Data.List (groupBy, stripPrefix)
-import Data.Monoid ((<>))
-import Debug.Trace
-import GHC (hsSourceDirs)
 import Imports (cleanImports)
 import Language.Haskell.Names (Scoped(Scoped))
 import LoadModule (loadModules)
-import Utils (withCleanRepo, withCurrentDirectory, withTempDirectory)
-import System.Directory
-import System.Environment
-import System.FilePath ((</>), makeRelative)
-import System.FilePath.Find ((&&?), (==?), always, depth, extension, fileType, FileType(RegularFile), find)
-import System.Console.GetOpt
+import System.Console.GetOpt (ArgDescr(NoArg, ReqArg), ArgOrder(Permute), getOpt', OptDescr(..), usageInfo)
+import System.Directory (canonicalizePath)
+import System.Environment (getArgs)
+import System.FilePath (makeRelative)
+import System.FilePath.Find ((&&?), (==?), depth, extension, fileType, FileType(RegularFile), find)
+import Utils (withCleanRepo, withTempDirectory)
 
 data Params
     = Params { _topDirs :: [FilePath]

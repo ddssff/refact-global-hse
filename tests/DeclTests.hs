@@ -11,29 +11,27 @@
 
 module DeclTests where
 
-import CPP (defaultCpphsOptions)
+import CPP (defaultCpphsOptions, GHCOpts(..))
 import Control.Monad (when)
 import Data.Data (Data)
 import Data.List hiding (find)
 import Data.Monoid ((<>))
-import Debug.Trace
 import Decls (runMoveUnsafe, runSimpleMoveUnsafe)
-import GHC (GHCOpts(..))
 import Imports (cleanImports)
-import Language.Haskell.Exts.Annotated.Simplify (sExp, sName, sQName)
+import Language.Haskell.Exts.Annotated.Simplify (sName)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl(FunBind, TypeSig), Exp(App), Match(InfixMatch, Match), Module(Module), ModuleName(ModuleName), Name(Ident))
 import Language.Haskell.Exts.Extension (KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules))
 import Language.Haskell.Exts.SrcLoc (SrcInfo)
 import qualified Language.Haskell.Exts.Syntax as S (Name(Ident))
 import Language.Preprocessor.Cpphs (CpphsOptions(..))
-import LoadModule (Annot, loadModule')
+import LoadModule (loadModule')
 import ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
 import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
 import MoveSpec (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec), moveSpliceDecls)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.Process (readProcessWithExitCode)
 import Test.HUnit (assertString, Test(..))
-import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, prettyPrint', simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
+import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
 
 declTests :: Test
 declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, {-decl7,-} decl8, decl9,

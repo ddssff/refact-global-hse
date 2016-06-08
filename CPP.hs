@@ -1,14 +1,21 @@
 -- A module copied from hse-cpp, but the return value from
 -- parseFileWithCommentsAndCPP includes the preprocessed text.
 -- Hopefully I won't need this, but it is useful for debugging.
+{-# LANGUAGE RecordWildCards #-}
 module CPP
   ( parseFileWithCommentsAndCPP
   , CPP.defaultCpphsOptions
+  , GHCOpts(GHCOpts, hc, hsSourceDirs, cppOptions, enabled)
+  , ghcProcessArgs
+  , extensionsForHSEParser
   ) where
 
-import Data.List (isSuffixOf)
+import Data.Default (Default(def))
+import Data.List (intercalate, isSuffixOf)
+import Data.Monoid ((<>))
 import Language.Haskell.Exts.Annotated (Comment, impliesExts, KnownExtension(CPP), Module, ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
-import Language.Preprocessor.Cpphs (BoolOptions(..), CpphsOptions(..), runCpphs)
+import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
+import Language.Preprocessor.Cpphs (BoolOptions(hashline, locations, stripC89, stripEol), CpphsOptions(boolopts, defines), runCpphs)
 import qualified Language.Preprocessor.Cpphs as Orig (defaultCpphsOptions)
 import Language.Preprocessor.Unlit (unlit)
 
@@ -64,3 +71,45 @@ defaultCpphsOptions =
       , hashline = False
       }
   }
+
+
+-- | Support a tiny subset of the GHC command line options.
+data GHCOpts =
+    GHCOpts
+    { hc :: String
+    , hsSourceDirs :: [FilePath]
+    , cppOptions :: CpphsOptions
+    , enabled :: [KnownExtension]
+    }
+
+instance Default GHCOpts where
+    def = GHCOpts
+          { hc = "ghc"
+          , hsSourceDirs = []
+          , cppOptions = CPP.defaultCpphsOptions
+          , enabled = [] }
+
+ghcProcessArgs :: GHCOpts -> [String]
+ghcProcessArgs (GHCOpts {..}) =
+    map (\(name, s) -> "-D" ++ name ++ if null s then "" else ("=" ++ s)) (defines cppOptions) <>
+    concatMap ppExtension (map EnableExtension enabled) <>
+    case hsSourceDirs of
+      [] -> []
+      xs -> ["-i" <> intercalate ":" xs]
+
+-- | From hsx2hs, but removing Arrows because it makes test case
+-- fold3c and others fail.  Maybe we should parse the headers and then
+-- use the options there?  There are functions to do this.
+extensionsForHSEParser :: [KnownExtension]
+extensionsForHSEParser =
+    [ RecursiveDo, ParallelListComp, MultiParamTypeClasses, FunctionalDependencies, RankNTypes, ExistentialQuantification
+    , ScopedTypeVariables, ImplicitParams, FlexibleContexts, FlexibleInstances, EmptyDataDecls, KindSignatures
+    , BangPatterns, TemplateHaskell, ForeignFunctionInterface, {- Arrows, -} DeriveGeneric, NamedFieldPuns, PatternGuards
+    , MagicHash, TypeFamilies, StandaloneDeriving, TypeOperators, RecordWildCards, GADTs, UnboxedTuples
+    , PackageImports, QuasiQuotes, {-TransformListComp,-} ViewPatterns, {-XmlSyntax, RegularPatterns,-} TupleSections
+    , ExplicitNamespaces
+    ]
+
+ppExtension :: Extension -> [String]
+ppExtension (EnableExtension x) = ["-X"++ show x]
+ppExtension _ = []

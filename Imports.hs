@@ -4,6 +4,7 @@
 
 module Imports (cleanImports) where
 
+import CPP (extensionsForHSEParser, GHCOpts(..), ghcProcessArgs)
 import Control.Exception (SomeException)
 import Control.Monad (void)
 import Control.Monad.RWS (MonadWriter(tell))
@@ -16,7 +17,6 @@ import Data.Maybe (catMaybes)
 import Data.Monoid ((<>))
 import Data.Set as Set (empty, member, Set, singleton, union, unions)
 import Debug.Trace (trace)
-import GHC (extensionsForHSEParser, GHCOpts(..), ghcProcessArgs)
 import qualified Language.Haskell.Exts.Annotated as A (ann, Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Name, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
 import LoadModule (loadModule)

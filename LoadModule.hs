@@ -7,6 +7,7 @@ module LoadModule
     , Annot
     ) where
 
+import CPP (extensionsForHSEParser, GHCOpts(..))
 import qualified CPP (defaultCpphsOptions, parseFileWithCommentsAndCPP)
 import Control.Exception (Exception, SomeException)
 import Control.Exception.Lifted as IO (try)
@@ -14,7 +15,6 @@ import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
 import Data.List (groupBy, intercalate)
 import Debug.Trace (trace)
-import GHC (extensionsForHSEParser, GHCOpts(..))
 import Language.Haskell.Exts.Annotated as A (Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName))
 import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Parser as Exts (defaultParseMode, fromParseResult, ParseMode(extensions, parseFilename, fixities))
