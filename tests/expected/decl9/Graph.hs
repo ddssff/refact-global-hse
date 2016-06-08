@@ -1,43 +1,26 @@
-{-# LANGUAGE CPP, FlexibleContexts, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections, TypeFamilies #-}
-module Graph
-    ( Rd(Rd, _modules, _environment)
-    , MoveType(..)
+{-# LANGUAGE CPP #-}
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
+module Graph(Rd(Rd, _modules, _environment)
+    , MoveType(Down, Up)
     , findModuleByKey
-    , findModuleByKeyUnsafe
     , moveType'
     , moveType
     , importsSymbolsFrom
     ) where
 
-import Control.Exception (SomeException)
-import Control.Lens (makeLenses, view)
-import Control.Monad (foldM, void, when)
-import Control.Monad.RWS (modify, MonadWriter(tell))
-import Control.Monad.State (execState, MonadState)
-import Data.Default (def)
 import Data.Foldable as Foldable (find)
-import Data.Generics (Data)
-import Data.List ((\\), foldl', intercalate, nub, stripPrefix)
-import Data.Map as Map (insertWith, Map, mapWithKey, toList)
-import Data.Maybe (catMaybes, listToMaybe, mapMaybe, maybeToList)
-import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, toList)
-import Debug.Trace (trace)
-import GHC (GHCOpts(hsSourceDirs))
-import Imports (cleanImports)
-import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), Module(Module), ModuleHead(ModuleHead), ModuleName(..), ModulePragma, Name, SrcInfo)
-import Language.Haskell.Exts.Annotated.Simplify (sExportSpec, sModuleName, sModulePragma, sName)
-import Language.Haskell.Exts.Pretty (prettyPrint)
-import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpanInfo(..))
-import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), ModulePragma(..), Name(..), QName(Qual, Special, UnQual))
-import Language.Haskell.Names (Environment, resolve, symbolName)
-import LoadModule (Annot, loadModule, loadModules)
-import ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
-import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
-import MoveSpec (applyMoveSpec, MoveSpec)
-import Names (topDeclExportSpec)
-import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, keep, keepAll, ScanM, scanModule, skip, srcLoc, startOfImports, withTrailingWhitespace)
-import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
-import Utils (EZPrint(ezPrint), gFind, listPairs, prettyPrint', replaceFile, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
+import qualified Language.Haskell.Exts.Annotated as A (ImportDecl(importModule), Module(Module), ModuleName)
+import Language.Haskell.Names (Environment)
+import ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
+import ModuleKey (ModuleKey, moduleName)
+import Utils (simplify)
+
 
 data Rd l
     = Rd { _modules :: [ModuleInfo l]
@@ -66,9 +49,6 @@ data MoveType
 -- | Unsafe ModuleInfo lookup
 findModuleByKey :: forall l. [ModuleInfo l] -> ModuleKey -> Maybe (ModuleInfo l)
 findModuleByKey mods thisKey = Foldable.find (\m -> _moduleKey m == thisKey) mods
-
-findModuleByKeyUnsafe :: forall l. [ModuleInfo l] -> ModuleKey -> ModuleInfo l
-findModuleByKeyUnsafe mods thisKey = maybe (error $ "Module not found: " ++ show thisKey) id $ findModuleByKey mods thisKey
 
 moveType' :: Rd l -> ModuleKey -> ModuleKey -> String
 moveType' (Rd mods _env) thisKey' someKey' =

@@ -89,14 +89,14 @@ replaceImports :: [A.ImportDecl SrcSpanInfo] -> ModuleInfo SrcSpanInfo -> Maybe 
 replaceImports newImports (ModuleInfo {_module = A.Module _l _mh _ps is _ds})
     | map simplify is == map simplify newImports =
         Nothing
-replaceImports newImports info@(ModuleInfo {_module = m@(A.Module _l _mh _ps (_ : _) _ds)}) =
+replaceImports newImports mi@(ModuleInfo {_module = m@(A.Module _l _mh _ps (_ : _) _ds)}) =
     Just $ scanModule (do -- keep (endOfHeader m)
-                          maybe (pure ()) keep (startOfImports m)
+                          keep (startOfImports mi)
                           tell (intercalate "\n" (map prettyPrint' newImports))
                           -- skip (startOfDecls m)
                           skip (endOfImports m)
                           keepAll)
-                      info
+                      mi
 replaceImports _ _ = error "replaceImports"
 
 -- | Final touch-ups - sort and merge similar imports.

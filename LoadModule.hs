@@ -1,4 +1,4 @@
-{-# LANGUAGE ScopedTypeVariables, TemplateHaskell #-}
+{-# LANGUAGE FlexibleInstances, ScopedTypeVariables, TemplateHaskell, TypeSynonymInstances #-}
 
 module LoadModule
     ( loadModule
@@ -19,7 +19,7 @@ import Language.Haskell.Exts.Annotated as A (Module(..), ModuleHead(ModuleHead),
 import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Parser as Exts (defaultParseMode, fromParseResult, ParseMode(extensions, parseFilename, fixities))
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo(..))
-import Language.Haskell.Names (annotate, resolve, Scoped)
+import Language.Haskell.Names (annotate, resolve, Scoped(..))
 import Language.Haskell.Names.Imports (importTable)
 import Language.Haskell.Names.ModuleSymbols (moduleTable)
 import Language.Preprocessor.Cpphs (BoolOptions(locations), CpphsOptions(..))
@@ -31,6 +31,9 @@ import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension
 import Utils (EZPrint(ezPrint))
 
 type Annot = Scoped SrcSpanInfo
+
+instance EZPrint Annot where
+    ezPrint (Scoped _ x) = ezPrint x
 
 loadModules :: GHCOpts -> [FilePath] -> IO [ModuleInfo Annot]
 loadModules opts paths = do

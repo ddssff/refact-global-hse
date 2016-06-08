@@ -7,7 +7,6 @@ import Control.Monad (foldM, void, when)
 import Control.Monad.RWS (modify, MonadWriter(tell))
 import Control.Monad.State (execState, MonadState)
 import Data.Default (def)
-import Data.Foldable as Foldable (find)
 import Data.Generics (Data)
 import Data.List ((\\), foldl', intercalate, nub, stripPrefix)
 import Data.Map as Map (insertWith, Map, mapWithKey, toList)
@@ -15,14 +14,14 @@ import Data.Maybe (catMaybes, listToMaybe, mapMaybe, maybeToList)
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, toList)
 import Debug.Trace (trace)
 import GHC (GHCOpts(hsSourceDirs))
-import Graph
+import Graph (findModuleByKey, moveType, moveType', MoveType(Down, Up), Rd(Rd))
 import Imports (cleanImports)
 import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), Decl(TypeSig), ExportSpec, ExportSpecList(ExportSpecList), ImportDecl(importModule, importSpecs), ImportSpec, ImportSpecList(ImportSpecList), Module(Module), ModuleHead(ModuleHead), ModuleName(..), ModulePragma, Name, SrcInfo)
 import Language.Haskell.Exts.Annotated.Simplify (sExportSpec, sModuleName, sModulePragma, sName)
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpanInfo(..))
 import qualified Language.Haskell.Exts.Syntax as S (ExportSpec(..), ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..), ModulePragma(..), Name(..), QName(Qual, Special, UnQual))
-import Language.Haskell.Names (Environment, resolve, symbolName)
+import Language.Haskell.Names (resolve, Symbol(symbolName))
 import LoadModule (Annot, loadModule, loadModules)
 import ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
@@ -99,6 +98,9 @@ moveDeclsOfModule rd mv info@(ModuleInfo {_module = A.Module l _ ps _ _}) =
                    keepAll)
                info
 moveDeclsOfModule _ _ x = error $ "moveDeclsOfModule - unexpected module: " ++ show (_module x)
+
+findModuleByKeyUnsafe :: forall l. [ModuleInfo l] -> ModuleKey -> ModuleInfo l
+findModuleByKeyUnsafe mods thisKey = maybe (error $ "Module not found: " ++ show thisKey) id $ findModuleByKey mods thisKey
 
 exportSep :: String
 exportSep = "\n    , "
