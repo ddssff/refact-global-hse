@@ -179,6 +179,8 @@ decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tes
               key {_moduleName = A.ModuleName () "Scan"}
       instPred i _ _ = _moduleKey i
 
+-- Because Imports imports Symbols, Symbols is reachable from Imports.
+-- Moving a declaration from Symbols to Imports is an Up move.
 decl8 :: Test
 decl8 = TestLabel "decl8 - up move" $ TestCase $ do
           let input = "tests/input/decl-mover"

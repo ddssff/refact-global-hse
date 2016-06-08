@@ -6,26 +6,35 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
-module Graph(Rd(Rd, _modules, _environment)
+module Graph
+    ( Rd(Rd, _modules, _environment)
     , MoveType(Down, Up)
+    , makeImportGraph
     , findModuleByKey
     , findModuleByKeyUnsafe
-    , moveType'
     , moveType
     , importsSymbolsFrom
+    , modulesImportedBy
     ) where
 
 import Data.Foldable as Foldable (find)
+import Data.Graph
+import Data.List (nub)
+import Data.Maybe (mapMaybe)
+import Debug.Trace
 import qualified Language.Haskell.Exts.Annotated as A (ImportDecl(importModule), Module(Module), ModuleName)
 import Language.Haskell.Names (Environment)
 import ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
-import ModuleKey (ModuleKey, moduleName)
+import ModuleKey (ModuleKey(..), moduleName)
 import Utils (simplify)
 
 
 data Rd l
     = Rd { _modules :: [ModuleInfo l]
-         , _environment :: Environment }
+         , _environment :: Environment
+         , _importGraph :: (Graph,
+                            Vertex -> ((), A.ModuleName (), [A.ModuleName ()]),
+                            A.ModuleName () -> Maybe Vertex) }
 
 -- | Declaration moves can be characterized as one of two types, Down
 -- or Up.  This must be computed by scanning the parsed code of the
@@ -40,12 +49,22 @@ data MoveType
     -- which means we probably need to add imports of the symbols of
     -- the declaration to the departure module.
     | Up
-    -- ^ An Up move moves a declaration towards where it is used.  In
-    -- this case leaving behind an import will probably create an
-    -- import cycle.  Therefore we need to convert the (remaining)
-    -- exports of the departure module into imports and add them to
-    -- the arrival module.
+    -- ^ An Up move moves a declaration towards where it is used.  That
+    -- means the arrive module already imports the depart module, though
+    -- that import may disappear when the module is cleaned.  So we shouldn't
+    -- add an import of the arrive module to the depart module as we would
+    -- for a down move.
     deriving Show
+
+
+-- | Build a graph of the "imports" relation.
+makeImportGraph :: [ModuleInfo l] -> (Graph,
+                                      Vertex -> ((), A.ModuleName (), [A.ModuleName ()]),
+                                      A.ModuleName () -> Maybe Vertex)
+makeImportGraph mods =
+    graphFromEdges (mapMaybe (\m -> case _moduleKey m of
+                                      ModuleKey {_moduleName = a} -> Just ((), a, modulesImportedBy m)
+                                      _ -> Nothing) (map simplify mods))
 
 -- | Unsafe ModuleInfo lookup
 findModuleByKey :: forall l. [ModuleInfo l] -> ModuleKey -> Maybe (ModuleInfo l)
@@ -53,13 +72,6 @@ findModuleByKey mods thisKey = Foldable.find (\m -> _moduleKey m == thisKey) mod
 
 findModuleByKeyUnsafe :: forall l. [ModuleInfo l] -> ModuleKey -> ModuleInfo l
 findModuleByKeyUnsafe mods thisKey = maybe (error $ "Module not found: " ++ show thisKey) id $ findModuleByKey mods thisKey
-
-moveType' :: Rd l -> ModuleKey -> ModuleKey -> String
-moveType' (Rd mods _env) thisKey' someKey' =
-    case (findModuleByKey mods someKey', moduleName thisKey') of
-      (Just (ModuleInfo {_module = A.Module _ _ _ someModuleImports _}), Just thisModuleName') ->
-          show (moveType someModuleImports thisModuleName')
-      _ -> "Unknown"
 
 -- | If a declaration move requires us to import the departure module
 -- into the arrival module it is called an "Up" move (towards where it
@@ -77,13 +89,22 @@ moveType' (Rd mods _env) thisKey' someKey' =
 --       that is moving in, it is a Down move.  This is a difficult
 --       computation, so for now we assume it is true unless explicitly
 --       marked "Up".
-
-moveType :: [A.ImportDecl l] -> A.ModuleName () -> MoveType
-moveType arrivalModuleImports departureModuleName =
-    case arrivalModuleImports `importsSymbolsFrom` departureModuleName of
-      True -> Up
-      False -> Down
+moveType :: Rd l -> ModuleKey -> ModuleKey -> MoveType
+moveType (Rd _ _ (gr, v2k, k2v)) (ModuleKey {_moduleName = depart}) (ModuleKey {_moduleName = arrive}) =
+    case (k2v depart, k2v arrive) of
+      (Just depart', Just arrive') ->
+          -- If we move something from D to a module A that already
+          -- imports D, that is an Up move.
+          if depart' `elem` reachable gr arrive' then Up else Down
+      _ -> Down -- A Down move is less likely to create an import cycle, so it is the default
+moveType _ d a = Down
 
 -- | Does module m import from name?
 importsSymbolsFrom :: [A.ImportDecl l] -> A.ModuleName () -> Bool
 importsSymbolsFrom imports importee = any (\i -> simplify (A.importModule i) == importee) imports
+
+-- | What modules are imported by m?
+modulesImportedBy :: ModuleInfo l -> [A.ModuleName ()]
+modulesImportedBy (ModuleInfo {_module = A.Module _ _ _ imports _}) =
+    nub $ map (simplify . A.importModule) imports
+modulesImportedBy _ = []
