@@ -7,9 +7,9 @@
 {-# OPTIONS -Wall #-}
 
 module Imports (cleanImports
-               , symbolsDeclaredBy
-               , exports
-               , imports) where
+    , symbolsDeclaredBy
+    , exports
+    , imports) where
 
 import Control.Exception (SomeException)
 import Control.Monad (void)

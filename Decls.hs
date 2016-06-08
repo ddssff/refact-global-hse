@@ -117,7 +117,7 @@ newModuleMap rd@(Rd mods _env _gr) mv =
                 -- let thisMod = findModuleByKeyUnsafe mods thisKey in
                 newPragmas rd mv thisKey [] ++
                 "module " ++ maybe "Main" prettyPrint (moduleName thisKey) ++ "(" ++
-                intercalate exportSep (newExports mv mods thisKey) ++ "\n    ) where\n\n" ++
+                intercalate exportSep (newExports rd mv thisKey) ++ "\n    ) where\n\n" ++
                 concatMap (\(someKey, _ds) -> importsForArrivingDecls rd mv thisKey (findModuleByKeyUnsafe mods someKey)) pairs ++
                 -- importsForDepartingDecls mv mods thisKey -- new module, no decls can depart
                 newDecls mv mods thisKey
@@ -156,12 +156,16 @@ newPragmas (Rd mods _env _gr) mv thisKey thesePragmas =
 -- | Write the new export list.  Exports of symbols that have moved
 -- out are removed.  Exports of symbols that have moved in are added
 -- *if* the symbol is imported anywhere else.
-updateHeader :: forall l. (A.SrcInfo l, Data l, EndLoc l, Show l) => Rd l -> MoveSpec -> ModuleInfo l -> ScanM ()
-updateHeader (Rd _mods _env _gr) mv
+updateHeader :: forall l. (A.SrcInfo l, Data l, EndLoc l, Eq l, Show l) => Rd l -> MoveSpec -> ModuleInfo l -> ScanM ()
+updateHeader rd@(Rd _mods _env _gr) mv
              mi@(ModuleInfo {_moduleKey = k,
                              _module = m@(A.Module _ (Just (A.ModuleHead _ _ _ (Just (A.ExportSpecList _ specs)))) _ _ _)}) = do
   maybe (pure ()) (keep . srcLoc . A.ann) (listToMaybe specs)
-  foldM doExport False specs
+  needSep <- foldM doExport False specs
+  case newExports rd mv k of
+    [] -> pure ()
+    xs -> do when needSep (tell exportSep)
+             tell (intercalate exportSep xs)
   keep (endOfHeader m)
   withTrailingWhitespace keep (startOfImports mi)
     where
@@ -178,8 +182,8 @@ updateHeader (Rd _mods _env _gr) _mv
 updateHeader _ _ _ = pure ()
 
 -- | Text of exports added due to arriving declarations
-newExports :: forall l. (A.SrcInfo l, Data l, Eq l, Show l) => MoveSpec -> [ModuleInfo l] -> ModuleKey -> [String]
-newExports mv mods thisKey =
+newExports :: forall l. (A.SrcInfo l, Data l, Eq l, Show l) => Rd l -> MoveSpec -> ModuleKey -> [String]
+newExports (Rd mods _ _) mv thisKey =
     map prettyPrint names
     where
       -- (This should be inferred from the text of thisKey.)
