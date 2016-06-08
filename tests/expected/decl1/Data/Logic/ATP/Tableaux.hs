@@ -2,6 +2,8 @@
 --
 -- Copyright (c) 2003-2007, John Harrison. (See "LICENSE.txt" for details.)
 
+{-# LANGUAGE DeriveDataTypeable #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE GADTs #-}
@@ -25,27 +27,25 @@ module Data.Logic.ATP.Tableaux
 
 import Control.Monad.RWS (RWS)
 import Control.Monad.State (execStateT, StateT)
-import Data.Foldable as Foldable (Foldable(length))
 import Data.List as List (map)
 import Data.Logic.ATP.Apply (HasApply(TermOf), pApp)
 import Data.Logic.ATP.FOL (asubst, fv, generalize, IsFirstOrder, subst)
-import Data.Logic.ATP.Formulas (IsFormula(asBool, AtomOf), atomic, onatoms, overatoms)
+import Data.Logic.ATP.Formulas (atomic, IsFormula(asBool, AtomOf), onatoms, overatoms)
 import Data.Logic.ATP.Herbrand (davisputnam)
-import Data.Logic.ATP.Lib (allpairs, deepen, Depth(Depth), distrib, evalRS, failing, Failing(Success, Failure), settryfind, (|=>))
+import Data.Logic.ATP.Lib ((|=>), allpairs, deepen, Depth(..), distrib, evalRS, failing, Failing(..), settryfind)
 import Data.Logic.ATP.Lit ((.~.), convertToLiteral, IsLiteral, JustLiteral, LFormula, positive)
 import Data.Logic.ATP.LitWrapper (JL)
 import Data.Logic.ATP.Pretty (assertEqual', Pretty(pPrint), prettyShow, text)
 import Data.Logic.ATP.Prop ((.&.), (.<=>.), (.=>.), (.|.), BinOp((:&:), (:|:)), PFormula, simpdnf)
-import Data.Logic.ATP.Quantified (Quant((:!:)), exists, foldQuantified, for_all)
+import Data.Logic.ATP.Quantified (exists, foldQuantified, for_all, Quant((:!:)))
 import Data.Logic.ATP.Skolem (askolemize, Formula, HasSkolem(SVarOf, toSkolem), runSkolem, simpdnf', skolemize, SkTerm)
 import Data.Logic.ATP.Term (fApp, IsTerm(TVarOf, FunOf), vt)
 import Data.Logic.ATP.Unif (Unify(UTermOf), unify_literals)
 import Data.Map.Strict as Map (empty, fromList, Map)
-import Data.Maybe (Maybe(..))
 import Data.Set as Set (empty, map, minView, partition, Set, singleton, toList, union)
 import Data.String (IsString(..))
-import Prelude (($), Num((*), (+)), (++), (.), Ord((<)), (<$>), Eq((==)), Monad((>>=), return), Applicative(pure), Bool(False), Enum(fromEnum, pred, succ, toEnum), error, fst, id, Int, Show(show), snd, zip)
-import Prelude hiding (map)
+import Prelude (($), (++), (.), (<$>), Applicative(pure), Bool(False), Enum(fromEnum, pred, succ, toEnum), Eq((==)), error, Foldable(length), fst, id, Int, Maybe(..), Monad((>>=), return), Num((*), (+)), Ord((<)), Show(show), snd, zip)
+import Prelude hiding (map, map)
 import Test.HUnit (Test(..))
 import Test.HUnit hiding (State)
 

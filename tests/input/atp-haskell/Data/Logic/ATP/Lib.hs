@@ -17,6 +17,7 @@ module Data.Logic.ATP.Lib
     -- , itlist2
     -- , itlist  -- same as foldr with last arguments flipped
     , tryfind
+    , tryfindM
     , runRS
     , evalRS
     , settryfind
@@ -449,6 +450,10 @@ let repetitions =
 
 tryfind :: Foldable t => (a -> Failing r) -> t a -> Failing r
 tryfind p s = maybe (Failure ["tryfind"]) p (find (failing (const False) (const True) . p) s)
+
+tryfindM :: Monad m => (t -> m (Failing a)) -> [t] -> m (Failing a)
+tryfindM _ [] = return $ Failure ["tryfindM"]
+tryfindM f (h : t) = f h >>= failing (\_ -> tryfindM f t) (return . Success)
 
 evalRS :: RWS r () s a -> r -> s -> a
 evalRS action r s = fst $ evalRWS action r s

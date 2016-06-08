@@ -30,7 +30,7 @@ import Data.Logic.ATP.Apply (HasApply(TermOf), pApp)
 import Data.Logic.ATP.FOL (asubst, fv, generalize, IsFirstOrder, subst)
 import Data.Logic.ATP.Formulas (IsFormula(asBool, AtomOf), atomic, onatoms, overatoms)
 import Data.Logic.ATP.Herbrand (davisputnam)
-import Data.Logic.ATP.Lib (allpairs, deepen, Depth(Depth), distrib, evalRS, failing, Failing(Success, Failure), settryfind, (|=>))
+import Data.Logic.ATP.Lib (allpairs, deepen, Depth(Depth), distrib, evalRS, failing, Failing(Success, Failure), settryfind, tryfindM, (|=>))
 import Data.Logic.ATP.Lit ((.~.), convertToLiteral, IsLiteral, JustLiteral, LFormula, positive)
 import Data.Logic.ATP.LitWrapper (JL)
 import Data.Logic.ATP.Pretty (assertEqual', Pretty(pPrint), prettyShow, text)
@@ -667,7 +667,3 @@ let davis_putnam_example = time splittab
 
 testTableaux :: Test
 testTableaux = TestLabel "Tableaux" (TestList [p20, p19, p38])
-
-tryfindM :: Monad m => (t -> m (Failing a)) -> [t] -> m (Failing a)
-tryfindM _ [] = return $ Failure ["tryfindM"]
-tryfindM f (h : t) = f h >>= failing (\_ -> tryfindM f t) (return . Success)
