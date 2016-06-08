@@ -22,7 +22,7 @@ data GHCOpts =
     { hc :: String
     , hsSourceDirs :: [FilePath]
     , cppOptions :: CpphsOptions
-    , extensions :: [KnownExtension]
+    , enabled :: [KnownExtension]
     }
 
 instance Default GHCOpts where
@@ -30,12 +30,12 @@ instance Default GHCOpts where
           { hc = "ghc"
           , hsSourceDirs = []
           , cppOptions = CPP.defaultCpphsOptions
-          , extensions = [] }
+          , enabled = [] }
 
 ghcProcessArgs :: GHCOpts -> [String]
 ghcProcessArgs (GHCOpts {..}) =
     map (\(name, s) -> "-D" ++ name ++ if null s then "" else ("=" ++ s)) (defines cppOptions) <>
-    concatMap ppExtension (map EnableExtension extensions) <>
+    concatMap ppExtension (map EnableExtension enabled) <>
     case hsSourceDirs of
       [] -> []
       xs -> ["-i" <> intercalate ":" xs]

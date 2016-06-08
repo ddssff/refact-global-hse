@@ -45,7 +45,7 @@ cleanImports scratch opts info =
     where
       dump = do
         let args' = ["--make", "-c", "-ddump-minimal-imports", "-outputdir", scratch] ++
-                    ghcProcessArgs (opts {extensions = extensions opts ++ extensionsForHSEParser}) ++
+                    ghcProcessArgs (opts {enabled = enabled opts ++ extensionsForHSEParser}) ++
                     map _modulePath info
         (code, _out, err) <- liftIO $ readProcessWithExitCode (hc opts) args' ""
         case code of
