@@ -4,7 +4,7 @@
 {-# LANGUAGE RecordWildCards #-}
 module CPP
   ( parseFileWithCommentsAndCPP
-  , CPP.defaultCpphsOptions
+  , defaultCpphsOptions
   , GHCOpts(GHCOpts, hc, hsSourceDirs, cppOptions, enabled)
   , ghcProcessArgs
   , extensionsForHSEParser
@@ -86,7 +86,7 @@ instance Default GHCOpts where
     def = GHCOpts
           { hc = "ghc"
           , hsSourceDirs = []
-          , cppOptions = CPP.defaultCpphsOptions
+          , cppOptions = defaultCpphsOptions
           , enabled = [] }
 
 ghcProcessArgs :: GHCOpts -> [String]
