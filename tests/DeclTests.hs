@@ -24,7 +24,7 @@ import Language.Haskell.Exts.Extension (KnownExtension(CPP, OverloadedStrings, E
 import Language.Haskell.Exts.SrcLoc (SrcInfo)
 import qualified Language.Haskell.Exts.Syntax as S (Name(Ident))
 import Language.Preprocessor.Cpphs (CpphsOptions(..))
-import LoadModule (loadModule')
+import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
 import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
 import MoveSpec (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec), moveSpliceDecls)
@@ -212,7 +212,7 @@ load8 = TestLabel "load8" $ TestCase $
                                 hsSourceDirs=["client", "../happstack-ghcjs-webmodule"],
                                 cppOptions = defaultCpphsOptions {defines = [("CLIENT", "1"), ("SERVER", "0"), ("SERVE_DYNAMIC", "")]},
                                 enabled = [CPP, OverloadedStrings, ExtendedDefaultRules]}
-            m <- loadModule' opts "client/Examples/MVExample.hs"
+            m <- loadModule opts "client/Examples/MVExample.hs"
             cleanImports opts [m]
             (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
             case code of
@@ -234,7 +234,7 @@ load9 = TestLabel "load9" $ TestCase $
                                 hsSourceDirs=["client", "../happstack-ghcjs-webmodule"],
                                 cppOptions = defaultCpphsOptions {defines = [("CLIENT", "0"), ("SERVER", "1"), ("SERVE_DYNAMIC", "")]},
                                 enabled = [CPP, OverloadedStrings, ExtendedDefaultRules]}
-            m <- loadModule' opts"client/Examples/MVExample.hs"
+            m <- loadModule opts"client/Examples/MVExample.hs"
             cleanImports opts [m]
             (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
             case code of

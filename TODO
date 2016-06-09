@@ -21,6 +21,7 @@
    34. Identity transform: Turn concrete type into a type parameter
    36: Global elimination of exports
    37. CPP
+   38. Don't return Either SomeException X, just throw and catch the exception
 
 DONE
 

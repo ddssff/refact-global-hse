@@ -2,7 +2,7 @@
 module Decls (runSimpleMove, runSimpleMoveUnsafe, runMoveUnsafe, moveDeclsAndClean, moveDecls) where
 
 import CPP (GHCOpts(hsSourceDirs))
-import Control.Exception (SomeException)
+import Control.Exception (catch, SomeException)
 import Control.Lens (makeLenses, view)
 import Control.Monad (foldM, void, when)
 import Control.Monad.RWS (modify, MonadWriter(tell))
@@ -73,10 +73,10 @@ moveDeclsAndClean mv hsSourceDirs mods = do
                    (Map.toList (newModuleMap rd mv))
   -- Re-read the updated modules and clean their imports
   -- (Later we will need to find the newly created modules here)
-  modules' <- mapM (\p -> either (loadError p) id <$> loadModule def p) (catMaybes oldPaths ++ newPaths) :: IO [ModuleInfo SrcSpanInfo]
+  modules' <- mapM (\p -> loadModule def p `catch` loadError p) (catMaybes oldPaths ++ newPaths) :: IO [ModuleInfo SrcSpanInfo]
   cleanImports (def {hsSourceDirs = hsSourceDirs}) modules'
     where
-      loadError :: FilePath -> SomeException -> ModuleInfo SrcSpanInfo
+      loadError :: FilePath -> SomeException -> IO (ModuleInfo SrcSpanInfo)
       loadError p e = error ("Unable to load updated module " ++ show p ++ ": " ++ show e)
       -- t1 rd@(Rd _ _ env) = trace ("environment: " ++ show env) rd
 

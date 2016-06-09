@@ -2,7 +2,6 @@
 
 module LoadModule
     ( loadModule
-    , loadModule'
     , loadModules
     , Annot
     ) where
@@ -35,9 +34,10 @@ type Annot = Scoped SrcSpanInfo
 instance EZPrint Annot where
     ezPrint (Scoped _ x) = ezPrint x
 
+-- | Load a list of modules and compute their global scoping info.
 loadModules :: GHCOpts -> [FilePath] -> IO [ModuleInfo Annot]
 loadModules opts paths = do
-  t1 <$> addScoping <$> mapM (loadModule' opts) paths
+  t1 <$> addScoping <$> mapM (loadModule opts) paths
     where
       t1 :: [ModuleInfo l] -> [ModuleInfo l]
       t1 modules = trace ("modules loaded: " ++ show (map ezPrint modules)) modules
@@ -48,11 +48,11 @@ addScoping mods =
                   _moduleGlobals = moduleTable (importTable env (_module m)) (_module m)}) mods
     where env = resolve (map _module mods) mempty
 
-loadModule' :: GHCOpts -> FilePath -> IO (ModuleInfo SrcSpanInfo)
-loadModule' opts path = either (error . show) id <$> (loadModule opts path :: IO (Either SomeException (ModuleInfo SrcSpanInfo)))
+-- loadModule' :: GHCOpts -> FilePath -> IO (ModuleInfo SrcSpanInfo)
+-- loadModule' opts path = either (error . show) id <$> (loadModule opts path :: IO (Either SomeException (ModuleInfo SrcSpanInfo)))
 
-loadModule :: Exception e => GHCOpts -> FilePath -> IO (Either e (ModuleInfo SrcSpanInfo))
-loadModule opts path = try $ do
+loadModule :: GHCOpts -> FilePath -> IO (ModuleInfo SrcSpanInfo)
+loadModule opts path = do
   moduleText <- liftIO $ readFile path
   (parsed', comments, _processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions mode path
   let parsed = mapTopAnnotations (fixEnds comments moduleText) $ everywhere (mkT fixSpan) parsed'

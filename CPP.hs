@@ -7,15 +7,18 @@ module CPP
   , defaultCpphsOptions
   , GHCOpts(GHCOpts, hc, hsSourceDirs, cppOptions, enabled)
   , ghcProcessArgs
+  , cppIf
+  , cppEndif
   , extensionsForHSEParser
   ) where
 
+import Data.Char (isDigit)
 import Data.Default (Default(def))
 import Data.List (intercalate, isSuffixOf)
 import Data.Monoid ((<>))
 import Language.Haskell.Exts.Annotated (Comment, impliesExts, KnownExtension(CPP), Module, ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
 import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
-import Language.Preprocessor.Cpphs (BoolOptions(hashline, locations, stripC89, stripEol), CpphsOptions(boolopts, defines), runCpphs)
+import Language.Preprocessor.Cpphs (BoolOptions(hashline, locations, stripC89, stripEol), CpphsOptions(CpphsOptions, boolopts, defines), runCpphs)
 import qualified Language.Preprocessor.Cpphs as Orig (defaultCpphsOptions)
 import Language.Preprocessor.Unlit (unlit)
 
@@ -96,6 +99,21 @@ ghcProcessArgs (GHCOpts {..}) =
     case hsSourceDirs of
       [] -> []
       xs -> ["-i" <> intercalate ":" xs]
+
+-- | Somewhere there should be a library to do this.
+cppIf :: GHCOpts -> String
+cppIf (GHCOpts{cppOptions = CpphsOptions {defines = []}}) = ""
+cppIf (GHCOpts{cppOptions = CpphsOptions{..}}) =
+    "#if " ++ intercalate " && " (map ppCpp defines) ++ "\n"
+    where
+      ppCpp (name, "") = "defined(" ++ name ++ ")"
+      ppCpp (name, s) | all (== '0') s = "!" ++ name
+      ppCpp (name, s) | all isDigit s = name
+      ppCpp (name, value) = name ++ " == " ++ value
+
+cppEndif :: GHCOpts -> String
+cppEndif (GHCOpts{cppOptions = CpphsOptions {defines = []}}) = ""
+cppEndif (GHCOpts{cppOptions = CpphsOptions{..}}) = "#endif\n"
 
 -- | From hsx2hs, but removing Arrows because it makes test case
 -- fold3c and others fail.  Maybe we should parse the headers and then
