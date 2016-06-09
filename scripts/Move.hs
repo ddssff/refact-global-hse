@@ -87,9 +87,9 @@ main = getArgs >>= run
 run :: [String] -> IO ()
 run args = do
   params <- buildParams args
-  withCurrentDirectory (_cd params) $ maybeReset params $ withTempDirectory True "." "scratch" $ \scratch -> do
+  withCurrentDirectory (_cd params) $ maybeReset params $ do
     modules <- loadModules def (view moduverse params)
-    moveDeclsAndClean (view moveSpec params) scratch (view hsDirs params) modules
+    moveDeclsAndClean (view moveSpec params) (view hsDirs params) modules
     where
       maybeReset :: Params -> IO () -> IO ()
       maybeReset params = if _unsafe params then (if _gitReset params then (\action -> gitResetSubdir "." >> action)  else id) else withCleanRepo

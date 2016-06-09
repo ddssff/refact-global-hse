@@ -29,7 +29,7 @@ import MoveSpec (applyMoveSpec, MoveSpec)
 import Names (topDeclExportSpec)
 import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, endOfImportSpecs, endOfModule, keep, keepAll, ScanM, scanModule, skip, srcLoc, startOfDecls, startOfImports, withTrailingWhitespace)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
-import Utils (EZPrint(ezPrint), gFind, prettyPrint', replaceFile, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
+import Utils (EZPrint(ezPrint), gFind, prettyPrint', replaceFile, simplify, withCleanRepo, withCurrentDirectory)
 
 $(makeLenses ''Rd)
 
@@ -40,22 +40,20 @@ runSimpleMove top spec = withCleanRepo $ runSimpleMoveUnsafe top spec
 
 runSimpleMoveUnsafe :: FilePath -> MoveSpec -> IO ()
 runSimpleMoveUnsafe top mv =
-    withCurrentDirectory top $
-    withTempDirectory True "." "scratch" $ \scratch -> do
+    withCurrentDirectory top $ do
       paths <- (catMaybes . map (stripPrefix "./"))
                <$> (FilePath.find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
-      loadModules def paths >>= moveDeclsAndClean mv scratch ["."]
+      loadModules def paths >>= moveDeclsAndClean mv ["."]
 
 runMoveUnsafe :: FilePath -> [FilePath] -> MoveSpec -> IO ()
 runMoveUnsafe top hsSourceDirs mv =
-    withCurrentDirectory top $
-    withTempDirectory True "." "scratch" $ \scratch -> do
+    withCurrentDirectory top $ do
       paths <- (catMaybes . map (stripPrefix "./"))
                <$> (FilePath.find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
-      loadModules def paths >>= moveDeclsAndClean mv scratch hsSourceDirs
+      loadModules def paths >>= moveDeclsAndClean mv hsSourceDirs
 
-moveDeclsAndClean :: MoveSpec -> FilePath -> [FilePath] -> [ModuleInfo Annot] -> IO ()
-moveDeclsAndClean mv scratch hsSourceDirs mods = do
+moveDeclsAndClean :: MoveSpec -> [FilePath] -> [ModuleInfo Annot] -> IO ()
+moveDeclsAndClean mv hsSourceDirs mods = do
   -- Move the declarations and rewrite the updated modules
   let env = resolve (map _module mods) mempty
       -- ann = map (annotate env) (map _module mods)
@@ -76,7 +74,7 @@ moveDeclsAndClean mv scratch hsSourceDirs mods = do
   -- Re-read the updated modules and clean their imports
   -- (Later we will need to find the newly created modules here)
   modules' <- mapM (\p -> either (loadError p) id <$> loadModule def p) (catMaybes oldPaths ++ newPaths) :: IO [ModuleInfo SrcSpanInfo]
-  cleanImports scratch (def {hsSourceDirs = hsSourceDirs}) modules'
+  cleanImports (def {hsSourceDirs = hsSourceDirs}) modules'
     where
       loadError :: FilePath -> SomeException -> ModuleInfo SrcSpanInfo
       loadError p e = error ("Unable to load updated module " ++ show p ++ ": " ++ show e)

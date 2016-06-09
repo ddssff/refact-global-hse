@@ -83,4 +83,4 @@ main = do
   params <- buildParams >>= finalParams
   (if (view unsafe params) then id else withCleanRepo) $ withTempDirectory True "." "scratch" $ \scratch -> do
     modules <- loadModules def (view moduverse params)
-    cleanImports scratch (def {hsSourceDirs = view topDirs params}) (map (fmap (\(Scoped _ x) -> x)) modules)
+    cleanImports (def {hsSourceDirs = view topDirs params}) (map (fmap (\(Scoped _ x) -> x)) modules)

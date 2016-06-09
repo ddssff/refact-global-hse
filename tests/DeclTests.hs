@@ -31,7 +31,7 @@ import MoveSpec (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpe
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.Process (readProcessWithExitCode)
 import Test.HUnit (assertString, Test(..))
-import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, simplify, withCleanRepo, withCurrentDirectory, withTempDirectory)
+import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, simplify, withCleanRepo, withCurrentDirectory)
 
 declTests :: Test
 declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, {-decl7,-} decl8, decl9,
@@ -207,14 +207,13 @@ decl9 = TestLabel "decl9" $ TestCase $ testMoveSpec' "tests/expected/decl9" "tes
 load8 :: Test
 load8 = TestLabel "load8" $ TestCase $
           withCurrentDirectory "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client" $
-          withCleanRepo $
-          withTempDirectory True "." "scratch" $ \scratch -> do
+          withCleanRepo $ do
             let opts = GHCOpts {hc = "ghcjs",
                                 hsSourceDirs=["client", "../happstack-ghcjs-webmodule"],
                                 cppOptions = defaultCpphsOptions {defines = [("CLIENT", "1"), ("SERVER", "0"), ("SERVE_DYNAMIC", "")]},
                                 enabled = [CPP, OverloadedStrings, ExtendedDefaultRules]}
             m <- loadModule' opts "client/Examples/MVExample.hs"
-            cleanImports scratch opts [m]
+            cleanImports opts [m]
             (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
             case code of
               ExitSuccess -> assertString diff
@@ -230,14 +229,13 @@ load8 = TestLabel "load8" $ TestCase $
 load9 :: Test
 load9 = TestLabel "load9" $ TestCase $
           withCurrentDirectory "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client" $
-          withCleanRepo $
-          withTempDirectory True "." "scratch" $ \scratch -> do
+          withCleanRepo $ do
             let opts = GHCOpts {hc = "ghc",
                                 hsSourceDirs=["client", "../happstack-ghcjs-webmodule"],
                                 cppOptions = defaultCpphsOptions {defines = [("CLIENT", "0"), ("SERVER", "1"), ("SERVE_DYNAMIC", "")]},
                                 enabled = [CPP, OverloadedStrings, ExtendedDefaultRules]}
             m <- loadModule' opts"client/Examples/MVExample.hs"
-            cleanImports scratch opts [m]
+            cleanImports opts [m]
             (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
             case code of
               ExitSuccess -> assertString diff
