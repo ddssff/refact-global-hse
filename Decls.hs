@@ -74,7 +74,7 @@ moveDeclsAndClean mv hsSourceDirs mods = do
   -- Re-read the updated modules and clean their imports
   -- (Later we will need to find the newly created modules here)
   modules' <- mapM (\p -> loadModule def p `catch` loadError p) (catMaybes oldPaths ++ newPaths) :: IO [ModuleInfo SrcSpanInfo]
-  cleanImports (def {hsSourceDirs = hsSourceDirs}) modules'
+  cleanImports [(def {hsSourceDirs = hsSourceDirs})] modules'
     where
       loadError :: FilePath -> SomeException -> IO (ModuleInfo SrcSpanInfo)
       loadError p e = error ("Unable to load updated module " ++ show p ++ ": " ++ show e)

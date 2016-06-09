@@ -33,6 +33,7 @@ Library
     CPP
     Decls
     Graph
+    HashDefine
     Imports
     LoadModule
     ModuleKey

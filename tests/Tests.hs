@@ -13,7 +13,7 @@ import qualified Language.Haskell.Exts.Syntax as S
 import Language.Haskell.Names
 import Language.Haskell.Names.ModuleSymbols (moduleTable)
 import Language.Haskell.Names.Imports (importTable)
-import LoadModule (loadModule')
+import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(..))
 import SrcLoc (debugRender)
 import System.Exit (ExitCode(..), exitWith)
@@ -27,7 +27,7 @@ main = runTestTT (TestList [declTests, cpp1]) >>= doCounts
 
 cpp1 :: Test
 cpp1 = TestCase $ do
-         (ModuleInfo {_module = m, _moduleText = s, _moduleComments = cs}) <- loadModule' def "tests/input/cpp/A.hs"
+         (ModuleInfo {_module = m, _moduleText = s, _moduleComments = cs}) <- loadModule def "tests/input/cpp/A.hs"
          assertEqual "cpp1" expected (debugRender m cs s)
     where
       expected =

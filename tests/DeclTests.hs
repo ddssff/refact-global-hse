@@ -15,8 +15,10 @@ import CPP (defaultCpphsOptions, GHCOpts(..))
 import Control.Monad (when)
 import Data.Data (Data)
 import Data.List hiding (find)
+import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Decls (runMoveUnsafe, runSimpleMoveUnsafe)
+import HashDefine (parseHashDefine)
 import Imports (cleanImports)
 import Language.Haskell.Exts.Annotated.Simplify (sName)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl(FunBind, TypeSig), Exp(App), Match(InfixMatch, Match), Module(Module), ModuleName(ModuleName), Name(Ident))
@@ -206,14 +208,19 @@ decl9 = TestLabel "decl9" $ TestCase $ testMoveSpec' "tests/expected/decl9" "tes
 
 load8 :: Test
 load8 = TestLabel "load8" $ TestCase $
-          withCurrentDirectory "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client" $
-          withCleanRepo $ do
-            let opts = GHCOpts {hc = "ghcjs",
-                                hsSourceDirs=["client", "../happstack-ghcjs-webmodule"],
-                                cppOptions = defaultCpphsOptions {defines = [("CLIENT", "1"), ("SERVER", "0"), ("SERVE_DYNAMIC", "")]},
-                                enabled = [CPP, OverloadedStrings, ExtendedDefaultRules]}
+          withCurrentDirectory "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client" $ do
+          -- withCleanRepo $ do
+            let opts = GHCOpts { hc = "ghcjs"
+                               , hsSourceDirs=["client", "../happstack-ghcjs-webmodule"]
+                               , cppOptions = defaultCpphsOptions
+                               , enabled = [CPP, OverloadedStrings, ExtendedDefaultRules]
+                               , hashDefines = [] }
+            let optSets = [ opts {hc = "ghc",   hashDefines = map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["define", "SERVE_DYNAMIC"]]}
+                          , opts {hc = "ghcjs", hashDefines = map (fromJust . parseHashDefine False) [["define", "CLIENT", "1"], ["define", "SERVER", "0"], ["define", "NO_TH"], ["define", "SERVE_DYNAMIC"]]}
+                          , opts {hc = "ghc",   hashDefines = map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["undef", "SERVE_DYNAMIC"]]}
+                          , opts {hc = "ghcjs", hashDefines = map (fromJust . parseHashDefine False) [["define", "CLIENT", "1"], ["define", "SERVER", "0"], ["define", "NO_TH"], ["undef", "SERVE_DYNAMIC"]]} ]
             m <- loadModule opts "client/Examples/MVExample.hs"
-            cleanImports opts [m]
+            cleanImports optSets [m]
             (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
             case code of
               ExitSuccess -> assertString diff
@@ -232,10 +239,11 @@ load9 = TestLabel "load9" $ TestCase $
           withCleanRepo $ do
             let opts = GHCOpts {hc = "ghc",
                                 hsSourceDirs=["client", "../happstack-ghcjs-webmodule"],
-                                cppOptions = defaultCpphsOptions {defines = [("CLIENT", "0"), ("SERVER", "1"), ("SERVE_DYNAMIC", "")]},
-                                enabled = [CPP, OverloadedStrings, ExtendedDefaultRules]}
+                                cppOptions = defaultCpphsOptions,
+                                enabled = [CPP, OverloadedStrings, ExtendedDefaultRules],
+                                hashDefines = map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["define", "SERVE_DYNAMIC"]]}
             m <- loadModule opts"client/Examples/MVExample.hs"
-            cleanImports opts [m]
+            cleanImports [opts] [m]
             (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
             case code of
               ExitSuccess -> assertString diff

@@ -8,8 +8,6 @@ module LoadModule
 
 import CPP (extensionsForHSEParser, GHCOpts(..))
 import qualified CPP (defaultCpphsOptions, parseFileWithCommentsAndCPP)
-import Control.Exception (Exception, SomeException)
-import Control.Exception.Lifted as IO (try)
 import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
 import Data.List (groupBy, intercalate)
