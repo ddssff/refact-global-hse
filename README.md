@@ -22,6 +22,7 @@
 
  * Figure out what imports are required by a template haskell splice (and add them)
  * Figure out what exports are created by a template haskell splice (and move them)
+ * Update your .cabal file when modules appear or disappear
 
 # Requirements
 

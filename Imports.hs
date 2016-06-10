@@ -6,26 +6,23 @@
 
 module Imports (cleanImports) where
 
-import CPP (cppIf, cppEndif, extensionsForHSEParser, GHCOpts(..), ghcProcessArgs)
+import CPP (cppEndif, cppIf, extensionsForHSEParser, GHCOpts(..), ghcProcessArgs)
 import Control.Monad (void, when)
 import Control.Monad.RWS (MonadWriter(tell))
-import Data.Char (toLower)
-import Data.Function (on)
-import Data.Generics (everywhere, mkT)
-import Data.List (find, groupBy, nub, sortBy, transpose)
-import Data.Maybe (catMaybes)
+import Data.List (find, transpose)
 import Data.Monoid ((<>))
 import Data.Set as Set (empty, member, Set, singleton, union, unions)
 import Debug.Trace (trace)
-import qualified Language.Haskell.Exts.Annotated as A (ann, Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Name, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
+import qualified Language.Haskell.Exts.Annotated as A (Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(IAbs, IThingAll, IThingWith, IVar), ImportSpecList(ImportSpecList), InstHead(..), InstRule(..), Module(Module, XmlHybrid, XmlPage), ModuleHead(ModuleHead), ModuleName(..), Name, QName(Qual, UnQual), Type(..))
 import Language.Haskell.Exts.SrcLoc (SrcInfo, SrcSpanInfo)
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath)
-import SrcLoc (EndLoc, endOfImports, keep, keepAll, ScanM, scanModule, skip, srcLoc, startOfDecls, startOfImports, withTrailingWhitespace)
+import SrcLoc (EndLoc, endOfImports, keep, keepAll, ScanM, scanModule, skip, startOfDecls, startOfImports, withTrailingWhitespace)
 import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
-import System.Process (readProcess, showCommandForUser)
+import System.Process (readProcess)
+import Tmp (mergeDecls)
 import Utils (ezPrint, prettyPrint', replaceFile, simplify, withTempDirectory)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
@@ -137,80 +134,6 @@ fixNewImports' _ _ _ = error "Unexpected module type"
 isHidingImport :: A.ImportDecl l -> Bool
 isHidingImport (A.ImportDecl {A.importSpecs = Just (A.ImportSpecList _ True _)}) = True
 isHidingImport _ = False
-
-mergeDecls :: forall l. (SrcInfo l, Eq l) => [A.ImportDecl l] -> [A.ImportDecl l]
-mergeDecls = map mergeDecls' . groupBy (\ a b -> importMergable a b == EQ) . sortBy importMergable
-    where
-      mergeDecls' :: [A.ImportDecl l] -> A.ImportDecl l
-      mergeDecls' [] = error "mergeDecls"
-      mergeDecls' xs@(x : _) = x {A.importSpecs = mergeSpecLists (catMaybes (Prelude.map A.importSpecs xs))}
-
-      -- Merge a list of specs for the same module
-      mergeSpecLists :: [A.ImportSpecList l] -> Maybe (A.ImportSpecList l)
-      mergeSpecLists (A.ImportSpecList loc flag specs : ys) =
-          Just (A.ImportSpecList loc flag (mergeSpecs (sortBy compareSpecs (nub (concat (specs : Prelude.map (\ (A.ImportSpecList _ _ specs') -> specs') ys))))))
-      mergeSpecLists [] = error "mergeSpecLists"
-
--- | Compare the two import declarations ignoring the things that are
--- actually being imported.  Equality here indicates that the two
--- imports could be merged.
-importMergable :: SrcInfo l => A.ImportDecl l -> A.ImportDecl l -> Ordering
-importMergable a b =
-    case (compare `on` noSpecs) a' b' of
-      EQ -> EQ
-      specOrdering ->
-          case (compare `on` (A.importModule . simplify)) a' b' of
-            EQ -> specOrdering
-            moduleNameOrdering -> moduleNameOrdering
-    where
-      a' = simplify a
-      b' = simplify b
-      -- Return a version of an ImportDecl with an empty spec list and no
-      -- source locations.  This will distinguish "import Foo as F" from
-      -- "import Foo", but will let us group imports that can be merged.
-      -- Don't merge hiding imports with regular imports.
-      A.SrcLoc _path _ _ = srcLoc (A.ann a)
-      noSpecs :: A.ImportDecl l -> A.ImportDecl l
-      noSpecs x = x { A.importSpecs = case A.importSpecs x of
-                                        Just (A.ImportSpecList l True _) -> Just (A.ImportSpecList l True []) -- hiding
-                                        Just (A.ImportSpecList _ False _) -> Nothing
-                                        Nothing -> Nothing }
-
--- Merge elements of a sorted spec list as possible
--- unimplemented, should merge Foo and Foo(..) into Foo(..), and the like
-mergeSpecs :: [A.ImportSpec l] -> [A.ImportSpec l]
-mergeSpecs [] = []
-mergeSpecs [x] = [x]
-{-
--- We need to do this using the simplified syntax
-mergeSpecs (x : y : zs) =
-    case (name x' == name y', x, y) of
-      (True, S.IThingAll _ _, _) -> mergeSpecs (x : zs)
-      (True, _, S.IThingAll _ _) -> mergeSpecs (y : zs)
-      (True, S.IThingWith _ n xs, S.IThingWith _ ys) -> mergeSpecs (S.IThingWith n (nub (xs ++ ys)))
-      (True, S.IThingWith _ _, _) -> mergeSpecs (x' : zs)
-      (True, _, S.IThingWith _ _) -> mergeSpecs (y' : zs)
-      _ -> x : mergeSpecs (y : zs)
-    where
-      x' = sImportSpec x
-      y' = sImportSpec y
-      name (S.IVar n) = n
-      name (S.IAbs n) = n
-      name (S.IThingAll n) = n
-      name (S.IThingWith n _) = n
--}
-mergeSpecs xs = xs
-
--- Compare function used to sort the symbols within an import.
-compareSpecs :: A.ImportSpec l -> A.ImportSpec l -> Ordering
--- compareSpecs a b = (compare `on` sImportSpec) a b
-compareSpecs a b =
-    case (compare `on` (everywhere (mkT (map toLower)))) a' b' of
-      EQ -> compare b' a' -- upper case first
-      x -> x
-    where
-      a' = prettyPrint' a
-      b' = prettyPrint' b
 
 standaloneDerivingTypes :: ModuleInfo l -> Set (Maybe (A.ModuleName ()), A.Name ())
 standaloneDerivingTypes (ModuleInfo {_module = A.XmlPage _ _ _ _ _ _ _}) = error "standaloneDerivingTypes A.XmlPage"
