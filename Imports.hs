@@ -97,17 +97,8 @@ fixNewImports' :: forall l. (SrcInfo l, Eq l) =>
                -> [A.ImportDecl l]
                -> [A.ImportDecl l]
 fixNewImports' remove mi@(ModuleInfo {_module = A.Module _ _ _ oi _}) ni =
-    filter importPred $ map expandSDTypes $ map mergeDecls $ groupBy (\ a b -> importMergable a b == EQ) $ sortBy importMergable $ ni ++ filter isHidingImport oi
+    filter importPred $ map expandSDTypes $ mergeDecls $ ni ++ filter isHidingImport oi
     where
-      -- mergeDecls :: [ImportDecl] -> ImportDecl
-      mergeDecls [] = error "mergeDecls"
-      mergeDecls xs@(x : _) = x {A.importSpecs = mergeSpecLists (catMaybes (Prelude.map A.importSpecs xs))}
-          where
-            -- Merge a list of specs for the same module
-            mergeSpecLists :: [A.ImportSpecList l] -> Maybe (A.ImportSpecList l)
-            mergeSpecLists (A.ImportSpecList loc flag specs : ys) =
-                Just (A.ImportSpecList loc flag (mergeSpecs (sortBy compareSpecs (nub (concat (specs : Prelude.map (\ (A.ImportSpecList _ _ specs') -> specs') ys))))))
-            mergeSpecLists [] = error "mergeSpecLists"
       expandSDTypes :: A.ImportDecl l -> A.ImportDecl l
       expandSDTypes i@(A.ImportDecl {A.importSpecs = Just (A.ImportSpecList l f specs)}) =
           i {A.importSpecs = Just (A.ImportSpecList l f (Prelude.map (expandSpec i) specs))}
@@ -146,6 +137,19 @@ fixNewImports' _ _ _ = error "Unexpected module type"
 isHidingImport :: A.ImportDecl l -> Bool
 isHidingImport (A.ImportDecl {A.importSpecs = Just (A.ImportSpecList _ True _)}) = True
 isHidingImport _ = False
+
+mergeDecls :: forall l. (SrcInfo l, Eq l) => [A.ImportDecl l] -> [A.ImportDecl l]
+mergeDecls = map mergeDecls' . groupBy (\ a b -> importMergable a b == EQ) . sortBy importMergable
+    where
+      mergeDecls' :: [A.ImportDecl l] -> A.ImportDecl l
+      mergeDecls' [] = error "mergeDecls"
+      mergeDecls' xs@(x : _) = x {A.importSpecs = mergeSpecLists (catMaybes (Prelude.map A.importSpecs xs))}
+
+      -- Merge a list of specs for the same module
+      mergeSpecLists :: [A.ImportSpecList l] -> Maybe (A.ImportSpecList l)
+      mergeSpecLists (A.ImportSpecList loc flag specs : ys) =
+          Just (A.ImportSpecList loc flag (mergeSpecs (sortBy compareSpecs (nub (concat (specs : Prelude.map (\ (A.ImportSpecList _ _ specs') -> specs') ys))))))
+      mergeSpecLists [] = error "mergeSpecLists"
 
 -- | Compare the two import declarations ignoring the things that are
 -- actually being imported.  Equality here indicates that the two
