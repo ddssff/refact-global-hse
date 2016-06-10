@@ -12,10 +12,13 @@ import Control.Monad (MonadPlus, msum, when)
 import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Bool (bool)
-import Data.Generics (Data(gmapM), GenericM, listify, toConstr, Typeable)
-import Data.List (intercalate, stripPrefix)
-import Data.Maybe (mapMaybe)
+import Data.Char (toLower)
+import Data.Function (on)
+import Data.Generics (Data(gmapM), everywhere, GenericM, listify, mkT, toConstr, Typeable)
+import Data.List (intercalate, groupBy, nub, sortBy, stripPrefix)
+import Data.Maybe (catMaybes, mapMaybe)
 import Data.Sequence ((|>), Seq)
+import qualified Data.Set as Set
 import qualified Language.Haskell.Exts.Annotated as A -- (Pretty)
 import Language.Haskell.Exts.Annotated.Simplify (sType)
 import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
@@ -212,3 +215,13 @@ con = show . toConstr
 
 prettyPrint' :: A.Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
+
+class SetLike a where
+    union :: a -> a -> a
+    intersection :: a -> a -> a
+    difference :: a -> a -> a
+
+instance Ord a => SetLike (Set.Set a) where
+    union = Set.union
+    intersection = Set.intersection
+    difference = Set.difference
