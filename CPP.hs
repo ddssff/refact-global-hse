@@ -16,7 +16,7 @@ import Data.Char (isDigit)
 import Data.Default (Default(def))
 import Data.List (intercalate, isSuffixOf)
 import Data.Monoid ((<>))
-import HashDefine (HashDefine(..), parseHashDefine, simplifyHashDefines)
+import HashDefine (HashDefine(..))
 import Language.Haskell.Exts.Annotated (Comment, impliesExts, KnownExtension(CPP), Module, ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
 import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
 import Language.Preprocessor.Cpphs (BoolOptions(hashline, locations, stripC89, stripEol), CpphsOptions(CpphsOptions, boolopts, defines), runCpphs)
@@ -103,6 +103,7 @@ asArgument :: HashDefine -> String
 asArgument (AntiDefined{..}) = "-U" <> name
 asArgument (SymbolReplacement{..}) =
     "-D" <> name <> if replacement == "" then "" else ("=" <> replacement)
+asArgument _ = error $ "Unexpected HashDefine value"
 
 asPredicate :: HashDefine -> String
 asPredicate (AntiDefined{..}) = "!defined(" <> name <> ")"
@@ -123,13 +124,7 @@ ghcProcessArgs (GHCOpts {..}) =
 -- | Somewhere there should be a library to do this.
 cppIf :: GHCOpts -> String
 cppIf (GHCOpts{hashDefines = []}) = ""
-cppIf (GHCOpts{..}) =
-    "#if " <> intercalate " && " (map asPredicate hashDefines) <> "\n"
-    where
-      ppCpp (name, "") = "defined(" <> name <> ")"
-      ppCpp (name, s) | all (== '0') s = "!" <> name
-      ppCpp (name, s) | all isDigit s = name
-      ppCpp (name, value) = name <> " == " <> value
+cppIf (GHCOpts{..}) = "#if " <> intercalate " && " (map asPredicate hashDefines) <> "\n"
 
 cppEndif :: GHCOpts -> String
 cppEndif (GHCOpts{hashDefines = []}) = ""

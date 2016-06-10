@@ -25,7 +25,6 @@ import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl(FunBind, Type
 import Language.Haskell.Exts.Extension (KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules))
 import Language.Haskell.Exts.SrcLoc (SrcInfo)
 import qualified Language.Haskell.Exts.Syntax as S (Name(Ident))
-import Language.Preprocessor.Cpphs (CpphsOptions(..))
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
 import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)

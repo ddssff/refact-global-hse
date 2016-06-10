@@ -18,11 +18,11 @@ import Data.Monoid ((<>))
 import Data.Set as Set (empty, member, Set, singleton, union, unions)
 import Debug.Trace (trace)
 import qualified Language.Haskell.Exts.Annotated as A (ann, Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(..), ImportSpecList(..), InstHead(..), InstRule(..), Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName), Name, QName(Qual, UnQual), SrcLoc(SrcLoc), Type(..))
-import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
+import Language.Haskell.Exts.SrcLoc (SrcInfo, SrcSpanInfo)
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath)
-import SrcLoc (endOfImports, keep, keepAll, ScanM, scanModule, skip, srcLoc, startOfDecls, startOfImports, withTrailingWhitespace)
+import SrcLoc (EndLoc, endOfImports, keep, keepAll, ScanM, scanModule, skip, srcLoc, startOfDecls, startOfImports, withTrailingWhitespace)
 import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcess, showCommandForUser)
@@ -70,46 +70,45 @@ newImports _ _ _ = error "Unsupported module type"
 -- source file.  We also need to modify the imports of any names
 -- that are types that appear in standalone instance derivations so
 -- their members are imported too.
-newModuleText :: ModuleInfo SrcSpanInfo -> [(GHCOpts, [A.ImportDecl SrcSpanInfo])] -> Maybe String
+newModuleText :: forall l. (SrcInfo l, EndLoc l, Eq l) => ModuleInfo l -> [(GHCOpts, [A.ImportDecl l])] -> Maybe String
 newModuleText mi@(ModuleInfo {_module = m@(A.Module _ _ _ oi _)}) pairs =
     Just $ scanModule (do keep (startOfImports mi)
-                          mapM_ (uncurry doOptImports) pairs
+                          mapM_ (uncurry doOptImports) (fixNewImports True mi pairs)
                           when (not (null oi)) (skip (endOfImports m))
                           withTrailingWhitespace skip (startOfDecls mi)
                           keepAll) mi
     where
-      doOptImports :: GHCOpts -> [A.ImportDecl SrcSpanInfo] -> ScanM ()
+      doOptImports :: GHCOpts -> [A.ImportDecl l] -> ScanM ()
       doOptImports opts ni =
-          let ni' = ni ++ filter isHidingImport oi
-              ni'' = fixNewImports True mi oi ni' in
+          -- let ni'' = fixNewImports' True mi ni in
           -- if simplify oi == map simplify ni' then keep ... else
           do tell (cppIf opts)
-             tell (unlines (map prettyPrint' ni''))
+             tell (unlines (map prettyPrint' ni))
              tell (cppEndif opts)
-      doOptImports _ _ = error "Unsupported module type"
-      isHidingImport (A.ImportDecl {A.importSpecs = Just (A.ImportSpecList _ True _)}) = True
-      isHidingImport _ = False
 newModuleText _ _ = error "Unsupported module type"
 
+fixNewImports :: (SrcInfo l, Eq l) => Bool -> ModuleInfo l -> [(GHCOpts, [A.ImportDecl l])] -> [(GHCOpts, [A.ImportDecl l])]
+fixNewImports remove mi pairs = map (\(opts, ni) -> (opts, fixNewImports' remove mi ni)) pairs
+
 -- | Final touch-ups - sort and merge similar imports.
-fixNewImports :: Bool         -- ^ If true, imports that turn into empty lists will be removed
-              -> ModuleInfo l
-              -> [A.ImportDecl SrcSpanInfo]
-              -> [A.ImportDecl SrcSpanInfo]
-              -> [A.ImportDecl SrcSpanInfo]
-fixNewImports remove m oldImports imports =
-    filter importPred $ Prelude.map expandSDTypes $ Prelude.map mergeDecls $ groupBy (\ a b -> importMergable a b == EQ) $ sortBy importMergable imports
+fixNewImports' :: forall l. (SrcInfo l, Eq l) =>
+                  Bool         -- ^ If true, imports that turn into empty lists will be removed
+               -> ModuleInfo l
+               -> [A.ImportDecl l]
+               -> [A.ImportDecl l]
+fixNewImports' remove mi@(ModuleInfo {_module = A.Module _ _ _ oi _}) ni =
+    filter importPred $ map expandSDTypes $ map mergeDecls $ groupBy (\ a b -> importMergable a b == EQ) $ sortBy importMergable $ ni ++ filter isHidingImport oi
     where
       -- mergeDecls :: [ImportDecl] -> ImportDecl
       mergeDecls [] = error "mergeDecls"
       mergeDecls xs@(x : _) = x {A.importSpecs = mergeSpecLists (catMaybes (Prelude.map A.importSpecs xs))}
           where
             -- Merge a list of specs for the same module
-            mergeSpecLists :: [A.ImportSpecList SrcSpanInfo] -> Maybe (A.ImportSpecList SrcSpanInfo)
+            mergeSpecLists :: [A.ImportSpecList l] -> Maybe (A.ImportSpecList l)
             mergeSpecLists (A.ImportSpecList loc flag specs : ys) =
                 Just (A.ImportSpecList loc flag (mergeSpecs (sortBy compareSpecs (nub (concat (specs : Prelude.map (\ (A.ImportSpecList _ _ specs') -> specs') ys))))))
             mergeSpecLists [] = error "mergeSpecLists"
-      expandSDTypes :: A.ImportDecl SrcSpanInfo -> A.ImportDecl SrcSpanInfo
+      expandSDTypes :: A.ImportDecl l -> A.ImportDecl l
       expandSDTypes i@(A.ImportDecl {A.importSpecs = Just (A.ImportSpecList l f specs)}) =
           i {A.importSpecs = Just (A.ImportSpecList l f (Prelude.map (expandSpec i) specs))}
       expandSDTypes i = i
@@ -134,19 +133,24 @@ fixNewImports remove m oldImports imports =
       -- Eliminate imports that became empty
       -- importPred :: ImportDecl -> Bool
       importPred (A.ImportDecl _ mn _ _ _ _ _ (Just (A.ImportSpecList _ _ []))) =
-          not remove || maybe False (isEmptyImport . A.importSpecs) (find ((== (simplify mn)) . simplify . A.importModule) oldImports)
+          not remove || maybe False (isEmptyImport . A.importSpecs) (find ((== (simplify mn)) . simplify . A.importModule) oi)
           where
             isEmptyImport (Just (A.ImportSpecList _ _ [])) = True
             isEmptyImport _ = False
       importPred _ = True
 
       sdTypes :: Set (Maybe (A.ModuleName ()), A.Name ())
-      sdTypes = standaloneDerivingTypes m
+      sdTypes = standaloneDerivingTypes mi
+fixNewImports' _ _ _ = error "Unexpected module type"
+
+isHidingImport :: A.ImportDecl l -> Bool
+isHidingImport (A.ImportDecl {A.importSpecs = Just (A.ImportSpecList _ True _)}) = True
+isHidingImport _ = False
 
 -- | Compare the two import declarations ignoring the things that are
 -- actually being imported.  Equality here indicates that the two
 -- imports could be merged.
-importMergable :: A.ImportDecl SrcSpanInfo -> A.ImportDecl SrcSpanInfo -> Ordering
+importMergable :: SrcInfo l => A.ImportDecl l -> A.ImportDecl l -> Ordering
 importMergable a b =
     case (compare `on` noSpecs) a' b' of
       EQ -> EQ
@@ -170,7 +174,7 @@ importMergable a b =
 
 -- Merge elements of a sorted spec list as possible
 -- unimplemented, should merge Foo and Foo(..) into Foo(..), and the like
-mergeSpecs :: [A.ImportSpec SrcSpanInfo] -> [A.ImportSpec SrcSpanInfo]
+mergeSpecs :: [A.ImportSpec l] -> [A.ImportSpec l]
 mergeSpecs [] = []
 mergeSpecs [x] = [x]
 {-
@@ -194,7 +198,7 @@ mergeSpecs (x : y : zs) =
 mergeSpecs xs = xs
 
 -- Compare function used to sort the symbols within an import.
-compareSpecs :: A.ImportSpec SrcSpanInfo -> A.ImportSpec SrcSpanInfo -> Ordering
+compareSpecs :: A.ImportSpec l -> A.ImportSpec l -> Ordering
 -- compareSpecs a b = (compare `on` sImportSpec) a b
 compareSpecs a b =
     case (compare `on` (everywhere (mkT (map toLower)))) a' b' of
