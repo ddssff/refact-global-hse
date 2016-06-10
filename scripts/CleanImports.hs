@@ -2,10 +2,11 @@
 -- runhaskell scripts/Clean.hs --top=tests --top=. --top=scripts --mod=scripts/Tests.hs --unsafe
 
 {-# LANGUAGE RankNTypes, TemplateHaskell #-}
+
+import Clean (cleanImports)
 import CPP (hsSourceDirs)
 import Control.Lens (makeLenses, over, set, view)
 import Data.Default (def)
-import Imports (cleanImports)
 import Language.Haskell.Names (Scoped(Scoped))
 import LoadModule (loadModules)
 import System.Console.GetOpt (ArgDescr(NoArg, ReqArg), ArgOrder(Permute), getOpt', OptDescr(..), usageInfo)

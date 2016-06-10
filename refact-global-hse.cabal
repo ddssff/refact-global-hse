@@ -30,6 +30,7 @@ Library
     syb,
     temporary
   Exposed-Modules:
+    Clean
     CPP
     Decls
     Graph
@@ -41,13 +42,12 @@ Library
     MoveSpec
     Names
     SrcLoc
-    Tmp
     Utils
   GHC-options: -Wall -O2
 
 executable move-decls
   Hs-Source-Dirs: scripts
-  Main-Is: Move.hs
+  Main-Is: MoveDecls.hs
   Build-Depends:
     base,
     data-default,
@@ -58,7 +58,7 @@ executable move-decls
 
 executable clean-imports
   Hs-Source-Dirs: scripts
-  Main-Is: Clean.hs
+  Main-Is: CleanImports.hs
   Build-Depends:
     base,
     data-default,

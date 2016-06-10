@@ -12,8 +12,10 @@
 # What it might do soon
 
  * Handle CPP directives
- * Move a declaration to a particular line of a module (rather than the end)
- * Find symbols that are exported but never imported and make them local
+ * Move a declaration to a particular line of a module (rather than
+   the end)
+ * global export minimization - find symbols that are exported but
+   never imported and make them local
  * Minimize LANGUAGE directives by trial and error
  * Remove modules that become empty
  * Fix up qualified references to declarations that moved

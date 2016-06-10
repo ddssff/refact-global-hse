@@ -11,6 +11,7 @@
 
 module DeclTests where
 
+import Clean (cleanImports)
 import CPP (defaultCpphsOptions, GHCOpts(..))
 import Control.Monad (when)
 import Data.Data (Data)
@@ -19,7 +20,6 @@ import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Decls (runMoveUnsafe, runSimpleMoveUnsafe)
 import HashDefine (parseHashDefine)
-import Imports (cleanImports)
 import Language.Haskell.Exts.Annotated.Simplify (sName)
 import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl(FunBind, TypeSig), Exp(App), Match(InfixMatch, Match), Module(Module), ModuleName(ModuleName), Name(Ident))
 import Language.Haskell.Exts.Extension (KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules))
