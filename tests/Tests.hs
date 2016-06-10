@@ -6,7 +6,7 @@
 
 import Data.Default (def)
 import Data.List (intercalate)
-import Data.Map as Map (fromList)
+import Data.Map.Strict as Map (fromList)
 import DeclTests
 import Language.Haskell.Exts.Annotated -- (parseModule, ParseResult(ParseOk))
 import qualified Language.Haskell.Exts.Syntax as S
