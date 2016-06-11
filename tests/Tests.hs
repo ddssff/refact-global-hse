@@ -8,6 +8,7 @@ import Data.Default (def)
 import Data.List (intercalate)
 import Data.Map.Strict as Map (fromList)
 import DeclTests
+import ImportTests
 import Language.Haskell.Exts.Annotated -- (parseModule, ParseResult(ParseOk))
 import qualified Language.Haskell.Exts.Syntax as S
 import Language.Haskell.Names
@@ -21,7 +22,7 @@ import Test.HUnit (assertEqual, errors, failures, runTestTT, Test(TestCase, Test
 import Utils
 
 main :: IO ()
-main = runTestTT (TestList [declTests, cpp1]) >>= doCounts
+main = runTestTT (TestList [importTests, declTests, cpp1]) >>= doCounts
     where
       doCounts counts' = exitWith (if errors counts' /= 0 || failures counts' /= 0 then ExitFailure 1 else ExitSuccess)
 
