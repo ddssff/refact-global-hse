@@ -8,14 +8,37 @@ module Imports
     ) where
 
 import Data.Char (toLower)
+import Data.Foldable (foldl')
 import Data.Function (on)
 import Data.Generics (everywhere, mkT)
 import Data.List (groupBy, nub, sortBy)
-import Data.Maybe (catMaybes)
-import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), ImportDecl(importModule, importSpecs), ImportSpec, ImportSpecList(..), SrcLoc(SrcLoc))
+import Data.Map.Strict as Map (adjust, elems, foldlWithKey', insertWith, Map)
+import Data.Maybe (catMaybes, maybeToList)
+import Data.Monoid ((<>))
+import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(..), SrcLoc(SrcLoc))
 import Language.Haskell.Exts.SrcLoc (SrcInfo)
 import SrcLoc (srcLoc)
-import Utils (prettyPrint', simplify)
+import Utils (prettyPrint', SetLike(union, difference), simplify)
+
+type ImportKey = (A.ImportDecl (), Bool)
+
+-- | Return a value that can serve as a key to where and how the
+-- import is importing, but not exactly what it is importing.  It just
+-- throws away the specs and the SrcLoc info and records whether the
+-- import was done with the "hiding" keyword.  This will distinguishes
+-- "import Foo as F" from "import Foo", but will let us group imports
+-- that can be merged.
+importKey :: A.ImportDecl l -> ImportKey
+importKey x = (cleanDecl, hiding)
+    where
+      cleanDecl = x' {A.importSpecs = Nothing}
+      hiding = maybe False (\(A.ImportSpecList () f _) -> f) (A.importSpecs x')
+      x' = fmap (const ()) x
+
+type ImportMap l = Map ImportKey [A.ImportDecl l]
+
+importMap :: [A.ImportDecl l] -> ImportMap l
+importMap xs = foldl' (\mp x -> Map.insertWith (<>) (importKey x) [x] mp) mempty xs
 
 mergeDecls :: forall l. (SrcInfo l, Eq l) => [A.ImportDecl l] -> [A.ImportDecl l]
 mergeDecls = map mergeDecls' . groupBy (\ a b -> importMergable a b == EQ) . sortBy importMergable

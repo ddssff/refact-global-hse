@@ -70,7 +70,9 @@ newImports _ _ _ = error "Unsupported module type"
 newModuleText :: forall l. (SrcInfo l, EndLoc l, Eq l) => ModuleInfo l -> [(GHCOpts, [A.ImportDecl l])] -> Maybe String
 newModuleText mi@(ModuleInfo {_module = m@(A.Module _ _ _ oi _)}) pairs =
     Just $ scanModule (do keep (startOfImports mi)
-                          mapM_ (uncurry doOptImports) (fixNewImports True mi pairs)
+                          let (common, pairs') = fixNewImports True mi pairs
+                          tell (unlines (map prettyPrint' common))
+                          mapM_ (uncurry doOptImports) pairs'
                           when (not (null oi)) (skip (endOfImports m))
                           withTrailingWhitespace skip (startOfDecls mi)
                           keepAll) mi
@@ -84,10 +86,16 @@ newModuleText mi@(ModuleInfo {_module = m@(A.Module _ _ _ oi _)}) pairs =
              tell (cppEndif opts)
 newModuleText _ _ = error "Unsupported module type"
 
-fixNewImports :: (SrcInfo l, Eq l) => Bool -> ModuleInfo l -> [(GHCOpts, [A.ImportDecl l])] -> [(GHCOpts, [A.ImportDecl l])]
-fixNewImports remove mi pairs = map (\(opts, ni) -> (opts, fixNewImports' remove mi ni)) pairs
+fixNewImports :: (SrcInfo l, Eq l) => Bool -> ModuleInfo l -> [(GHCOpts, [A.ImportDecl l])] -> ([A.ImportDecl l], [(GHCOpts, [A.ImportDecl l])])
+fixNewImports _ _ [] = ([], [])
+fixNewImports remove mi pairs =
+    let pairs' = map (\(opts, ni) -> (opts, fixNewImports' remove mi ni)) pairs
+        common = {-foldl1' intersection (map snd pairs')-} []
+        pairs'' = {-map (\(opts, imports) -> (opts, map (`difference` common) imports))-} pairs' in
+    (common, pairs'')
+    -- ([], map (\(opts, ni) -> (opts, fixNewImports' remove mi ni)) pairs)
 
--- | Final touch-ups - sort and merge similar imports.
+-- | Final touch-ups - sort and merge similar imports.  (This code should be part of the SetLike instance)
 fixNewImports' :: forall l. (SrcInfo l, Eq l) =>
                   Bool         -- ^ If true, imports that turn into empty lists will be removed
                -> ModuleInfo l

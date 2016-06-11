@@ -218,8 +218,8 @@ class SetLike a where
     union :: a -> a -> a
     difference :: a -> a -> a
     intersection :: a -> a -> a
+    intersection a b =  difference a (difference a b)
 
 instance Ord a => SetLike (Set.Set a) where
     union = Set.union
     difference = Set.difference
-    intersection a b =  difference a (difference a b)
