@@ -216,10 +216,10 @@ prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
 
 class SetLike a where
     union :: a -> a -> a
-    intersection :: a -> a -> a
     difference :: a -> a -> a
+    intersection :: a -> a -> a
 
 instance Ord a => SetLike (Set.Set a) where
     union = Set.union
-    intersection = Set.intersection
     difference = Set.difference
+    intersection a b =  difference a (difference a b)
