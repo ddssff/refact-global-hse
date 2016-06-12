@@ -8,7 +8,7 @@ import Control.Monad.State
 import Data.Generics
 import Data.Set as Set (insert)
 import Debug.Trace
-import Language.Haskell.Exts.Annotated
+import Language.Haskell.Exts
 import Types (loadModule, ModuleInfo(..))
 import SrcLoc
 import Symbols (foldDeclared)

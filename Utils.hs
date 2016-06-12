@@ -1,4 +1,5 @@
 {-# LANGUAGE CPP #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
@@ -17,10 +18,9 @@ import Data.List (intercalate, stripPrefix)
 import Data.Maybe (mapMaybe)
 import Data.Sequence ((|>), Seq)
 import qualified Data.Set as Set
-import qualified Language.Haskell.Exts.Annotated as A -- (Pretty)
-import Language.Haskell.Exts.Annotated.Simplify (sType)
-import Language.Haskell.Exts.Pretty (defaultMode, prettyPrint, prettyPrintStyleMode)
-import qualified Language.Haskell.Exts.Syntax as S (ModuleName(..), Name)
+import "haskell-src-exts-1ast" Language.Haskell.Exts.Pretty
+import "haskell-src-exts-1ast" Language.Haskell.Exts.Syntax
+import "haskell-src-exts-1ast" Language.Haskell.Exts.SrcLoc
 import System.Directory (createDirectoryIfMissing, doesFileExist, getCurrentDirectory, removeDirectoryRecursive, removeFile, renameFile, setCurrentDirectory)
 import System.Exit (ExitCode(..))
 import System.FilePath (takeDirectory)
@@ -28,7 +28,6 @@ import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError)
 import qualified System.IO.Temp as Temp (createTempDirectory)
 import System.Process (readProcess, readProcessWithExitCode)
-import Text.PrettyPrint (mode, Mode(OneLineMode), style)
 
 -- | dropWhile where predicate operates on two list elements.
 dropWhile2 :: (a -> Maybe a -> Bool) -> [a] -> [a]
@@ -90,36 +89,33 @@ class EZPrint a where
 instance EZPrint a => EZPrint [a] where
     ezPrint xs = "[" ++ intercalate ", " (map ezPrint xs) ++ "]"
 
-instance EZPrint S.ModuleName where
-    ezPrint (S.ModuleName s) = s
+instance EZPrint (ModuleName ()) where
+    ezPrint (ModuleName _ s) = s
 
-instance EZPrint S.Name where
-    ezPrint = prettyPrint'
-
-instance EZPrint (Maybe S.ModuleName) where
+instance EZPrint (Maybe (ModuleName ())) where
     ezPrint (Just x) = prettyPrint x
     ezPrint Nothing = "Main"
 
-instance A.SrcInfo l => EZPrint (A.InstRule l) where
-    ezPrint (A.IParen _ r) = ezPrint r
-    ezPrint (A.IRule _ _ _ h) = "instance " ++ ezPrint h
+instance SrcInfo l => EZPrint (InstRule l) where
+    ezPrint (IParen _ r) = ezPrint r
+    ezPrint (IRule _ _ _ h) = "instance " ++ ezPrint h
 
-instance A.SrcInfo l => EZPrint (A.InstHead l) where
-    ezPrint (A.IHParen _ h) = ezPrint h
-    ezPrint (A.IHInfix _ t n) = "(" ++ ezPrint n ++ ") " ++ ezPrint t
-    ezPrint (A.IHCon _ n) = ezPrint n
-    ezPrint (A.IHApp _ h t) = ezPrint h ++ " " ++ ezPrint t
+instance SrcInfo l => EZPrint (InstHead l) where
+    ezPrint (IHParen _ h) = ezPrint h
+    ezPrint (IHInfix _ t n) = "(" ++ ezPrint n ++ ") " ++ ezPrint t
+    ezPrint (IHCon _ n) = ezPrint n
+    ezPrint (IHApp _ h t) = ezPrint h ++ " " ++ ezPrint t
 
-instance EZPrint (A.QName l) where
+instance EZPrint (QName l) where
     ezPrint = prettyPrint'
 
-instance EZPrint (A.Name l) where
+instance EZPrint (Name l) where
     ezPrint = prettyPrint'
 
-instance A.SrcInfo l => EZPrint (A.Type l) where
-    ezPrint = prettyPrint' . sType
+instance SrcInfo l => EZPrint (Type l) where
+    ezPrint = prettyPrint'
 
-instance A.SrcInfo l => EZPrint (A.Exp l) where
+instance SrcInfo l => EZPrint (Exp l) where
     ezPrint = prettyPrint'
 
 maybeStripPrefix :: Eq a => [a] -> [a] -> [a]
@@ -205,13 +201,10 @@ listTriples l = zip3 ([Nothing] ++ map Just l) l (tail (map Just l ++ [Nothing])
 dropWhileNext :: (a -> Bool) -> [a] -> [a]
 dropWhileNext p xs = mapMaybe fst $ dropWhile (\(_,x) -> maybe True p x) $ listPairs xs
 
-simplify :: Functor f => f a -> f ()
-simplify = fmap (const ())
-
 con :: (Typeable a, Data a) => a -> String
 con = show . toConstr
 
-prettyPrint' :: A.Pretty a => a -> String
+prettyPrint' :: Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
 
 class SetLike a where

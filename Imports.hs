@@ -1,7 +1,9 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
 
 module Imports
     ( mergeDecls
@@ -15,12 +17,13 @@ import Data.List (groupBy, nub, sortBy)
 import Data.Map.Strict as Map (adjust, elems, foldlWithKey', insertWith, Map)
 import Data.Maybe (catMaybes, maybeToList)
 import Data.Monoid ((<>))
-import qualified Language.Haskell.Exts.Annotated as A (Annotated(ann), ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(..), SrcLoc(SrcLoc))
-import Language.Haskell.Exts.SrcLoc (SrcInfo)
+import "haskell-src-exts-1ast" Language.Haskell.Exts.Syntax (Annotated(ann), ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(..))
+import "haskell-src-exts-1ast" Language.Haskell.Exts.SrcLoc (SrcLoc(SrcLoc), SrcInfo)
+import Language.Haskell.Names.SyntaxUtils (dropAnn)
 import SrcLoc (srcLoc)
-import Utils (prettyPrint', SetLike(union, difference), simplify)
+import Utils (prettyPrint', SetLike(union, difference))
 
-type ImportKey = (A.ImportDecl (), Bool)
+type ImportKey = (ImportDecl (), Bool)
 
 -- | Return a value that can serve as a key to where and how the
 -- import is importing, but not exactly what it is importing.  It just
@@ -28,59 +31,58 @@ type ImportKey = (A.ImportDecl (), Bool)
 -- import was done with the "hiding" keyword.  This will distinguishes
 -- "import Foo as F" from "import Foo", but will let us group imports
 -- that can be merged.
-importKey :: A.ImportDecl l -> ImportKey
+importKey :: ImportDecl l -> ImportKey
 importKey x = (cleanDecl, hiding)
     where
-      cleanDecl = x' {A.importSpecs = Nothing}
-      hiding = maybe False (\(A.ImportSpecList () f _) -> f) (A.importSpecs x')
+      cleanDecl = x' {importSpecs = Nothing}
+      hiding = maybe False (\(ImportSpecList () f _) -> f) (importSpecs x')
       x' = fmap (const ()) x
 
-type ImportMap l = Map ImportKey [A.ImportDecl l]
+type ImportMap l = Map ImportKey [ImportDecl l]
 
-importMap :: [A.ImportDecl l] -> ImportMap l
+importMap :: [ImportDecl l] -> ImportMap l
 importMap xs = foldl' (\mp x -> Map.insertWith (<>) (importKey x) [x] mp) mempty xs
 
-mergeDecls :: forall l. (SrcInfo l, Eq l) => [A.ImportDecl l] -> [A.ImportDecl l]
+mergeDecls :: forall l. Eq l => [ImportDecl l] -> [ImportDecl l]
 mergeDecls = map mergeDecls' . groupBy (\ a b -> importMergable a b == EQ) . sortBy importMergable
     where
-      mergeDecls' :: [A.ImportDecl l] -> A.ImportDecl l
+      mergeDecls' :: [ImportDecl l] -> ImportDecl l
       mergeDecls' [] = error "mergeDecls"
-      mergeDecls' xs@(x : _) = x {A.importSpecs = mergeSpecLists (catMaybes (Prelude.map A.importSpecs xs))}
+      mergeDecls' xs@(x : _) = x {importSpecs = mergeSpecLists (catMaybes (fmap importSpecs xs))}
 
       -- Merge a list of specs for the same module
-      mergeSpecLists :: [A.ImportSpecList l] -> Maybe (A.ImportSpecList l)
-      mergeSpecLists (A.ImportSpecList loc flag specs : ys) =
-          Just (A.ImportSpecList loc flag (mergeSpecs (sortBy compareSpecs (nub (concat (specs : Prelude.map (\ (A.ImportSpecList _ _ specs') -> specs') ys))))))
+      mergeSpecLists :: [ImportSpecList l] -> Maybe (ImportSpecList l)
+      mergeSpecLists (ImportSpecList loc flag specs : ys) =
+          Just (ImportSpecList loc flag (mergeSpecs (sortBy compareSpecs (nub (concat (specs : fmap (\ (ImportSpecList _ _ specs') -> specs') ys))))))
       mergeSpecLists [] = error "mergeSpecLists"
 
 -- | Compare the two import declarations ignoring the things that are
 -- actually being imported.  Equality here indicates that the two
 -- imports could be merged.
-importMergable :: SrcInfo l => A.ImportDecl l -> A.ImportDecl l -> Ordering
+importMergable :: ImportDecl l -> ImportDecl l -> Ordering
 importMergable a b =
     case (compare `on` noSpecs) a' b' of
       EQ -> EQ
       specOrdering ->
-          case (compare `on` (A.importModule . simplify)) a' b' of
+          case (compare `on` importModule) a' b' of
             EQ -> specOrdering
             moduleNameOrdering -> moduleNameOrdering
     where
-      a' = simplify a
-      b' = simplify b
+      a' = dropAnn a
+      b' = dropAnn b
       -- Return a version of an ImportDecl with an empty spec list and no
       -- source locations.  This will distinguish "import Foo as F" from
       -- "import Foo", but will let us group imports that can be merged.
       -- Don't merge hiding imports with regular imports.
-      A.SrcLoc _path _ _ = srcLoc (A.ann a)
-      noSpecs :: A.ImportDecl l -> A.ImportDecl l
-      noSpecs x = x { A.importSpecs = case A.importSpecs x of
-                                        Just (A.ImportSpecList l True _) -> Just (A.ImportSpecList l True []) -- hiding
-                                        Just (A.ImportSpecList _ False _) -> Nothing
+      noSpecs :: ImportDecl l -> ImportDecl l
+      noSpecs x = x { importSpecs = case importSpecs x of
+                                        Just (ImportSpecList l True _) -> Just (ImportSpecList l True []) -- hiding
+                                        Just (ImportSpecList _ False _) -> Nothing
                                         Nothing -> Nothing }
 
 -- Merge elements of a sorted spec list as possible
 -- unimplemented, should merge Foo and Foo(..) into Foo(..), and the like
-mergeSpecs :: [A.ImportSpec l] -> [A.ImportSpec l]
+mergeSpecs :: [ImportSpec l] -> [ImportSpec l]
 mergeSpecs [] = []
 mergeSpecs [x] = [x]
 {-
@@ -104,7 +106,7 @@ mergeSpecs (x : y : zs) =
 mergeSpecs xs = xs
 
 -- Compare function used to sort the symbols within an import.
-compareSpecs :: A.ImportSpec l -> A.ImportSpec l -> Ordering
+compareSpecs :: ImportSpec l -> ImportSpec l -> Ordering
 -- compareSpecs a b = (compare `on` sImportSpec) a b
 compareSpecs a b =
     case (compare `on` (everywhere (mkT (map toLower)))) a' b' of

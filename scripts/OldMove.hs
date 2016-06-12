@@ -11,9 +11,7 @@ import Decls ({-moveDecls,-} moveDeclsAndClean)
 import IO ()
 import Utils (withTempDirectory)
 import Utils (withCurrentDirectory)
-import qualified Language.Haskell.Exts.Annotated.Syntax as A
-import Language.Haskell.Exts.SrcLoc (SrcSpanInfo)
-import qualified Language.Haskell.Exts.Syntax as S
+import Language.Haskell.Exts
 import ModuleKey (ModuleKey(..))
 import System.Directory (getCurrentDirectory, removeDirectoryRecursive, setCurrentDirectory)
 import System.FilePath.Find ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)

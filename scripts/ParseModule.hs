@@ -5,14 +5,15 @@ import Control.Monad.State
 import Data.Generics
 import Data.Set as Set (insert)
 import Debug.Trace
-import Language.Haskell.Exts.Annotated
-import Types (loadModule, ModuleInfo(..))
--- import Text.PrettyPrint.HughesPJClass (prettyShow)
+import Language.Haskell.Exts
+import LoadModule (loadModule)
+import ModuleInfo (ModuleInfo(..))
 import SrcLoc
-import Symbols (foldDeclared, toExportSpecs)
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.Exit (ExitCode(..), exitWith)
+import System.FilePath (dropExtension)
+import System.IO (hPutStrLn, stderr)
 import Test.HUnit (errors, failures, runTestTT, Test(TestList))
 import Utils (withCurrentDirectory)
 
@@ -42,8 +43,8 @@ buildParams = do
 main :: IO ()
 main = do
   params <- buildParams
-  withCurrentDirectory (view top params) $
-      loadModule' (view paths params) >>= mapM_ (\path -> either (doError path) (doModule path))
+  withCurrentDirectory (view topDir params) $
+      loadModule (view paths params) >>= mapM_ (\path -> either (doError path) (doModule path))
     where
       doError :: FilePath -> SomeException -> IO ()
       doError path e = hPutStrLn stderr $ "Failed to load " ++ show path ++ ": " ++ show e

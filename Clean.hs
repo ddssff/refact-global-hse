@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
 {-# OPTIONS -Wall #-}
@@ -14,8 +15,11 @@ import Data.Monoid ((<>))
 import Data.Set as Set (empty, member, Set, singleton, union, unions)
 import Debug.Trace (trace)
 import Imports (mergeDecls)
-import qualified Language.Haskell.Exts.Annotated as A (Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs), ImportSpec(IAbs, IThingAll, IThingWith, IVar), ImportSpecList(ImportSpecList), InstHead(..), InstRule(..), Module(Module, XmlHybrid, XmlPage), ModuleHead(ModuleHead), ModuleName(..), Name, QName(Qual, UnQual), Type(..))
+import Language.Haskell.Exts.Syntax (Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs),
+  ImportSpec(IAbs, IThingAll, IThingWith, IVar), ImportSpecList(ImportSpecList), InstHead(..), InstRule(..),
+  Module(Module), ModuleHead(ModuleHead), ModuleName(..), Name, QName(Qual, UnQual), Type(..))
 import Language.Haskell.Exts.SrcLoc (SrcInfo, SrcSpanInfo)
+import Language.Haskell.Names.SyntaxUtils (dropAnn, getImports, getModuleDecls)
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath)
@@ -23,16 +27,16 @@ import SrcLoc (EndLoc, endOfImports, keep, keepAll, ScanM, scanModule, skip, sta
 import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcess)
-import Utils (ezPrint, prettyPrint', replaceFile, simplify, withTempDirectory)
+import Utils (ezPrint, prettyPrint', replaceFile, withTempDirectory)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: [GHCOpts] -> [ModuleInfo SrcSpanInfo] -> IO ()
 cleanImports _ [] = trace ("cleanImports - no modules") (pure ())
 cleanImports optSets mods = do
-  imodSets <- mapM (doOpts mods) optSets :: IO [[(GHCOpts, [A.ImportDecl SrcSpanInfo])]]
+  imodSets <- mapM (doOpts mods) optSets :: IO [[(GHCOpts, [ImportDecl SrcSpanInfo])]]
   mapM_ (uncurry doModule) (zip mods (transpose imodSets))
 
-doOpts :: [ModuleInfo SrcSpanInfo] -> GHCOpts -> IO [(GHCOpts, [A.ImportDecl SrcSpanInfo])]
+doOpts :: [ModuleInfo SrcSpanInfo] -> GHCOpts -> IO [(GHCOpts, [ImportDecl SrcSpanInfo])]
 doOpts mods opts =
     withTempDirectory True "." "scratch" $ \scratch -> do
          hPutStrLn stderr ("cleanImports: " ++ ezPrint opts ++ " (scratch=" ++ scratch ++ ")")
@@ -42,7 +46,7 @@ doOpts mods opts =
          _out <- readProcess (hc opts) args' ""
          map (opts,) <$> mapM (newImports opts scratch) mods
 
-doModule :: ModuleInfo SrcSpanInfo -> [(GHCOpts, [A.ImportDecl SrcSpanInfo])] -> IO ()
+doModule :: ModuleInfo SrcSpanInfo -> [(GHCOpts, [ImportDecl SrcSpanInfo])] -> IO ()
 doModule m pairs =
     do let newText = newModuleText m pairs
        let path = moduleFullPath (_moduleKey m)
@@ -54,11 +58,11 @@ doModule m pairs =
          Just _ -> pure ()
 
 -- | Load the minimized imports output by ghc as a module.
-newImports :: GHCOpts -> FilePath -> ModuleInfo SrcSpanInfo -> IO [A.ImportDecl SrcSpanInfo]
-newImports opts scratch (ModuleInfo {_module = A.Module _ mh _ _ _}) = do
-  (\(ModuleInfo {_module = A.Module _ _ _ is _}) -> is) <$> loadModule opts importsPath
+newImports :: GHCOpts -> FilePath -> ModuleInfo SrcSpanInfo -> IO [ImportDecl SrcSpanInfo]
+newImports opts scratch (ModuleInfo {_module = Module _ mh _ _ _}) = do
+  (\(ModuleInfo {_module = m}) -> getImports m) <$> loadModule opts importsPath
     where
-      moduleName = maybe "Main" (\ (A.ModuleHead _ (A.ModuleName _ s) _ _) -> s) mh
+      moduleName = maybe "Main" (\ (ModuleHead _ (ModuleName _ s) _ _) -> s) mh
       importsPath = scratch </> moduleName ++ ".imports"
 newImports _ _ _ = error "Unsupported module type"
 
@@ -67,8 +71,8 @@ newImports _ _ _ = error "Unsupported module type"
 -- source file.  We also need to modify the imports of any names
 -- that are types that appear in standalone instance derivations so
 -- their members are imported too.
-newModuleText :: forall l. (SrcInfo l, EndLoc l, Eq l) => ModuleInfo l -> [(GHCOpts, [A.ImportDecl l])] -> Maybe String
-newModuleText mi@(ModuleInfo {_module = m@(A.Module _ _ _ oi _)}) pairs =
+newModuleText :: forall l. (SrcInfo l, EndLoc l, Eq l) => ModuleInfo l -> [(GHCOpts, [ImportDecl l])] -> Maybe String
+newModuleText mi@(ModuleInfo {_module = m}) pairs =
     Just $ scanModule (do keep (startOfImports mi)
                           let (common, pairs') = fixNewImports True mi pairs
                           tell (unlines (map prettyPrint' common))
@@ -77,16 +81,17 @@ newModuleText mi@(ModuleInfo {_module = m@(A.Module _ _ _ oi _)}) pairs =
                           withTrailingWhitespace skip (startOfDecls mi)
                           keepAll) mi
     where
-      doOptImports :: GHCOpts -> [A.ImportDecl l] -> ScanM ()
+      oi = getImports m
+      doOptImports :: GHCOpts -> [ImportDecl l] -> ScanM ()
       doOptImports opts ni =
           -- let ni'' = fixNewImports' True mi ni in
-          -- if simplify oi == map simplify ni' then keep ... else
+          -- if dropAnn oi == map dropAnn ni' then keep ... else
           do tell (cppIf opts)
              tell (unlines (map prettyPrint' ni))
              tell (cppEndif opts)
 newModuleText _ _ = error "Unsupported module type"
 
-fixNewImports :: (SrcInfo l, Eq l) => Bool -> ModuleInfo l -> [(GHCOpts, [A.ImportDecl l])] -> ([A.ImportDecl l], [(GHCOpts, [A.ImportDecl l])])
+fixNewImports :: (SrcInfo l, Eq l) => Bool -> ModuleInfo l -> [(GHCOpts, [ImportDecl l])] -> ([ImportDecl l], [(GHCOpts, [ImportDecl l])])
 fixNewImports _ _ [] = ([], [])
 fixNewImports remove mi pairs =
     let pairs' = map (\(opts, ni) -> (opts, fixNewImports' remove mi ni)) pairs
@@ -99,91 +104,89 @@ fixNewImports remove mi pairs =
 fixNewImports' :: forall l. (SrcInfo l, Eq l) =>
                   Bool         -- ^ If true, imports that turn into empty lists will be removed
                -> ModuleInfo l
-               -> [A.ImportDecl l]
-               -> [A.ImportDecl l]
-fixNewImports' remove mi@(ModuleInfo {_module = A.Module _ _ _ oi _}) ni =
+               -> [ImportDecl l]
+               -> [ImportDecl l]
+fixNewImports' remove mi@(ModuleInfo {_module = m}) ni =
     filter importPred $ map expandSDTypes $ mergeDecls $ ni ++ filter isHidingImport oi
     where
-      expandSDTypes :: A.ImportDecl l -> A.ImportDecl l
-      expandSDTypes i@(A.ImportDecl {A.importSpecs = Just (A.ImportSpecList l f specs)}) =
-          i {A.importSpecs = Just (A.ImportSpecList l f (Prelude.map (expandSpec i) specs))}
+      oi = getImports m
+      expandSDTypes :: ImportDecl l -> ImportDecl l
+      expandSDTypes i@(ImportDecl {importSpecs = Just (ImportSpecList l f specs)}) =
+          i {importSpecs = Just (ImportSpecList l f (Prelude.map (expandSpec i) specs))}
       expandSDTypes i = i
       expandSpec i s =
-          if not (A.importQualified i) && member (Nothing, simplify n) sdTypes ||
-             maybe False (\ mn -> (member (Just (simplify mn), simplify n) sdTypes)) (A.importAs i) ||
-             member (Just (simplify (A.importModule i)), simplify n) sdTypes
+          if not (importQualified i) && member (Nothing, dropAnn n) sdTypes ||
+             maybe False (\ mn -> (member (Just (dropAnn mn), dropAnn n) sdTypes)) (importAs i) ||
+             member (Just (dropAnn (importModule i)), dropAnn n) sdTypes
           then s'
           else s
           where
             n = case s of
-                  (A.IVar _ x) -> x
-                  (A.IAbs _ _ x) -> x
-                  (A.IThingAll _ x) -> x
-                  (A.IThingWith _ x _) -> x
+                  (IVar _ x) -> x
+                  (IAbs _ _ x) -> x
+                  (IThingAll _ x) -> x
+                  (IThingWith _ x _) -> x
             s' = case s of
-                  (A.IVar l x) -> A.IThingAll l x
-                  (A.IAbs l _ x) -> A.IThingAll l x
-                  (A.IThingWith l x _) -> A.IThingAll l x
-                  (A.IThingAll _ _) -> s
+                  (IVar l x) -> IThingAll l x
+                  (IAbs l _ x) -> IThingAll l x
+                  (IThingWith l x _) -> IThingAll l x
+                  (IThingAll _ _) -> s
 
       -- Eliminate imports that became empty
       -- importPred :: ImportDecl -> Bool
-      importPred (A.ImportDecl _ mn _ _ _ _ _ (Just (A.ImportSpecList _ _ []))) =
-          not remove || maybe False (isEmptyImport . A.importSpecs) (find ((== (simplify mn)) . simplify . A.importModule) oi)
+      importPred (ImportDecl _ mn _ _ _ _ _ (Just (ImportSpecList _ _ []))) =
+          not remove || maybe False (isEmptyImport . importSpecs) (find ((== (dropAnn mn)) . dropAnn . importModule) oi)
           where
-            isEmptyImport (Just (A.ImportSpecList _ _ [])) = True
+            isEmptyImport (Just (ImportSpecList _ _ [])) = True
             isEmptyImport _ = False
       importPred _ = True
 
-      sdTypes :: Set (Maybe (A.ModuleName ()), A.Name ())
+      sdTypes :: Set (Maybe (ModuleName ()), Name ())
       sdTypes = standaloneDerivingTypes mi
 fixNewImports' _ _ _ = error "Unexpected module type"
 
-isHidingImport :: A.ImportDecl l -> Bool
-isHidingImport (A.ImportDecl {A.importSpecs = Just (A.ImportSpecList _ True _)}) = True
+isHidingImport :: ImportDecl l -> Bool
+isHidingImport (ImportDecl {importSpecs = Just (ImportSpecList _ True _)}) = True
 isHidingImport _ = False
 
-standaloneDerivingTypes :: ModuleInfo l -> Set (Maybe (A.ModuleName ()), A.Name ())
-standaloneDerivingTypes (ModuleInfo {_module = A.XmlPage _ _ _ _ _ _ _}) = error "standaloneDerivingTypes A.XmlPage"
-standaloneDerivingTypes (ModuleInfo {_module = A.XmlHybrid _ _ _ _ _ _ _ _ _}) = error "standaloneDerivingTypes A.XmlHybrid"
-standaloneDerivingTypes (ModuleInfo {_module = A.Module _ _ _ _ decls}) =
-    unions (Prelude.map derivDeclTypes decls)
+standaloneDerivingTypes :: ModuleInfo l -> Set (Maybe (ModuleName ()), Name ())
+standaloneDerivingTypes (ModuleInfo {_module = m}) = (unions . fmap derivDeclTypes . getModuleDecls) m
 
 -- | Collect the declared types of a standalone deriving declaration.
 class DerivDeclTypes a where
-    derivDeclTypes :: a -> Set (Maybe (A.ModuleName ()), A.Name ())
+    derivDeclTypes :: a -> Set (Maybe (ModuleName ()), Name ())
 
-instance DerivDeclTypes (A.Decl l) where
-    derivDeclTypes (A.DerivDecl _ _ x) = derivDeclTypes x
+instance DerivDeclTypes (Decl l) where
+    derivDeclTypes (DerivDecl _ _ x) = derivDeclTypes x
     derivDeclTypes _ = empty
 
-instance DerivDeclTypes (A.InstRule l) where
-    derivDeclTypes (A.IRule _ _ _ x)  = derivDeclTypes x
-    derivDeclTypes (A.IParen _ x) = derivDeclTypes x
+instance DerivDeclTypes (InstRule l) where
+    derivDeclTypes (IRule _ _ _ x)  = derivDeclTypes x
+    derivDeclTypes (IParen _ x) = derivDeclTypes x
 
-instance DerivDeclTypes (A.InstHead l) where
-    derivDeclTypes (A.IHCon _ _) = empty
-    derivDeclTypes (A.IHParen _ x) = derivDeclTypes x
-    derivDeclTypes (A.IHInfix _ x _op) = derivDeclTypes x
-    derivDeclTypes (A.IHApp _ x y) = union (derivDeclTypes x) (derivDeclTypes y)
+instance DerivDeclTypes (InstHead l) where
+    derivDeclTypes (IHCon _ _) = empty
+    derivDeclTypes (IHParen _ x) = derivDeclTypes x
+    derivDeclTypes (IHInfix _ x _op) = derivDeclTypes x
+    derivDeclTypes (IHApp _ x y) = union (derivDeclTypes x) (derivDeclTypes y)
 
-instance DerivDeclTypes (A.Type l) where
-    derivDeclTypes (A.TyForall _ _ _ x) = derivDeclTypes x -- qualified type
-    derivDeclTypes (A.TyFun _ x y) = union (derivDeclTypes x) (derivDeclTypes y) -- function type
-    derivDeclTypes (A.TyTuple _ _ xs) = unions (Prelude.map derivDeclTypes xs) -- tuple type, possibly boxed
-    derivDeclTypes (A.TyList _ x) =  derivDeclTypes x -- list syntax, e.g. [a], as opposed to [] a
-    derivDeclTypes (A.TyApp _ x y) = union (derivDeclTypes x) (derivDeclTypes y) -- application of a type constructor
-    derivDeclTypes (A.TyVar _ _) = empty -- type variable
-    derivDeclTypes (A.TyCon _ (A.Qual _ m n)) = singleton (Just (simplify m), simplify n) -- named type or type constructor
+instance DerivDeclTypes (Type l) where
+    derivDeclTypes (TyForall _ _ _ x) = derivDeclTypes x -- qualified type
+    derivDeclTypes (TyFun _ x y) = union (derivDeclTypes x) (derivDeclTypes y) -- function type
+    derivDeclTypes (TyTuple _ _ xs) = unions (Prelude.map derivDeclTypes xs) -- tuple type, possibly boxed
+    derivDeclTypes (TyList _ x) =  derivDeclTypes x -- list syntax, e.g. [a], as opposed to [] a
+    derivDeclTypes (TyApp _ x y) = union (derivDeclTypes x) (derivDeclTypes y) -- application of a type constructor
+    derivDeclTypes (TyVar _ _) = empty -- type variable
+    derivDeclTypes (TyCon _ (Qual _ m n)) = singleton (Just (dropAnn m), dropAnn n) -- named type or type constructor
        -- Unqualified names refer to imports without "qualified" or "as" values.
-    derivDeclTypes (A.TyCon _ (A.UnQual _ n)) = singleton (Nothing, simplify n)
-    derivDeclTypes (A.TyCon _ _) = empty
-    derivDeclTypes (A.TyParen _ x) = derivDeclTypes x -- type surrounded by parentheses
-    derivDeclTypes (A.TyInfix _ x _op y) = union (derivDeclTypes x) (derivDeclTypes y) -- infix type constructor
-    derivDeclTypes (A.TyKind _ x _) = derivDeclTypes x -- type with explicit kind signature
-    derivDeclTypes (A.TyParArray _ x) = derivDeclTypes x
-    derivDeclTypes (A.TyPromoted _ _) = empty
-    derivDeclTypes (A.TyEquals _ _ _) = empty -- a ~ b, not clear how this related to standalone deriving
-    derivDeclTypes (A.TySplice _ _) = empty
-    derivDeclTypes (A.TyBang _ _ x) = derivDeclTypes x
-    derivDeclTypes (A.TyWildCard _ _) = empty
+    derivDeclTypes (TyCon _ (UnQual _ n)) = singleton (Nothing, dropAnn n)
+    derivDeclTypes (TyCon _ _) = empty
+    derivDeclTypes (TyParen _ x) = derivDeclTypes x -- type surrounded by parentheses
+    derivDeclTypes (TyInfix _ x _op y) = union (derivDeclTypes x) (derivDeclTypes y) -- infix type constructor
+    derivDeclTypes (TyKind _ x _) = derivDeclTypes x -- type with explicit kind signature
+    derivDeclTypes (TyParArray _ x) = derivDeclTypes x
+    derivDeclTypes (TyPromoted _ _) = empty
+    derivDeclTypes (TyEquals _ _ _) = empty -- a ~ b, not clear how this related to standalone deriving
+    derivDeclTypes (TySplice _ _) = empty
+    derivDeclTypes (TyBang _ _ _ x) = derivDeclTypes x
+    derivDeclTypes (TyWildCard _ _) = empty

@@ -5,7 +5,7 @@ module ImportTests where
 import Data.Default (Default(def))
 import Data.List (intercalate)
 import Imports (mergeDecls)
-import Language.Haskell.Exts.Annotated
+import Language.Haskell.Exts
 import Test.HUnit
 import Utils (prettyPrint')
 

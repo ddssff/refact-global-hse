@@ -9,8 +9,7 @@ import Data.List (intercalate)
 import Data.Map.Strict as Map (fromList)
 import DeclTests
 import ImportTests
-import Language.Haskell.Exts.Annotated -- (parseModule, ParseResult(ParseOk))
-import qualified Language.Haskell.Exts.Syntax as S
+import Language.Haskell.Exts -- (parseModule, ParseResult(ParseOk))
 import Language.Haskell.Names
 import Language.Haskell.Names.ModuleSymbols (moduleTable)
 import Language.Haskell.Names.Imports (importTable)
@@ -59,10 +58,10 @@ names1 = TestCase $ assertEqual "names1" expected actual
                           (Just (ExportSpecList
                                  (Scoped None (SrcSpanInfo {srcInfoSpan = SrcSpan "<unknown>.hs" 1 12 1 15, srcInfoPoints = [SrcSpan "<unknown>.hs" 1 12 1 13,SrcSpan "<unknown>.hs" 1 14 1 15]}))
                                  [EVar
-                                  (Scoped (Export [Value {symbolModule = S.ModuleName "M", symbolName = S.Ident "f"}]) (SrcSpanInfo {srcInfoSpan = SrcSpan "<unknown>.hs" 1 13 1 14, srcInfoPoints = []}))
+                                  (Scoped (Export [Value {symbolModule = ModuleName () "M", symbolName = Ident () "f"}]) (SrcSpanInfo {srcInfoSpan = SrcSpan "<unknown>.hs" 1 13 1 14, srcInfoPoints = []}))
                                   (UnQual
-                                   (Scoped (GlobalSymbol (Value {symbolModule = S.ModuleName "M", symbolName = S.Ident "f"}) (S.UnQual (S.Ident "f"))) (SrcSpanInfo {srcInfoSpan = SrcSpan "<unknown>.hs" 1 13 1 14, srcInfoPoints = []}))
-                                   (Ident (Scoped (GlobalSymbol (Value {symbolModule = S.ModuleName "M", symbolName = S.Ident "f"}) (S.UnQual (S.Ident "f"))) (SrcSpanInfo {srcInfoSpan = SrcSpan "<unknown>.hs" 1 13 1 14, srcInfoPoints = []})) "f"))]))))
+                                   (Scoped (GlobalSymbol (Value {symbolModule = ModuleName () "M", symbolName = Ident () "f"}) (UnQual () (Ident () "f"))) (SrcSpanInfo {srcInfoSpan = SrcSpan "<unknown>.hs" 1 13 1 14, srcInfoPoints = []}))
+                                   (Ident (Scoped (GlobalSymbol (Value {symbolModule = ModuleName () "M", symbolName = Ident () "f"}) (UnQual () (Ident () "f"))) (SrcSpanInfo {srcInfoSpan = SrcSpan "<unknown>.hs" 1 13 1 14, srcInfoPoints = []})) "f"))]))))
                    []
                    []
                    [FunBind
@@ -97,9 +96,9 @@ names2 = TestCase $ do
       actual = gFind (parsemod "module M   (f)   where\nf x | x > 0 = x + 1\n") :: [NameInfo SrcSpanInfo]
       expected = [None,None,None,None,
 #if 1
-                  Export [Value {symbolModule = S.ModuleName "M", symbolName = S.Ident "f"}],
-                  GlobalSymbol (Value {symbolModule = S.ModuleName "M", symbolName = S.Ident "f"}) (S.UnQual (S.Ident "f")),
-                  GlobalSymbol (Value {symbolModule = S.ModuleName "M", symbolName = S.Ident "f"}) (S.UnQual (S.Ident "f")),
+                  Export [Value {symbolModule = ModuleName () "M", symbolName = Ident () "f"}],
+                  GlobalSymbol (Value {symbolModule = ModuleName () "M", symbolName = Ident () "f"}) (UnQual () (Ident () "f")),
+                  GlobalSymbol (Value {symbolModule = ModuleName () "M", symbolName = Ident () "f"}) (UnQual () (Ident () "f")),
                   None,
 #endif
                   None,ValueBinder,None,ValueBinder,None,None,None,None,None,
@@ -132,6 +131,6 @@ names3 = TestCase $ do
                  let itable = importTable env m in
                  moduleTable itable m
       expected =
-          let mp = Map.fromList [(S.Qual (S.ModuleName "M") (S.Ident "f"),[Value {symbolModule = S.ModuleName "M", symbolName = S.Ident "f"}]),
-                                 (S.UnQual (S.Ident "f"),[Value {symbolModule = S.ModuleName "M", symbolName = S.Ident "f"}])] in
+          let mp = Map.fromList [(Qual () (ModuleName () "M") (Ident () "f"),[Value {symbolModule = ModuleName () "M", symbolName = Ident () "f"}]),
+                                 (UnQual () (Ident () "f"),[Value {symbolModule = ModuleName () "M", symbolName = Ident () "f"}])] in
           (mp, mp)

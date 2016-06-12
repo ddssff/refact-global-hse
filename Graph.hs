@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -19,19 +20,19 @@ import Data.Foldable as Foldable (find)
 import Data.Graph
 import Data.List (nub)
 import Data.Maybe (mapMaybe)
-import qualified Language.Haskell.Exts.Annotated as A (ImportDecl(importModule), Module(Module), ModuleName)
+import Language.Haskell.Exts.Syntax (ImportDecl(importModule), Module(Module), ModuleName)
 import Language.Haskell.Names (Environment)
+import Language.Haskell.Names.SyntaxUtils (dropAnn)
 import ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
 import ModuleKey (ModuleKey(..))
-import Utils (simplify)
 
 
 data Rd l
     = Rd { _modules :: [ModuleInfo l]
          , _environment :: Environment
          , _importGraph :: (Graph,
-                            Vertex -> ((), A.ModuleName (), [A.ModuleName ()]),
-                            A.ModuleName () -> Maybe Vertex) }
+                            Vertex -> ((), ModuleName (), [ModuleName ()]),
+                            ModuleName () -> Maybe Vertex) }
 
 -- | Declaration moves can be characterized as one of two types, Down
 -- or Up.  This must be computed by scanning the parsed code of the
@@ -56,17 +57,17 @@ data MoveType
 
 -- | Build a graph of the "imports" relation.
 makeImportGraph :: [ModuleInfo l] -> (Graph,
-                                      Vertex -> ((), A.ModuleName (), [A.ModuleName ()]),
-                                      A.ModuleName () -> Maybe Vertex)
+                                      Vertex -> ((), ModuleName (), [ModuleName ()]),
+                                      ModuleName () -> Maybe Vertex)
 makeImportGraph mods =
     graphFromEdges (mapMaybe (\m -> case _moduleKey m of
                                       ModuleKey {_moduleName = a} -> Just ((), a, modulesImportedBy m)
-                                      _ -> Nothing) (map simplify mods))
+                                      _ -> Nothing) (map dropAnn mods))
     where
       -- What modules are imported by m?
-      modulesImportedBy :: ModuleInfo l -> [A.ModuleName ()]
-      modulesImportedBy (ModuleInfo {_module = A.Module _ _ _ imports _}) =
-          nub $ map (simplify . A.importModule) imports
+      modulesImportedBy :: ModuleInfo l -> [ModuleName ()]
+      modulesImportedBy (ModuleInfo {_module = Module _ _ _ imports _}) =
+          nub $ map (dropAnn . importModule) imports
       modulesImportedBy _ = []
 
 -- | Unsafe ModuleInfo lookup

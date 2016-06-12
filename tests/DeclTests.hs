@@ -20,11 +20,10 @@ import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Decls (runMoveUnsafe, runSimpleMoveUnsafe)
 import HashDefine (parseHashDefine)
-import Language.Haskell.Exts.Annotated.Simplify (sName)
-import qualified Language.Haskell.Exts.Annotated.Syntax as A (Decl(FunBind, TypeSig), Exp(App), Match(InfixMatch, Match), Module(Module), ModuleName(ModuleName), Name(Ident))
-import Language.Haskell.Exts.Extension (KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules))
-import Language.Haskell.Exts.SrcLoc (SrcInfo)
-import qualified Language.Haskell.Exts.Syntax as S (Name(Ident))
+import Language.Haskell.Exts (Decl(FunBind, TypeSig), Match(InfixMatch, Match),
+   ModuleName(ModuleName), Name(Ident), Exp(App),
+   KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules), Module(Module), SrcInfo)
+import Language.Haskell.Names.SyntaxUtils (dropAnn)
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
 import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
@@ -32,7 +31,7 @@ import MoveSpec (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpe
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.Process (readProcessWithExitCode)
 import Test.HUnit (assertString, Test(..))
-import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, simplify, withCleanRepo, withCurrentDirectory)
+import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, withCleanRepo, withCurrentDirectory)
 
 declTests :: Test
 declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, {-decl7,-} decl8, decl9,
@@ -55,30 +54,30 @@ decl1 = TestLabel "decl1" $ TestCase $ testMoveSpec "tests/expected/decl1" "test
 moveSpec1 :: MoveSpec
 moveSpec1 = MoveSpec f
     where
-      f i (A.TypeSig _ [A.Ident _ s] _)
+      f i (TypeSig _ [Ident _ s] _)
           | s == "tryfindM" {-|| s == "failing"-} =
-              (_moduleKey i) {_moduleName = A.ModuleName () "Data.Logic.ATP.Tableaux"}
-      f i (A.FunBind _ ms)
-          | any (`elem` [S.Ident "tryfindM" {-, S.Ident "failing"-}])
+              (_moduleKey i) {_moduleName = ModuleName () "Data.Logic.ATP.Tableaux"}
+      f i (FunBind _ ms)
+          | any (`elem` [Ident () "tryfindM" {-, S.Ident () "failing"-}])
                 (map (\match -> case match of
-                                  A.Match _ name _ _ _ -> sName name
-                                  A.InfixMatch _ _ name _ _ _ -> sName name) ms) =
-              (_moduleKey i) {_moduleName = A.ModuleName () "Data.Logic.ATP.Tableaux"}
+                                  Match _ name _ _ _ -> name
+                                  InfixMatch _ _ name _ _ _ -> name) ms) =
+              (_moduleKey i) {_moduleName = ModuleName () "Data.Logic.ATP.Tableaux"}
       f i __ = _moduleKey i
 {-
 moveSpec1 k d | Set.member (S.Ident "tryfindM") (foldDeclared Set.insert mempty d) =
                   trace ("Expected TypeSig or FunBind: " ++ show d)
                         (k {_modulePath = "Data/Logic/ATP/Tableaux.hs",
                             _moduleName = S.ModuleName "Data.Logic.ATP.Tableaux"})
-moveSpec1 k d@(A.FunBind _ _) = {-trace ("FunBind: " ++ show (foldDeclared (:) mempty d))-} k
-moveSpec1 k (A.ClassDecl _ _mcxt _dh _fd _mcds) = k
-moveSpec1 k (A.DataDecl _ _dn _mcxt _dh _qcs _md) = k
-moveSpec1 k (A.PatBind _ _p _rhs _mbs) = k
-moveSpec1 k (A.TypeDecl _ _dh _typ) = k
-moveSpec1 k (A.TypeSig _ _name _typ) = k
-moveSpec1 k (A.InstDecl _ _mo _ir _mids) = k
-moveSpec1 k (A.InfixDecl _ _assoc _mi _ops) = k
-moveSpec1 k (A.DerivDecl {}) = k
+moveSpec1 k d@(FunBind _ _) = {-trace ("FunBind: " ++ show (foldDeclared (:) mempty d))-} k
+moveSpec1 k (ClassDecl _ _mcxt _dh _fd _mcds) = k
+moveSpec1 k (DataDecl _ _dn _mcxt _dh _qcs _md) = k
+moveSpec1 k (PatBind _ _p _rhs _mbs) = k
+moveSpec1 k (TypeDecl _ _dh _typ) = k
+moveSpec1 k (TypeSig _ _name _typ) = k
+moveSpec1 k (InstDecl _ _mo _ir _mids) = k
+moveSpec1 k (InfixDecl _ _assoc _mi _ops) = k
+moveSpec1 k (DerivDecl {}) = k
 moveSpec1 k d = error $ "Unexpected decl: " ++ take 120 (show d) ++ ".."
 -}
 
@@ -113,8 +112,8 @@ decl4 = TestLabel "decl4" $ TestCase $ do
                            moveDeclsByName "FoldDeclared" "Symbols" "Tmp",
                            moveInstDecls instpred]
       instpred i name _types
-          | (gFind name :: [A.Name ()]) == [A.Ident () "FoldDeclared"] =
-              (_moduleKey i) {_moduleName = A.ModuleName () "Tmp"}
+          | (gFind name :: [Name ()]) == [Ident () "FoldDeclared"] =
+              (_moduleKey i) {_moduleName = ModuleName () "Tmp"}
       instpred i _ _ = _moduleKey i
 
 decl5 :: Test
@@ -162,20 +161,20 @@ decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tes
                            moveDeclsByName "St" "SrcLoc" "Scan",
                            moveSpliceDecls testSplice]
       -- testSplice key@(ModuleKey {_moduleName = S.ModuleName "SrcLoc"}) _ = key {_moduleName = S.ModuleName "Scan"}
-      testSplice :: ModuleInfo () -> A.Exp () -> ModuleKey
-      testSplice (ModuleInfo {_moduleKey = key@(ModuleKey {_moduleName = A.ModuleName () "SrcLoc"})}) exp' =
+      testSplice :: ModuleInfo () -> Exp () -> ModuleKey
+      testSplice (ModuleInfo {_moduleKey = key@(ModuleKey {_moduleName = ModuleName () "SrcLoc"})}) exp' =
           case unfoldApply exp' of
-            (x : _) | hasName x "makeLenses" || hasName x "makeLensesFor" -> key {_moduleName = A.ModuleName () "Scan"}
+            (x : _) | hasName x "makeLenses" || hasName x "makeLensesFor" -> key {_moduleName = ModuleName () "Scan"}
             _ -> key
       testSplice i _ = _moduleKey i
-      hasName x s = elem (A.Ident () s) (map simplify (gFind x :: [A.Name ()]))
-      unfoldApply (A.App _ a b) = unfoldApply a ++ [b]
+      hasName x s = elem (Ident () s) (map dropAnn (gFind x :: [Name ()]))
+      unfoldApply (App _ a b) = unfoldApply a ++ [b]
       unfoldApply x = [x]
-      instPred (ModuleInfo {_moduleKey = key@(ModuleKey {_moduleName = A.ModuleName () "SrcLoc"})}) name _types
-          | (gFind name :: [A.Name ()]) == [A.Ident () "SpanInfo"] =
-              key {_moduleName = A.ModuleName () "Scan"}
-          | (gFind name :: [A.Name ()]) == [A.Ident () "EndLoc"] =
-              key {_moduleName = A.ModuleName () "Scan"}
+      instPred (ModuleInfo {_moduleKey = key@(ModuleKey {_moduleName = ModuleName () "SrcLoc"})}) name _types
+          | (gFind name :: [Name ()]) == [Ident () "SpanInfo"] =
+              key {_moduleName = ModuleName () "Scan"}
+          | (gFind name :: [Name ()]) == [Ident () "EndLoc"] =
+              key {_moduleName = ModuleName () "Scan"}
       instPred i _ _ = _moduleKey i
 
 -- Because Imports imports Symbols, Symbols is reachable from Imports.
@@ -302,7 +301,7 @@ testMoveSpec' expected actual action = do
   assertString diff
 
 testSpec :: forall l. (SrcInfo l, Data l) => MoveSpec -> ModuleInfo l -> IO (ModuleInfo l)
-testSpec moveSpec i@(ModuleInfo {_moduleKey = k, _module = A.Module _ _ _ _ ds}) = do
+testSpec moveSpec i@(ModuleInfo {_moduleKey = k, _module = Module _ _ _ _ ds}) = do
   putStrLn ("---- module " ++ show (moduleName k) ++ " ----")
   mapM_ (\d -> let k' = applyMoveSpec moveSpec i d in
                putStrLn (ezPrint (i, d) ++ ": " ++ if k /= k' then show k ++ " " ++  " -> " ++ show k' else "unchanged")) ds

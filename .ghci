@@ -1,9 +1,10 @@
+:set -hide-package haskell-src-exts
 :set -itests
 -- :set -itests:../haskell-names/src:../haskell-names/dist/build/autogen
 :set -XScopedTypeVariables
 :load tests/Tests
 :m +Data.Monoid System.Process
-:m +Language.Haskell.Exts.Annotated
+:m +Language.Haskell.Exts
 :m +Language.Haskell.Names
 :m +Test.HUnit
 :m +Decls

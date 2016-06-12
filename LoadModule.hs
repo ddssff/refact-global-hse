@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleInstances, ScopedTypeVariables, TemplateHaskell, TypeSynonymInstances #-}
+{-# LANGUAGE FlexibleInstances, PackageImports, ScopedTypeVariables, TemplateHaskell, TypeSynonymInstances #-}
 
 module LoadModule
     ( loadModule
@@ -12,10 +12,10 @@ import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
 import Data.List (groupBy, intercalate)
 import Debug.Trace (trace)
-import Language.Haskell.Exts.Annotated as A (Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName))
-import Language.Haskell.Exts.Extension (Extension(EnableExtension))
-import Language.Haskell.Exts.Parser as Exts (defaultParseMode, fromParseResult, ParseMode(extensions, parseFilename, fixities))
-import Language.Haskell.Exts.SrcLoc (SrcSpanInfo(..))
+import "haskell-src-exts-1ast" Language.Haskell.Exts.Syntax (Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName))
+import "haskell-src-exts-1ast" Language.Haskell.Exts.Extension (Extension(EnableExtension))
+import "haskell-src-exts-1ast" Language.Haskell.Exts.Parser as Exts (defaultParseMode, fromParseResult, ParseMode(extensions, parseFilename, fixities))
+import "haskell-src-exts-1ast" Language.Haskell.Exts.SrcLoc (SrcSpanInfo(..))
 import Language.Haskell.Names (annotate, resolve, Scoped(..))
 import Language.Haskell.Names.Imports (importTable)
 import Language.Haskell.Names.ModuleSymbols (moduleTable)
@@ -46,9 +46,6 @@ addScoping mods =
                   _moduleGlobals = moduleTable (importTable env (_module m)) (_module m)}) mods
     where env = resolve (map _module mods) mempty
 
--- loadModule' :: GHCOpts -> FilePath -> IO (ModuleInfo SrcSpanInfo)
--- loadModule' opts path = either (error . show) id <$> (loadModule opts path :: IO (Either SomeException (ModuleInfo SrcSpanInfo)))
-
 loadModule :: GHCOpts -> FilePath -> IO (ModuleInfo SrcSpanInfo)
 loadModule opts path = do
   moduleText <- liftIO $ readFile path
@@ -72,7 +69,6 @@ loadModule opts path = do
       mode = Exts.defaultParseMode {Exts.extensions = map EnableExtension (enabled opts ++ extensionsForHSEParser),
                                     Exts.parseFilename = path,
                                     Exts.fixities = Nothing }
-  -- {- `IO.catch` (\(e :: IOError) -> if isDoesNotExistError e || isUserError e then return Nothing else throw e) -}
 
 -- | Turn of the locations flag.  This means simple #if macros will not
 -- affect the line numbers of the output text, so we can use the
@@ -89,12 +85,12 @@ cpphsOptions =
 
 -- | Compute the module key from a filepath (absolute or relative to
 -- ".") and the parsed module.
-moduleKey :: FilePath -> A.Module SrcSpanInfo -> IO ModuleKey
-moduleKey _ (A.XmlPage {}) = error "XmlPage"
-moduleKey _ (A.XmlHybrid {}) = error "XmlHybrid"
-moduleKey path (A.Module _ Nothing _ _ _) = do
+moduleKey :: FilePath -> Module SrcSpanInfo -> IO ModuleKey
+moduleKey _ (XmlPage {}) = error "XmlPage"
+moduleKey _ (XmlHybrid {}) = error "XmlHybrid"
+moduleKey path (Module _ Nothing _ _ _) = do
   ModuleFullPath <$> canonicalizePath path
-moduleKey path (A.Module _ (Just (A.ModuleHead _ (A.ModuleName _ name) _ _)) _ _ _) = do
+moduleKey path (Module _ (Just (ModuleHead _ (ModuleName _ name) _ _)) _ _ _) = do
   canonicalizePath path >>= pure . makeKey
     where
       makeKey path' =
@@ -104,5 +100,5 @@ moduleKey path (A.Module _ (Just (A.ModuleHead _ (A.ModuleName _ name) _ _)) _ _
               (dirs', name'') = splitAt (length dirs - length name') dirs in
           case (name'' == name') of
             False -> ModuleFullPath path'
-            True -> ModuleKey {_moduleTop = joinPath dirs', _moduleName = A.ModuleName () (intercalate "." name''), _moduleExt = ext}
+            True -> ModuleKey {_moduleTop = joinPath dirs', _moduleName = ModuleName () (intercalate "." name''), _moduleExt = ext}
       splitModuleName = filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))

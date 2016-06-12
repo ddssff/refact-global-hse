@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE ScopedTypeVariables #-}
@@ -19,16 +20,16 @@ module MoveSpec(MoveSpec(MoveSpec)
 import Data.Generics (Data)
 import Data.Set as Set (fromList, member)
 import Debug.Trace (trace)
-import qualified Language.Haskell.Exts.Annotated as A (Decl(InstDecl, SpliceDecl), Exp(SpliceExp), InstHead(..), InstRule(..), ModuleName(ModuleName), Name(Ident), QName, Splice(..), Type)
-import qualified Language.Haskell.Exts.Syntax as S (Name(Ident, Symbol))
+import "haskell-src-exts-1ast" Language.Haskell.Exts.Syntax (Decl(InstDecl, SpliceDecl), Exp(SpliceExp), InstHead(..), InstRule(..), ModuleName(ModuleName), Name(Ident, Symbol), QName, Splice(..), Type)
 import Language.Haskell.Names (Symbol(symbolName))
+import Language.Haskell.Names.SyntaxUtils (dropAnn)
 import ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
 import ModuleKey (ModuleKey(ModuleKey, _moduleName))
-import Utils (gFind, simplify)
+import Utils (gFind)
 
 -- | Specifies where to move each declaration of each module.  Given a
 -- departure module key and a declaration, return an arrival module key.
-newtype MoveSpec = MoveSpec (ModuleInfo () -> A.Decl () -> ModuleKey)
+newtype MoveSpec = MoveSpec (ModuleInfo () -> Decl () -> ModuleKey)
 
 instance Monoid MoveSpec where
     mempty = MoveSpec $ \i _ -> _moduleKey i
@@ -44,8 +45,8 @@ instance Monoid MoveSpec where
                   then k1
                   else error "Conflicting move specs"
 
-applyMoveSpec :: Data l => MoveSpec -> ModuleInfo l -> A.Decl l -> ModuleKey
-applyMoveSpec (MoveSpec f) i d = f (simplify i) (simplify d)
+applyMoveSpec :: Data l => MoveSpec -> ModuleInfo l -> Decl l -> ModuleKey
+applyMoveSpec (MoveSpec f) i d = f (dropAnn i) (dropAnn d)
 
 traceMoveSpec :: MoveSpec -> MoveSpec
 traceMoveSpec (MoveSpec f) = MoveSpec $ \i d ->
@@ -60,55 +61,55 @@ moveDeclsByName symname departMod arriveMod = MoveSpec $
     \i decl ->
         let syms = (Set.fromList . map symbolName) (getTopDeclSymbols' i decl) in
         case _moduleKey i of
-          ModuleKey {_moduleName = A.ModuleName l name}
-              | name == departMod && (Set.member (S.Ident symname) syms || Set.member (S.Symbol symname) syms) ->
-                  (_moduleKey i) {_moduleName = A.ModuleName l arriveMod}
+          ModuleKey {_moduleName = ModuleName l name}
+              | name == departMod && (Set.member (Ident () symname) syms || Set.member (Symbol () symname) syms) ->
+                  (_moduleKey i) {_moduleName = ModuleName l arriveMod}
           _ -> _moduleKey i
 
-moveInstDecls :: (ModuleInfo () -> A.QName () -> [A.Type ()] -> ModuleKey) -> MoveSpec
+moveInstDecls :: (ModuleInfo () -> QName () -> [Type ()] -> ModuleKey) -> MoveSpec
 moveInstDecls instpred =
     MoveSpec f
     where
-      f :: ModuleInfo () -> A.Decl () -> ModuleKey
-      f i (A.InstDecl _ _ irule _) = g i irule
+      f :: ModuleInfo () -> Decl () -> ModuleKey
+      f i (InstDecl _ _ irule _) = g i irule
       f i _ = _moduleKey i
-      g :: ModuleInfo () -> A.InstRule () -> ModuleKey
-      g i (A.IParen _ irule) = g i irule
-      g i (A.IRule _ _ _ ihead) = uncurry (instpred i) (h [] ihead)
-      h :: [A.Type ()] -> A.InstHead () -> (A.QName (), [A.Type ()])
-      h types (A.IHParen _ ihead) = h types ihead
-      h types (A.IHApp _ ihead typ) = h (typ : types) ihead
-      h types (A.IHCon _ name) = (name, types)
-      h types (A.IHInfix _ typ name) = (name, typ : types)
+      g :: ModuleInfo () -> InstRule () -> ModuleKey
+      g i (IParen _ irule) = g i irule
+      g i (IRule _ _ _ ihead) = uncurry (instpred i) (h [] ihead)
+      h :: [Type ()] -> InstHead () -> (QName (), [Type ()])
+      h types (IHParen _ ihead) = h types ihead
+      h types (IHApp _ ihead typ) = h (typ : types) ihead
+      h types (IHCon _ name) = (name, types)
+      h types (IHInfix _ typ name) = (name, typ : types)
 
-moveSpliceDecls :: (ModuleInfo () -> A.Exp () -> ModuleKey) -> MoveSpec
+moveSpliceDecls :: (ModuleInfo () -> Exp () -> ModuleKey) -> MoveSpec
 moveSpliceDecls exppred =
     MoveSpec f
     where
-      f :: ModuleInfo () -> A.Decl () -> ModuleKey
-      f i (A.SpliceDecl _ exp') = g i exp'
+      f :: ModuleInfo () -> Decl () -> ModuleKey
+      f i (SpliceDecl _ exp') = g i exp'
       f i _ = _moduleKey i
-      g :: ModuleInfo () -> A.Exp () -> ModuleKey
-      g i (A.SpliceExp _ splice) = h i splice
+      g :: ModuleInfo () -> Exp () -> ModuleKey
+      g i (SpliceExp _ splice) = h i splice
       g i _ = _moduleKey i
-      h :: ModuleInfo () -> A.Splice () -> ModuleKey
-      h i (A.IdSplice _ _) = _moduleKey i
-      h i (A.ParenSplice _ exp') = exppred i exp'
+      h :: ModuleInfo () -> Splice () -> ModuleKey
+      h i (IdSplice _ _) = _moduleKey i
+      h i (ParenSplice _ exp') = exppred i exp'
 
 -- | Build the argument to moveInstDecls
 instClassPred :: forall l. Data l => String -> String -> String ->
-                 ModuleInfo l -> A.QName l -> [A.Type l] -> ModuleKey
+                 ModuleInfo l -> QName l -> [Type l] -> ModuleKey
 instClassPred classname depart arrive (ModuleInfo {_moduleKey = key@ModuleKey {_moduleName = mname}}) qname _ts
-    | simplify mname == A.ModuleName () depart &&
-      (gFind (simplify qname) :: [A.Name ()]) == [A.Ident () classname] =
-        key {_moduleName = A.ModuleName () arrive}
+    | dropAnn mname == ModuleName () depart &&
+      (gFind (dropAnn qname) :: [Name ()]) == [Ident () classname] =
+        key {_moduleName = ModuleName () arrive}
 instClassPred _ _ _ i _ _ = _moduleKey i
 
 -- | Build the argument to moveInstDecls
 splicePred :: forall l. Data l => String -> String -> String ->
-                 ModuleInfo l -> A.Exp l -> ModuleKey
+                 ModuleInfo l -> Exp l -> ModuleKey
 splicePred name depart arrive (ModuleInfo {_moduleKey = key@ModuleKey {_moduleName = mname}}) exp'
-    | simplify mname == A.ModuleName () depart &&
-      elem (A.Ident () name) (gFind (simplify exp') :: [A.Name ()]) =
-        key {_moduleName = A.ModuleName () arrive}
+    | dropAnn mname == ModuleName () depart &&
+      elem (Ident () name) (gFind (dropAnn exp') :: [Name ()]) =
+        key {_moduleName = ModuleName () arrive}
 splicePred _ _ _ i _ = _moduleKey i

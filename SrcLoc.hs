@@ -1,4 +1,4 @@
-{-# LANGUAGE BangPatterns, CPP, FlexibleInstances, ScopedTypeVariables, TemplateHaskell, UndecidableInstances #-}
+{-# LANGUAGE BangPatterns, CPP, FlexibleInstances, PackageImports, ScopedTypeVariables, TemplateHaskell, UndecidableInstances #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 module SrcLoc
     ( -- * SpanInfo queries
@@ -54,9 +54,9 @@ import Control.Monad.State (get, put, runState, State)
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd)
 import Data.Monoid ((<>))
-import Language.Haskell.Exts.Annotated.Syntax as A -- (Annotated(ann), Module(..))
-import Language.Haskell.Exts.Comments (Comment(..))
-import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcInfo(..), SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
+import "haskell-src-exts-1ast" Language.Haskell.Exts.Syntax -- (Annotated(ann), Module(..))
+import "haskell-src-exts-1ast" Language.Haskell.Exts.Comments (Comment(..))
+import "haskell-src-exts-1ast" Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcInfo(..), SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import Language.Haskell.Names
 import ModuleInfo
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)
@@ -88,8 +88,8 @@ instance SpanInfo SrcSpan where
 instance SpanInfo SrcSpanInfo where
     srcSpan = srcSpan . srcInfoSpan
 
-instance A.Annotated ast => SpanInfo (ast SrcSpanInfo) where
-    srcSpan = srcSpan . A.ann
+instance Annotated ast => SpanInfo (ast SrcSpanInfo) where
+    srcSpan = srcSpan . ann
 
 instance SpanInfo (SrcLoc, SrcLoc) where
     srcSpan (b, e) = mkSrcSpan (SrcLoc (srcFilename b) (srcLine b) (srcColumn b))
@@ -223,7 +223,7 @@ splits' file spans s =
 -- text.  They could still be in the wrong places, so this doesn't
 -- guarantee the parse is valid, but its a pretty good bet.
 #if 0
-validateParseResults :: A.Module SrcSpanInfo -> String -> IO ()
+validateParseResults :: Module SrcSpanInfo -> String -> IO ()
 validateParseResults modul t =
     mapM_ validateSpan (nub (sort (gFind modul :: [SrcSpan])))
     where
@@ -257,7 +257,7 @@ fixSpan sp =
 type ScanM = RWS () String St
 
 scanModule :: ScanM () -> ModuleInfo l -> String
-scanModule action m@(ModuleInfo {_module = A.Module _ _ _ _ _}) =
+scanModule action m@(ModuleInfo {_module = Module _ _ _ _ _}) =
     snd $ evalRWS action () (St { _point = SrcLoc (_modulePath m) 1 1
                                 , _remaining = _moduleText m
                                 , _comments = _moduleComments m })
@@ -391,19 +391,19 @@ withTrailingWhitespace fn next = do
   p <- use point
   fn (locSum p (endLocOfText (view locFilename p) s))
 
-debugRender :: A.Module SrcSpanInfo -> [Comment] -> String -> String
-debugRender m@(A.Module _ mh ps is ds) cs s =
-    snd $ evalRWS render () (St {_point = (srcLoc (A.ann m)) {srcLine = 1, srcColumn = 1}, _comments = cs, _remaining = s})
+debugRender :: Module SrcSpanInfo -> [Comment] -> String -> String
+debugRender m@(Module _ mh ps is ds) cs s =
+    snd $ evalRWS render () (St {_point = (srcLoc (ann m)) {srcLine = 1, srcColumn = 1}, _comments = cs, _remaining = s})
     where
       -- Put [] around the spans (and eventually | at the divisions of the point list)
       render :: ScanM ()
       render = do
         tell "["
-        mapM_ (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") ps
-        maybe void (\h -> keep (srcLoc (A.ann h)) >> tell "[" >> keep (endLoc (A.ann h)) >> tell "]") mh
-        mapM_ (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") is
-        mapM_ (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") ds
-        keep (endLoc (A.ann m))
+        mapM_ (\x -> keep (srcLoc (ann x)) >> tell "[" >> keep (endLoc (ann x)) >> tell "]") ps
+        maybe void (\h -> keep (srcLoc (ann h)) >> tell "[" >> keep (endLoc (ann h)) >> tell "]") mh
+        mapM_ (\x -> keep (srcLoc (ann x)) >> tell "[" >> keep (endLoc (ann x)) >> tell "]") is
+        mapM_ (\x -> keep (srcLoc (ann x)) >> tell "[" >> keep (endLoc (ann x)) >> tell "]") ds
+        keep (endLoc (ann m))
         tell "]"
 debugRender _ _ _ = error "debugRender"
 
@@ -411,15 +411,15 @@ void :: Monad m => m ()
 void = pure ()
 
 -- | Modify end locations so they precede any trailing whitespace
-mapTopAnnotations :: (a -> a) -> A.Module a -> A.Module a
-mapTopAnnotations fn (A.Module loc mh ps is ds) =
-    A.Module loc (fmap fixMH mh) ps (map fixImport is) (map fixDecl ds)
+mapTopAnnotations :: (a -> a) -> Module a -> Module a
+mapTopAnnotations fn (Module loc mh ps is ds) =
+    Module loc (fmap fixMH mh) ps (map fixImport is) (map fixDecl ds)
     where
-      fixMH (A.ModuleHead sp name warn specs) = A.ModuleHead (fn sp) name warn specs
+      fixMH (ModuleHead sp name warn specs) = ModuleHead (fn sp) name warn specs
       fixImport i = i {importAnn = fn (importAnn i)}
       fixDecl (TypeDecl l a b) = (TypeDecl (fn l) a b)
-      fixDecl (TypeFamDecl l a b) = (TypeFamDecl (fn l) a b)
-      fixDecl (ClosedTypeFamDecl l a b c) = (ClosedTypeFamDecl (fn l) a b c)
+      fixDecl (TypeFamDecl l a b c) = (TypeFamDecl (fn l) a b c)
+      fixDecl (ClosedTypeFamDecl l a b c d) = (ClosedTypeFamDecl (fn l) a b c d)
       fixDecl (DataDecl l a b c d e) = (DataDecl (fn l) a b c d e)
       fixDecl (GDataDecl l a b c d e f) = GDataDecl (fn l) a b c d e f
       fixDecl (DataFamDecl l a b c) = (DataFamDecl (fn l) a b c)
@@ -469,31 +469,31 @@ instance EndLoc (SrcLoc, SrcLoc) where
     endLoc = snd
     srcPoints _ = []
 
-endOfDecls :: EndLoc l => A.Module l -> SrcLoc
-endOfDecls m@(A.Module _l _mh _ps _ []) = endOfImports m
-endOfDecls (A.Module _l _mh _ps _is ds) = endLoc (A.ann (last ds))
+endOfDecls :: EndLoc l => Module l -> SrcLoc
+endOfDecls m@(Module _l _mh _ps _ []) = endOfImports m
+endOfDecls (Module _l _mh _ps _is ds) = endLoc (ann (last ds))
 endOfDecls _ = error "endOfDecls"
 
-endOfImports :: EndLoc l => A.Module l -> SrcLoc
-endOfImports m@(A.Module _l _mh _ps [] _) = endOfHeader m
-endOfImports (A.Module _l _mh _ps is _) = endLoc (A.ann (last is))
+endOfImports :: EndLoc l => Module l -> SrcLoc
+endOfImports m@(Module _l _mh _ps [] _) = endOfHeader m
+endOfImports (Module _l _mh _ps is _) = endLoc (ann (last is))
 endOfImports _ = error "endOfImports"
 
-endOfImportSpecs :: (EndLoc l, Show l) => A.ImportDecl l -> SrcLoc
-endOfImportSpecs (A.ImportDecl {importSpecs = Just i}) =
-    case srcPoints (A.ann i) of
+endOfImportSpecs :: (EndLoc l, Show l) => ImportDecl l -> SrcLoc
+endOfImportSpecs (ImportDecl {importSpecs = Just i}) =
+    case srcPoints (ann i) of
       [] -> error $ "endOfImportSpecs: " ++ show i
       pts -> srcLoc (last pts)
-endOfImportSpecs (A.ImportDecl {importSpecs = Nothing}) = error "endOfImportSpecs"
+endOfImportSpecs (ImportDecl {importSpecs = Nothing}) = error "endOfImportSpecs"
 
-endOfHeader :: EndLoc l => A.Module l -> SrcLoc
-endOfHeader m@(A.Module _l Nothing _ps _ _) = endOfPragmas m
-endOfHeader (A.Module _l (Just h) _ps _is _) = endLoc (A.ann h)
+endOfHeader :: EndLoc l => Module l -> SrcLoc
+endOfHeader m@(Module _l Nothing _ps _ _) = endOfPragmas m
+endOfHeader (Module _l (Just h) _ps _is _) = endLoc (ann h)
 endOfHeader _ = error "endOfHeader"
 
-endOfPragmas :: EndLoc l => A.Module l -> SrcLoc
-endOfPragmas (A.Module l _ [] _ _) = endLoc l
-endOfPragmas (A.Module _l _ ps _ _) = endLoc (A.ann (last ps))
+endOfPragmas :: EndLoc l => Module l -> SrcLoc
+endOfPragmas (Module l _ [] _ _) = endLoc l
+endOfPragmas (Module _l _ ps _ _) = endLoc (ann (last ps))
 endOfPragmas _ = error "endOfPragmas"
 
 endOfModule :: ModuleInfo l -> SrcLoc
@@ -504,24 +504,24 @@ startOfModule mi = SrcLoc (_modulePath mi) 1 1
 
 -- | The beginning of the first thing after the imports
 startOfDecls :: SrcInfo l => ModuleInfo l -> SrcLoc
-startOfDecls mi@(ModuleInfo {_module = A.Module _l _mh _ps _is []}) = endLocOfText (_modulePath mi) (_moduleText mi)
-startOfDecls (ModuleInfo {_module = A.Module _l _mh _ps _is (d : _)}) = srcLoc (A.ann d)
+startOfDecls mi@(ModuleInfo {_module = Module _l _mh _ps _is []}) = endLocOfText (_modulePath mi) (_moduleText mi)
+startOfDecls (ModuleInfo {_module = Module _l _mh _ps _is (d : _)}) = srcLoc (ann d)
 startOfDecls _ = error "startOfDecls"
 
 -- | The beginning of the first thing after the header.
 startOfImports :: SrcInfo l => ModuleInfo l -> SrcLoc
-startOfImports mi@(ModuleInfo {_module = A.Module _l _mh _ps [] _}) = startOfDecls mi
-startOfImports (ModuleInfo {_module = A.Module _l _mh _ps (i : _) _}) = srcLoc (A.ann i)
+startOfImports mi@(ModuleInfo {_module = Module _l _mh _ps [] _}) = startOfDecls mi
+startOfImports (ModuleInfo {_module = Module _l _mh _ps (i : _) _}) = srcLoc (ann i)
 startOfImports _ = error "startOfImports"
 
 -- | The beginning of the first thing after the pragmas.
 startOfHeader :: SrcInfo l => ModuleInfo l -> SrcLoc
-startOfHeader mi@(ModuleInfo {_module = A.Module _l Nothing _ps _ _}) = startOfImports mi
-startOfHeader (ModuleInfo {_module = A.Module _l (Just h) _ps _is _}) = srcLoc (A.ann h)
+startOfHeader mi@(ModuleInfo {_module = Module _l Nothing _ps _ _}) = startOfImports mi
+startOfHeader (ModuleInfo {_module = Module _l (Just h) _ps _is _}) = srcLoc (ann h)
 startOfHeader _ = error "startOfHeader"
 
 -- | The beginning of the first thing
 startOfPragmas :: SrcInfo l => ModuleInfo l -> SrcLoc
-startOfPragmas (ModuleInfo {_module = m@(A.Module _l _ [] _ _)}) = SrcLoc (fileName (A.ann m)) 1 1
-startOfPragmas (ModuleInfo {_module = A.Module _l _ (p : _) _ _}) = srcLoc (A.ann p)
+startOfPragmas (ModuleInfo {_module = m@(Module _l _ [] _ _)}) = SrcLoc (fileName (ann m)) 1 1
+startOfPragmas (ModuleInfo {_module = Module _l _ (p : _) _ _}) = srcLoc (ann p)
 startOfPragmas _ = error "startOfPragmas"

@@ -1,6 +1,7 @@
 -- A module copied from hse-cpp, but the return value from
 -- parseFileWithCommentsAndCPP includes the preprocessed text.
 -- Hopefully I won't need this, but it is useful for debugging.
+{-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RecordWildCards #-}
 module CPP
   ( parseFileWithCommentsAndCPP
@@ -17,8 +18,8 @@ import Data.Default (Default(def))
 import Data.List (intercalate, isSuffixOf)
 import Data.Monoid ((<>))
 import HashDefine (HashDefine(..))
-import Language.Haskell.Exts.Annotated (Comment, impliesExts, KnownExtension(CPP), Module, ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
-import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
+import "haskell-src-exts-1ast" Language.Haskell.Exts (Comment, impliesExts, KnownExtension(CPP), Module, ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
+import "haskell-src-exts-1ast" Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
 import Language.Preprocessor.Cpphs (BoolOptions(hashline, locations, stripC89, stripEol), CpphsOptions(CpphsOptions, boolopts, defines), runCpphs)
 import qualified Language.Preprocessor.Cpphs as Orig (defaultCpphsOptions)
 import Language.Preprocessor.Unlit (unlit)
