@@ -2,9 +2,9 @@
 module Decls (runSimpleMove, runSimpleMoveUnsafe, runMoveUnsafe, moveDeclsAndClean, moveDecls) where
 
 import Clean (cleanImports)
-import CPP (GHCOpts(hsSourceDirs))
+import CPP (GHCOpts, hsSourceDirs)
 import Control.Exception (catch, SomeException)
-import Control.Lens (makeLenses, view)
+import Control.Lens (makeLenses, set, view)
 import Control.Monad (foldM, void, when)
 import Control.Monad.RWS (modify, MonadWriter(tell))
 import Control.Monad.State (execState, MonadState)
@@ -43,21 +43,17 @@ runSimpleMove :: FilePath -> MoveSpec -> IO ()
 runSimpleMove top spec = withCleanRepo $ runSimpleMoveUnsafe top spec
 
 runSimpleMoveUnsafe :: FilePath -> MoveSpec -> IO ()
-runSimpleMoveUnsafe top mv =
+runSimpleMoveUnsafe top mv = runMoveUnsafe top (set hsSourceDirs ["."] def) mv
+
+runMoveUnsafe :: FilePath -> GHCOpts -> MoveSpec -> IO ()
+runMoveUnsafe top opts mv =
     withCurrentDirectory top $ do
       paths <- (catMaybes . map (stripPrefix "./"))
                <$> (FilePath.find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
-      loadModules def paths >>= moveDeclsAndClean mv ["."]
+      loadModules def paths >>= moveDeclsAndClean mv opts
 
-runMoveUnsafe :: FilePath -> [FilePath] -> MoveSpec -> IO ()
-runMoveUnsafe top hsSourceDirs mv =
-    withCurrentDirectory top $ do
-      paths <- (catMaybes . map (stripPrefix "./"))
-               <$> (FilePath.find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
-      loadModules def paths >>= moveDeclsAndClean mv hsSourceDirs
-
-moveDeclsAndClean :: MoveSpec -> [FilePath] -> [ModuleInfo Annot] -> IO ()
-moveDeclsAndClean mv hsSourceDirs mods = do
+moveDeclsAndClean :: MoveSpec -> GHCOpts -> [ModuleInfo Annot] -> IO ()
+moveDeclsAndClean mv opts mods = do
   -- Move the declarations and rewrite the updated modules
   let env = resolve (map _module mods) mempty
       -- ann = map (annotate env) (map _module mods)
@@ -78,7 +74,7 @@ moveDeclsAndClean mv hsSourceDirs mods = do
   -- Re-read the updated modules and clean their imports
   -- (Later we will need to find the newly created modules here)
   modules' <- mapM (\p -> loadModule def p `catch` loadError p) (catMaybes oldPaths ++ newPaths) :: IO [ModuleInfo SrcSpanInfo]
-  cleanImports [(def {hsSourceDirs = hsSourceDirs})] modules'
+  cleanImports [opts] modules'
     where
       loadError :: FilePath -> SomeException -> IO (ModuleInfo SrcSpanInfo)
       loadError p e = error ("Unable to load updated module " ++ show p ++ ": " ++ show e)

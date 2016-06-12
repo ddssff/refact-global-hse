@@ -3,16 +3,18 @@
 -- Hopefully I won't need this, but it is useful for debugging.
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TemplateHaskell #-}
 module CPP
   ( parseFileWithCommentsAndCPP
   , defaultCpphsOptions
-  , GHCOpts(GHCOpts, hc, hsSourceDirs, cppOptions, enabled, hashDefines)
+  , GHCOpts(GHCOpts, hc, cppOptions, enabled, hashDefines, _hsSourceDirs, _ghcOptions), hsSourceDirs, ghcOptions
   , ghcProcessArgs
   , cppIf
   , cppEndif
   , extensionsForHSEParser
   ) where
 
+import Control.Lens (makeLenses)
 import Data.Char (isDigit)
 import Data.Default (Default(def))
 import Data.List (intercalate, isSuffixOf)
@@ -83,19 +85,23 @@ defaultCpphsOptions =
 data GHCOpts =
     GHCOpts
     { hc :: String
-    , hsSourceDirs :: [FilePath]
+    , _hsSourceDirs :: [FilePath]
     , cppOptions :: CpphsOptions
     , enabled :: [KnownExtension]
     , hashDefines :: [HashDefine]
+    , _ghcOptions :: [String]
     }
+
+$(makeLenses ''GHCOpts)
 
 instance Default GHCOpts where
     def = GHCOpts
           { hc = "ghc"
-          , hsSourceDirs = []
+          , _hsSourceDirs = []
           , cppOptions = defaultCpphsOptions
           , enabled = []
-          , hashDefines = [] }
+          , hashDefines = []
+          , _ghcOptions = [] }
 
 instance EZPrint GHCOpts where
     ezPrint x = unwords (hc x : map asArgument (hashDefines x))
@@ -118,7 +124,8 @@ ghcProcessArgs :: GHCOpts -> [String]
 ghcProcessArgs (GHCOpts {..}) =
     map asArgument hashDefines <>
     concatMap ppExtension (map EnableExtension enabled) <>
-    case hsSourceDirs of
+    _ghcOptions <>
+    case _hsSourceDirs of
       [] -> []
       xs -> ["-i" <> intercalate ":" xs]
 

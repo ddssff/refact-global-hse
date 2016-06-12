@@ -3,6 +3,7 @@
 
 {-# LANGUAGE RankNTypes, ScopedTypeVariables, TemplateHaskell #-}
 import Control.Lens (makeLenses, over, set, view)
+import CPP (GHCOpts, hsSourceDirs)
 import Data.Default (def)
 import Data.List (groupBy)
 import Data.Monoid ((<>))
@@ -20,7 +21,7 @@ import Utils (gitResetSubdir, withCleanRepo, withTempDirectory, withCurrentDirec
 data Params
     = Params { _moveSpec :: MoveSpec
              , _cd :: FilePath
-             , _hsDirs :: [FilePath]
+             , _ghcOpts :: GHCOpts
              , _lsDirs :: [FilePath]
              , _findDirs :: [FilePath]
              , _moduverse :: [FilePath]
@@ -30,7 +31,7 @@ data Params
 $(makeLenses ''Params)
 
 params0 :: Params
-params0 = Params {_moveSpec = mempty, _gitReset = False,_cd = ".", _hsDirs = [], _findDirs = [], _lsDirs = [], _moduverse = [], _unsafe = False}
+params0 = Params {_moveSpec = mempty, _gitReset = False,_cd = ".", _ghcOpts = def, _findDirs = [], _lsDirs = [], _moduverse = [], _unsafe = False}
 
 options :: [OptDescr (Params -> Params)]
 options =
@@ -48,7 +49,7 @@ options =
              "Move all splices that reference a symbol"
     , Option "" ["mod"] (ReqArg (\s -> over moduverse (s :)) "PATH") "Add a module to the moduverse"
     , Option "" ["cd"] (ReqArg (\s -> over cd (const s)) "DIR") "Set the process working directory"
-    , Option "i" ["hs-source-dir"] (ReqArg (\s -> over hsDirs (s :)) "DIR") "Add a directory to the haskell source path"
+    , Option "i" ["hs-source-dir"] (ReqArg (\s -> over (ghcOpts . hsSourceDirs) (s :)) "DIR") "Add a directory to the haskell source path"
     , Option "" ["ls"] (ReqArg (\s -> over lsDirs (s :)) "DIR") "Directory relative to top to search (non-recursively) for .hs files to add to the moduverse"
     , Option "" ["find"] (ReqArg (\s -> over findDirs (s :)) "DIR") "Directory relative to top to search (recursively) for .hs files to add to the moduverse"
     , Option "" ["unsafe"] (NoArg (set unsafe True)) "Skip the safety check - allow uncommitted edits in repo where clean is performed"
@@ -89,7 +90,7 @@ run args = do
   params <- buildParams args
   withCurrentDirectory (_cd params) $ maybeReset params $ do
     modules <- loadModules def (view moduverse params)
-    moveDeclsAndClean (view moveSpec params) (view hsDirs params) modules
+    moveDeclsAndClean (view moveSpec params) (view ghcOpts params) modules
     where
       maybeReset :: Params -> IO () -> IO ()
       maybeReset params = if _unsafe params then (if _gitReset params then (\action -> gitResetSubdir "." >> action)  else id) else withCleanRepo
