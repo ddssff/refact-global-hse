@@ -22,6 +22,8 @@
    36: Global elimination of exports
    37. CPP
    38. Don't return Either SomeException X, just throw and catch the exception
+   39. The replaced text when cleaning imports needs to include #if...#endif segments.
+       Easiest solution is to replace all leading and trailing comments.
 
 DONE
 

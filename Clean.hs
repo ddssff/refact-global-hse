@@ -23,7 +23,7 @@ import Language.Haskell.Names.SyntaxUtils (dropAnn, getImports, getModuleDecls)
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath)
-import SrcLoc (EndLoc, endOfImports, keep, keepAll, scanModule, skip, startOfDecls, startOfImports, withTrailingWhitespace)
+import SrcLoc (EndLoc, endOfHeader, endOfImports, keep, keepAll, scanModule, skip, startOfDecls, startOfImports, withTrailingWhitespace)
 import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcess)
@@ -73,11 +73,15 @@ newImports _ _ _ = error "Unsupported module type"
 -- their members are imported too.
 newModuleText :: forall l. (SrcInfo l, EndLoc l, Eq l) => ModuleInfo l -> [(GHCOpts, [ImportDecl ()])] -> Maybe String
 newModuleText mi@(ModuleInfo {_module = m}) pairs =
-    Just $ scanModule (do keep (startOfImports mi)
+    Just $ scanModule (do keep {-(startOfImports mi)-} (endOfHeader m)
                           let (common, pairs') = fixNewImports True mi pairs
+                          tell "\n\n"
                           tell (unlines (map prettyPrint' common))
                           mapM_ (uncurry doOptImports) pairs'
-                          when (not (null oi)) (skip (endOfImports m))
+                          -- when (not (null oi)) (skip (endOfImports m))
+                          tell "\n"
+                          -- FIXME: This will eat the header comment of the first Decl
+                          skip (startOfDecls mi)
                           withTrailingWhitespace skip (startOfDecls mi)
                           keepAll) mi
     where
@@ -104,8 +108,9 @@ fixNewImports' :: forall l.
                -> [ImportDecl ()]
                -> [ImportDecl ()]
 fixNewImports' remove mi@(ModuleInfo {_module = m}) ni =
-    filter importPred $ map expandSDTypes $ mergeDecls $ ni ++ filter isHidingImport (fmap dropAnn (getImports m))
+    filter importPred $ map expandSDTypes $ mergeDecls $ ni ++ filter isHidingImport oi
     where
+      oi = (fmap dropAnn (getImports m))
       expandSDTypes :: ImportDecl () -> ImportDecl ()
       expandSDTypes i@(ImportDecl {importSpecs = Just (ImportSpecList l f specs)}) =
           i {importSpecs = Just (ImportSpecList l f (Prelude.map (expandSpec i) specs))}
@@ -131,7 +136,7 @@ fixNewImports' remove mi@(ModuleInfo {_module = m}) ni =
       -- Eliminate imports that became empty
       -- importPred :: ImportDecl -> Bool
       importPred (ImportDecl _ mn _ _ _ _ _ (Just (ImportSpecList _ _ []))) =
-          not remove || maybe False (isEmptyImport . importSpecs) (find ((== (dropAnn mn)) . dropAnn . importModule) oi)
+          not remove || maybe False (isEmptyImport . importSpecs) (find ((== (dropAnn mn)) . importModule) oi)
           where
             isEmptyImport (Just (ImportSpecList _ _ [])) = True
             isEmptyImport _ = False
