@@ -189,7 +189,6 @@ newExports (Rd mods _ _) mv thisKey =
                    (map dropAnn (getModuleDecls m))
       -- We can't import from a module without an explicit name in its header
       newExportsFromModule (ModuleInfo {_moduleKey = ModuleFullPath {}}) = []
-      newExportsFromModule x = error $ "newExports - unexpected module: " ++ show (_module x)
 
 findNewKeyOfExportSpec :: (SrcInfo l, Data l, Show l) => MoveSpec -> ModuleInfo l -> ExportSpec l -> Maybe ModuleKey
 findNewKeyOfExportSpec mv mi espec = fmap (applyMoveSpec mv mi) (findDeclOfExportSpec mi espec)

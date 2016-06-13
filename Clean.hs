@@ -10,7 +10,7 @@ module Clean (cleanImports) where
 import CPP (cppEndif, cppIf, extensionsForHSEParser, GHCOpts(..), ghcProcessArgs)
 import Control.Monad (void, when)
 import Control.Monad.RWS (MonadWriter(tell))
-import Data.List (find, transpose)
+import Data.List (find, foldl1', transpose)
 import Data.Monoid ((<>))
 import Data.Set as Set (empty, member, Set, singleton, union, unions)
 import Debug.Trace (trace)
@@ -23,20 +23,20 @@ import Language.Haskell.Names.SyntaxUtils (dropAnn, getImports, getModuleDecls)
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath)
-import SrcLoc (EndLoc, endOfImports, keep, keepAll, ScanM, scanModule, skip, startOfDecls, startOfImports, withTrailingWhitespace)
+import SrcLoc (EndLoc, endOfImports, keep, keepAll, scanModule, skip, startOfDecls, startOfImports, withTrailingWhitespace)
 import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcess)
-import Utils (ezPrint, prettyPrint', replaceFile, withTempDirectory)
+import Utils (ezPrint, prettyPrint', replaceFile, SetLike(intersection, difference), withTempDirectory)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: [GHCOpts] -> [ModuleInfo SrcSpanInfo] -> IO ()
 cleanImports _ [] = trace ("cleanImports - no modules") (pure ())
 cleanImports optSets mods = do
-  imodSets <- mapM (doOpts mods) optSets :: IO [[(GHCOpts, [ImportDecl SrcSpanInfo])]]
+  imodSets <- mapM (doOpts mods) optSets :: IO [[(GHCOpts, [ImportDecl ()])]]
   mapM_ (uncurry doModule) (zip mods (transpose imodSets))
 
-doOpts :: [ModuleInfo SrcSpanInfo] -> GHCOpts -> IO [(GHCOpts, [ImportDecl SrcSpanInfo])]
+doOpts :: [ModuleInfo SrcSpanInfo] -> GHCOpts -> IO [(GHCOpts, [ImportDecl ()])]
 doOpts mods opts =
     withTempDirectory True "." "scratch" $ \scratch -> do
          hPutStrLn stderr ("cleanImports: " ++ ezPrint opts ++ " (scratch=" ++ scratch ++ ")")
@@ -46,7 +46,7 @@ doOpts mods opts =
          _out <- readProcess (hc opts) args' ""
          map (opts,) <$> mapM (newImports opts scratch) mods
 
-doModule :: ModuleInfo SrcSpanInfo -> [(GHCOpts, [ImportDecl SrcSpanInfo])] -> IO ()
+doModule :: ModuleInfo SrcSpanInfo -> [(GHCOpts, [ImportDecl ()])] -> IO ()
 doModule m pairs =
     do let newText = newModuleText m pairs
        let path = moduleFullPath (_moduleKey m)
@@ -58,9 +58,9 @@ doModule m pairs =
          Just _ -> pure ()
 
 -- | Load the minimized imports output by ghc as a module.
-newImports :: GHCOpts -> FilePath -> ModuleInfo SrcSpanInfo -> IO [ImportDecl SrcSpanInfo]
+newImports :: GHCOpts -> FilePath -> ModuleInfo SrcSpanInfo -> IO [ImportDecl ()]
 newImports opts scratch (ModuleInfo {_module = Module _ mh _ _ _}) = do
-  (\(ModuleInfo {_module = m}) -> getImports m) <$> loadModule opts importsPath
+  (\(ModuleInfo {_module = m}) -> fmap dropAnn (getImports m)) <$> loadModule opts importsPath
     where
       moduleName = maybe "Main" (\ (ModuleHead _ (ModuleName _ s) _ _) -> s) mh
       importsPath = scratch </> moduleName ++ ".imports"
@@ -71,7 +71,7 @@ newImports _ _ _ = error "Unsupported module type"
 -- source file.  We also need to modify the imports of any names
 -- that are types that appear in standalone instance derivations so
 -- their members are imported too.
-newModuleText :: forall l. (SrcInfo l, EndLoc l, Eq l) => ModuleInfo l -> [(GHCOpts, [ImportDecl l])] -> Maybe String
+newModuleText :: forall l. (SrcInfo l, EndLoc l, Eq l) => ModuleInfo l -> [(GHCOpts, [ImportDecl ()])] -> Maybe String
 newModuleText mi@(ModuleInfo {_module = m}) pairs =
     Just $ scanModule (do keep (startOfImports mi)
                           let (common, pairs') = fixNewImports True mi pairs
@@ -82,35 +82,31 @@ newModuleText mi@(ModuleInfo {_module = m}) pairs =
                           keepAll) mi
     where
       oi = getImports m
-      doOptImports :: GHCOpts -> [ImportDecl l] -> ScanM ()
       doOptImports opts ni =
           -- let ni'' = fixNewImports' True mi ni in
           -- if dropAnn oi == map dropAnn ni' then keep ... else
           do tell (cppIf opts)
              tell (unlines (map prettyPrint' ni))
              tell (cppEndif opts)
-newModuleText _ _ = error "Unsupported module type"
 
-fixNewImports :: (SrcInfo l, Eq l) => Bool -> ModuleInfo l -> [(GHCOpts, [ImportDecl l])] -> ([ImportDecl l], [(GHCOpts, [ImportDecl l])])
+fixNewImports :: forall l. Bool -> ModuleInfo l -> [(GHCOpts, [ImportDecl ()])] -> ([ImportDecl ()], [(GHCOpts, [ImportDecl ()])])
 fixNewImports _ _ [] = ([], [])
 fixNewImports remove mi pairs =
     let pairs' = map (\(opts, ni) -> (opts, fixNewImports' remove mi ni)) pairs
-        common = {-foldl1' intersection (map snd pairs')-} []
-        pairs'' = {-map (\(opts, imports) -> (opts, map (`difference` common) imports))-} pairs' in
+        common = foldl1' intersection (map snd pairs')
+        pairs'' = map (\(opts, imports) -> (opts, difference imports common)) pairs' in
     (common, pairs'')
-    -- ([], map (\(opts, ni) -> (opts, fixNewImports' remove mi ni)) pairs)
 
 -- | Final touch-ups - sort and merge similar imports.  (This code should be part of the SetLike instance)
-fixNewImports' :: forall l. (SrcInfo l, Eq l) =>
+fixNewImports' :: forall l.
                   Bool         -- ^ If true, imports that turn into empty lists will be removed
                -> ModuleInfo l
-               -> [ImportDecl l]
-               -> [ImportDecl l]
+               -> [ImportDecl ()]
+               -> [ImportDecl ()]
 fixNewImports' remove mi@(ModuleInfo {_module = m}) ni =
-    filter importPred $ map expandSDTypes $ mergeDecls $ ni ++ filter isHidingImport oi
+    filter importPred $ map expandSDTypes $ mergeDecls $ ni ++ filter isHidingImport (fmap dropAnn (getImports m))
     where
-      oi = getImports m
-      expandSDTypes :: ImportDecl l -> ImportDecl l
+      expandSDTypes :: ImportDecl () -> ImportDecl ()
       expandSDTypes i@(ImportDecl {importSpecs = Just (ImportSpecList l f specs)}) =
           i {importSpecs = Just (ImportSpecList l f (Prelude.map (expandSpec i) specs))}
       expandSDTypes i = i
@@ -143,7 +139,6 @@ fixNewImports' remove mi@(ModuleInfo {_module = m}) ni =
 
       sdTypes :: Set (Maybe (ModuleName ()), Name ())
       sdTypes = standaloneDerivingTypes mi
-fixNewImports' _ _ _ = error "Unexpected module type"
 
 isHidingImport :: ImportDecl l -> Bool
 isHidingImport (ImportDecl {importSpecs = Just (ImportSpecList _ True _)}) = True
@@ -190,3 +185,4 @@ instance DerivDeclTypes (Type l) where
     derivDeclTypes (TySplice _ _) = empty
     derivDeclTypes (TyBang _ _ _ x) = derivDeclTypes x
     derivDeclTypes (TyWildCard _ _) = empty
+    derivDeclTypes (TyQuasiQuote _ _ _) = empty

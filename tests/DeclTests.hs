@@ -205,8 +205,8 @@ decl9 = TestLabel "decl9" $ TestCase $ testMoveSpec' "tests/expected/decl9" "tes
                            moveDeclsByName "importsSymbolsFrom" "Decls" "Graph",
                            moveDeclsByName "Rd" "Decls" "Graph"]
 
-load8 :: Test
-load8 = TestLabel "load8" $ TestCase $
+clean8 :: Test
+clean8 = TestLabel "load8" $ TestCase $
           withCurrentDirectory "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client" $ do
           -- withCleanRepo $ do
             let opts = GHCOpts { hc = "ghcjs"
@@ -233,8 +233,8 @@ load8 = TestLabel "load8" $ TestCase $
       spec :: MoveSpec
       spec = foldl1' (<>) [moveDeclsByName "foo" "Bar" "Baz"]
 
-load9 :: Test
-load9 = TestLabel "load9" $ TestCase $
+clean9 :: Test
+clean9 = TestLabel "load9" $ TestCase $
           withCurrentDirectory "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client" $
           withCleanRepo $ do
             let opts = GHCOpts {hc = "ghc",

@@ -1,5 +1,6 @@
 {-# LANGUAGE CPP #-}
 {-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleInstances #-}
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE ScopedTypeVariables #-}
 {-# LANGUAGE TupleSections #-}
@@ -10,6 +11,7 @@ module Imports
     ) where
 
 import Data.Char (toLower)
+import Data.Default (Default(def))
 import Data.Foldable (foldl')
 import Data.Function (on)
 import Data.Generics (everywhere, mkT)
@@ -17,10 +19,9 @@ import Data.List (groupBy, nub, sortBy)
 import Data.Map.Strict as Map (adjust, elems, foldlWithKey', insertWith, Map)
 import Data.Maybe (catMaybes, maybeToList)
 import Data.Monoid ((<>))
-import "haskell-src-exts-1ast" Language.Haskell.Exts.Syntax (Annotated(ann), ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(..))
-import "haskell-src-exts-1ast" Language.Haskell.Exts.SrcLoc (SrcLoc(SrcLoc), SrcInfo)
+import "haskell-src-exts-1ast" Language.Haskell.Exts.Syntax (ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(..))
+import "haskell-src-exts-1ast" Language.Haskell.Exts.SrcLoc (SrcInfo)
 import Language.Haskell.Names.SyntaxUtils (dropAnn)
-import SrcLoc (srcLoc)
 import Utils (prettyPrint', SetLike(union, difference))
 
 type ImportKey = (ImportDecl (), Bool)
@@ -40,7 +41,26 @@ importKey x = (cleanDecl, hiding)
 
 type ImportMap l = Map ImportKey [ImportDecl l]
 
-importMap :: [ImportDecl l] -> ImportMap l
+instance SetLike [ImportDecl ()] where
+    union a b = mergeDecls (a <> b)
+    difference a b =
+        concat $  Map.elems $ foldlWithKey' f (importMap a) (importMap b)
+         where
+          f :: ImportMap () -> ImportKey -> [ImportDecl ()] -> ImportMap ()
+          f a' k ads = adjust (maybeToList . specDifference k ads) k a'
+          -- Compute the difference between two lists of mergable import declarations
+          specDifference :: ImportKey -> [ImportDecl ()] -> [ImportDecl ()] -> Maybe (ImportDecl ())
+          specDifference _ [] _ = Nothing
+          specDifference (ImportDecl {}, hiding) a'@(a1 : _) b' =
+              case specDifference' (concatMap specs a') (concatMap specs b') of
+                [] -> Nothing
+                xs -> Just (a1 {importSpecs = Just (ImportSpecList def hiding xs)})
+          specDifference' :: [ImportSpec ()] -> [ImportSpec ()] -> [ImportSpec ()]
+          specDifference' _ _ = [] -- undefined
+          specs :: ImportDecl () -> [ImportSpec ()]
+          specs i  = maybe [] (\(ImportSpecList _ _ ss) -> ss) (importSpecs i)
+
+importMap :: [ImportDecl ()] -> ImportMap ()
 importMap xs = foldl' (\mp x -> Map.insertWith (<>) (importKey x) [x] mp) mempty xs
 
 mergeDecls :: forall l. Eq l => [ImportDecl l] -> [ImportDecl l]

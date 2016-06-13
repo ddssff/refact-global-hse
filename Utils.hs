@@ -207,6 +207,8 @@ con = show . toConstr
 prettyPrint' :: Pretty a => a -> String
 prettyPrint' = prettyPrintStyleMode (style {mode = OneLineMode}) defaultMode
 
+-- | Part of the notion of a set.  Nothing about elements for now - no
+-- singleton, insert, delete.
 class SetLike a where
     union :: a -> a -> a
     difference :: a -> a -> a
