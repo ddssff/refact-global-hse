@@ -12,8 +12,9 @@
 module DeclTests where
 
 import Clean (cleanImports)
-import CPP (defaultCpphsOptions, GHCOpts(..))
+import Control.Lens (set)
 import Control.Monad (when)
+import CPP (cppOptions, defaultCpphsOptions, enabled, GHCOpts, ghcOptions, hashDefines, hc, hsSourceDirs)
 import Data.Data (Data)
 import Data.Default (def)
 import Data.List hiding (find)
@@ -88,7 +89,7 @@ decl2 :: Test
 decl2 = TestLabel "decl2" $ TestCase $ do
           let input = "tests/input/decl-mover"
           testMoveSpec' "tests/expected/decl2" input
-            (runMoveUnsafe input opts (moveDeclsByName "withCurrentDirectory" "IO" "Tmp" :: MoveSpec))
+            (runMoveUnsafe input opts0 (moveDeclsByName "withCurrentDirectory" "IO" "Tmp" :: MoveSpec))
 
 -- Test moving a declaration to a module that does *not* currently
 -- import it.  Now we don't know whether it leaves behind uses for
@@ -99,13 +100,13 @@ decl3 :: Test
 decl3 = TestLabel "decl3" $ TestCase $ do
           let input = "tests/input/decl-mover"
           testMoveSpec' "tests/expected/decl3" input
-            (runMoveUnsafe input opts (moveDeclsByName "lines'" "SrcLoc" "Tmp" :: MoveSpec) >>
-             runMoveUnsafe input opts (moveDeclsByName "lines'" "Tmp" "Utils" :: MoveSpec))
+            (runMoveUnsafe input opts0 (moveDeclsByName "lines'" "SrcLoc" "Tmp" :: MoveSpec) >>
+             runMoveUnsafe input opts0 (moveDeclsByName "lines'" "Tmp" "Utils" :: MoveSpec))
 
 decl4 :: Test
 decl4 = TestLabel "decl4" $ TestCase $ do
           let input = "tests/input/decl-mover"
-          testMoveSpec' "tests/expected/decl4" input (runMoveUnsafe input opts spec)
+          testMoveSpec' "tests/expected/decl4" input (runMoveUnsafe input opts0 spec)
     where
       spec :: MoveSpec
       spec = foldl1' (<>) [moveDeclsByName "withTempDirectory" "IO" "Utils",
@@ -137,7 +138,7 @@ decl6 = TestLabel "decl6" $ TestCase $ testMoveSpec "tests/expected/decl6" "test
 -- Need a way to add imports of the lenses created by makeLenses
 decl7 :: Test
 decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tests/input/rgh" $
-          runMoveUnsafe "tests/input/rgh" (opts {_hsSourceDirs = [".", "tests"]}) spec
+          runMoveUnsafe "tests/input/rgh" (set hsSourceDirs [".", "tests"] opts0) spec
     where
       spec :: MoveSpec
       spec = foldl1' (<>) [moveDeclsByName "textOfSpan" "SrcLoc" "Scan",
@@ -183,7 +184,7 @@ decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tes
 decl8 :: Test
 decl8 = TestLabel "decl8 - up move" $ TestCase $ do
           let input = "tests/input/decl-mover"
-          testMoveSpec' "tests/expected/decl8" input (runMoveUnsafe input opts spec)
+          testMoveSpec' "tests/expected/decl8" input (runMoveUnsafe input opts0 spec)
     where
       spec :: MoveSpec
       spec = foldl1' (<>) [-- moveDeclsByName "defaultCpphsOptions" "CPP" "Types"
@@ -196,7 +197,7 @@ decl8 = TestLabel "decl8 - up move" $ TestCase $ do
 -- Need a way to add imports of the lenses created by makeLenses
 decl9 :: Test
 decl9 = TestLabel "decl9" $ TestCase $ testMoveSpec' "tests/expected/decl9" "tests/input/rgh" $
-          runMoveUnsafe "tests/input/rgh" (opts {_hsSourceDirs = [".", "tests"]}) spec
+          runMoveUnsafe "tests/input/rgh" (set hsSourceDirs [".", "tests"] opts0) spec
     where
       spec = foldl1' (<>) [moveDeclsByName "MoveType" "Decls" "Graph",
                            moveDeclsByName "findModuleByKey" "Decls" "Graph",
@@ -209,16 +210,15 @@ clean8 :: Test
 clean8 = TestLabel "load8" $ TestCase $
           withCurrentDirectory "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client" $ do
           -- withCleanRepo $ do
-            let opts = GHCOpts { hc = "ghcjs"
-                               , _hsSourceDirs=["client", "../happstack-ghcjs-webmodule"]
-                               , cppOptions = defaultCpphsOptions
-                               , enabled = [CPP, OverloadedStrings, ExtendedDefaultRules]
-                               , hashDefines = []
-                               , _ghcOptions = [] }
-            let optSets = [ opts {hc = "ghc",   hashDefines = map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["define", "SERVE_DYNAMIC"]]}
-                          , opts {hc = "ghcjs", hashDefines = map (fromJust . parseHashDefine False) [["define", "CLIENT", "1"], ["define", "SERVER", "0"], ["define", "NO_TH"], ["define", "SERVE_DYNAMIC"]]}
-                          , opts {hc = "ghc",   hashDefines = map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["undef", "SERVE_DYNAMIC"]]}
-                          , opts {hc = "ghcjs", hashDefines = map (fromJust . parseHashDefine False) [["define", "CLIENT", "1"], ["define", "SERVER", "0"], ["define", "NO_TH"], ["undef", "SERVE_DYNAMIC"]]} ]
+            let opts = set hc "ghcjs" $
+                       set hsSourceDirs ["client", "../happstack-ghcjs-webmodule"] $
+                       set cppOptions defaultCpphsOptions $
+                       set enabled [CPP, OverloadedStrings, ExtendedDefaultRules] $
+                       opts0
+            let optSets = [ set hc "ghc" (set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["define", "SERVE_DYNAMIC"]]) opts)
+                          , set hc "ghcjs" (set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "1"], ["define", "SERVER", "0"], ["define", "NO_TH"], ["define", "SERVE_DYNAMIC"]]) opts)
+                          , set hc "ghc" (set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["undef", "SERVE_DYNAMIC"]]) opts)
+                          , set hc "ghcjs" (set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "1"], ["define", "SERVER", "0"], ["define", "NO_TH"], ["undef", "SERVE_DYNAMIC"]]) opts) ]
             m <- loadModule opts "client/Examples/MVExample.hs"
             cleanImports optSets [m]
             (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
@@ -237,12 +237,12 @@ clean9 :: Test
 clean9 = TestLabel "load9" $ TestCase $
           withCurrentDirectory "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client" $
           withCleanRepo $ do
-            let opts = GHCOpts {hc = "ghc",
-                                _hsSourceDirs=["client", "../happstack-ghcjs-webmodule"],
-                                cppOptions = defaultCpphsOptions,
-                                enabled = [CPP, OverloadedStrings, ExtendedDefaultRules],
-                                hashDefines = map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["define", "SERVE_DYNAMIC"]],
-                                _ghcOptions = ["-hide-package", "haskell-src-exts-1ast"]}
+            let opts = set hc "ghc" $
+                       set hsSourceDirs ["client", "../happstack-ghcjs-webmodule"] $
+                       set cppOptions defaultCpphsOptions $
+                       set enabled [CPP, OverloadedStrings, ExtendedDefaultRules] $
+                       set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["define", "SERVE_DYNAMIC"]]) $
+                       opts0
             m <- loadModule opts"client/Examples/MVExample.hs"
             cleanImports [opts] [m]
             (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
@@ -260,22 +260,22 @@ simple1 :: Test
 simple1 =
      TestLabel "simple1" $ TestCase $
       testMoveSpec' "tests/expected/simple1" "tests/input/simple" $
-        runMoveUnsafe "tests/input/simple" opts (moveDeclsByName "listPairs" "A" "B" :: MoveSpec)
+        runMoveUnsafe "tests/input/simple" opts0 (moveDeclsByName "listPairs" "A" "B" :: MoveSpec)
 
 simple2 :: Test
 simple2 =
      TestLabel "simple2" $ TestCase $
       testMoveSpec' "tests/expected/simple2" "tests/input/simple2" $
-        runMoveUnsafe "tests/input/simple2" opts (moveDeclsByName "MoveType" "C" "D" :: MoveSpec)
+        runMoveUnsafe "tests/input/simple2" opts0 (moveDeclsByName "MoveType" "C" "D" :: MoveSpec)
 
 simple3 :: Test
 simple3 =
      TestLabel "simple3" $ TestCase $
       testMoveSpec' "tests/expected/simple3" "tests/input/simple3" $
-        runMoveUnsafe "tests/input/simple3" opts (moveDeclsByName "MoveType" "C" "D" :: MoveSpec)
+        runMoveUnsafe "tests/input/simple3" opts0 (moveDeclsByName "MoveType" "C" "D" :: MoveSpec)
 
-opts :: GHCOpts
-opts = def {_hsSourceDirs = ["."], _ghcOptions = ["-hide-package", "haskell-src-exts-1ast"]}
+opts0 :: GHCOpts
+opts0 = set hsSourceDirs ["."] $ set ghcOptions ["-hide-package", "haskell-src-exts-1ast"] $ def
 
 -- Perform the same move with these CPP flag combinations:
 --
@@ -292,11 +292,11 @@ decl10 :: Test
 decl10 =
     TestLabel "decl10" $ TestCase $
     testMoveSpec' "tests/expected/decl10" "tests/input/decl10" $
-    runMoveUnsafe "tests/input/simple3" opts undefined
+    runMoveUnsafe "tests/input/simple3" opts0 undefined
 
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
 testMoveSpec expected actual moveSpec =
-    testMoveSpec' expected actual $ runMoveUnsafe actual opts moveSpec
+    testMoveSpec' expected actual $ runMoveUnsafe actual opts0 moveSpec
 
 testMoveSpec' :: FilePath -> FilePath -> IO () -> IO ()
 testMoveSpec' expected actual action = do

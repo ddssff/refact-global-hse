@@ -7,25 +7,28 @@
 module CPP
   ( parseFileWithCommentsAndCPP
   , defaultCpphsOptions
-  , GHCOpts(GHCOpts, hc, cppOptions, enabled, hashDefines, _hsSourceDirs, _ghcOptions), hsSourceDirs, ghcOptions
+  , GHCOpts(GHCOpts), hc, cppOptions, enabled, hashDefines, hsSourceDirs, ghcOptions
+  , applyHashDefine
   , ghcProcessArgs
   , cppIf
   , cppEndif
   , extensionsForHSEParser
+  , ghcOptsOptions
   ) where
 
-import Control.Lens (makeLenses)
+import Control.Lens (makeLenses, over, view)
 import Data.Char (isDigit)
 import Data.Default (Default(def))
 import Data.List (intercalate, isSuffixOf)
 import Data.Monoid ((<>))
-import HashDefine (HashDefine(..))
+import HashDefine (HashDefine(..), parseHashDefine)
 import "haskell-src-exts-1ast" Language.Haskell.Exts (Comment, impliesExts, KnownExtension(CPP), Module, ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
 import "haskell-src-exts-1ast" Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
-import Language.Preprocessor.Cpphs (BoolOptions(hashline, locations, stripC89, stripEol), CpphsOptions(CpphsOptions, boolopts, defines), runCpphs)
+import Language.Preprocessor.Cpphs (BoolOptions(hashline, locations, stripC89, stripEol), CpphsOptions(boolopts, defines), runCpphs)
 import qualified Language.Preprocessor.Cpphs as Orig (defaultCpphsOptions)
 import Language.Preprocessor.Unlit (unlit)
-import Utils (EZPrint(ezPrint))
+import System.Console.GetOpt
+import Utils (EZPrint(ezPrint), groupOn)
 
 parseFileWithCommentsAndCPP ::  CpphsOptions -> ParseMode -> FilePath
                       -> IO (ParseResult (Module SrcSpanInfo, [Comment], String))
@@ -84,27 +87,35 @@ defaultCpphsOptions =
 -- | Support a tiny subset of the GHC command line options.
 data GHCOpts =
     GHCOpts
-    { hc :: String
+    { _hc :: String
     , _hsSourceDirs :: [FilePath]
-    , cppOptions :: CpphsOptions
-    , enabled :: [KnownExtension]
-    , hashDefines :: [HashDefine]
+    , _cppOptions :: CpphsOptions
+    , _enabled :: [KnownExtension]
+    , _hashDefines :: [HashDefine]
     , _ghcOptions :: [String]
-    }
+    } deriving Show
 
 $(makeLenses ''GHCOpts)
 
 instance Default GHCOpts where
     def = GHCOpts
-          { hc = "ghc"
+          { _hc = "ghc"
           , _hsSourceDirs = []
-          , cppOptions = defaultCpphsOptions
-          , enabled = []
-          , hashDefines = []
+          , _cppOptions = defaultCpphsOptions
+          , _enabled = []
+          , _hashDefines = []
           , _ghcOptions = [] }
 
+applyHashDefine :: HashDefine -> CpphsOptions -> CpphsOptions
+applyHashDefine d x = x {defines = applyHashDefine' d (defines x)}
+    where
+      applyHashDefine' (AntiDefined {name = n}) xs = filter ((/= n) . fst) xs
+      applyHashDefine' (SymbolReplacement {name = n, replacement = r}) xs =
+          (n, r) : applyHashDefine' (AntiDefined {name = n, linebreaks = linebreaks d}) xs
+      applyHashDefine' _ xs = xs
+
 instance EZPrint GHCOpts where
-    ezPrint x = unwords (hc x : map asArgument (hashDefines x))
+    ezPrint x = unwords (view hc x : map asArgument (view hashDefines x))
 
 asArgument :: HashDefine -> String
 asArgument (AntiDefined{..}) = "-U" <> name
@@ -121,21 +132,21 @@ asPredicate (SymbolReplacement{..}) = name <> " == " <> replacement
 asPredicate _ = ""
 
 ghcProcessArgs :: GHCOpts -> [String]
-ghcProcessArgs (GHCOpts {..}) =
-    map asArgument hashDefines <>
-    concatMap ppExtension (map EnableExtension enabled) <>
-    _ghcOptions <>
-    case _hsSourceDirs of
+ghcProcessArgs opts =
+    map asArgument (view hashDefines opts) <>
+    concatMap ppExtension (map EnableExtension (view enabled opts)) <>
+    view ghcOptions opts <>
+    case view hsSourceDirs opts of
       [] -> []
       xs -> ["-i" <> intercalate ":" xs]
 
 -- | Somewhere there should be a library to do this.
 cppIf :: GHCOpts -> String
-cppIf (GHCOpts{hashDefines = []}) = ""
-cppIf (GHCOpts{..}) = "#if " <> intercalate " && " (map asPredicate hashDefines) <> "\n"
+cppIf opts | null (view hashDefines opts) = ""
+cppIf opts = "#if " <> intercalate " && " (map asPredicate (view hashDefines opts)) <> "\n"
 
 cppEndif :: GHCOpts -> String
-cppEndif (GHCOpts{hashDefines = []}) = ""
+cppEndif opts | null (view hashDefines opts) = ""
 cppEndif _ = "#endif\n"
 
 -- | From hsx2hs, but removing Arrows because it makes test case
@@ -154,3 +165,19 @@ extensionsForHSEParser =
 ppExtension :: Extension -> [String]
 ppExtension (EnableExtension x) = ["-X" <> show x]
 ppExtension _ = []
+
+ghcOptsOptions :: [OptDescr (GHCOpts -> GHCOpts)]
+ghcOptsOptions =
+    [ Option "i" ["hs-source-dir"] (ReqArg (\s -> over hsSourceDirs ((groupOn (== ':') s) <>)) "DIR")
+             "Add a directory to the haskell source path"
+    , Option "D" [] (ReqArg (\s -> let Just x = parseHashDefine False
+                                                                ("define" :
+                                                                 case break (== '=') s of
+                                                                   (_, "") -> [s]
+                                                                   (name, '=' : value) -> [name, value]
+                                                                   _ -> error "ghcOptsOptions") in
+                                   over hashDefines (x :)) "NAME")
+             "Add a #define to the compiler options"
+    , Option "U" [] (ReqArg (\s -> let Just x = parseHashDefine False ["undef", s] in
+                                   over hashDefines (x :)) "NAME")
+             "Add a #define to the compiler options" ]

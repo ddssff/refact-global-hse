@@ -69,6 +69,21 @@ executable clean-imports
     filepath,
     lens
 
+executable decorate
+  Hs-Source-Dirs: scripts
+  Main-Is: Decorate.hs
+  Build-Depends:
+    base,
+    refact-global-hse,
+    lens,
+    mtl,
+    syb,
+    data-default,
+    haskell-src-exts-1ast,
+    HUnit,
+    filepath,
+    containers
+
 Test-Suite refact-global-hse-tests
   Type: exitcode-stdio-1.0
   Hs-Source-Dirs: tests

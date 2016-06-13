@@ -14,7 +14,7 @@ import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
 import Data.Bool (bool)
 import Data.Generics (Data(gmapM), GenericM, listify, toConstr, Typeable)
-import Data.List (intercalate, stripPrefix)
+import Data.List (groupBy, intercalate, stripPrefix)
 import Data.Maybe (mapMaybe)
 import Data.Sequence ((|>), Seq)
 import qualified Data.Set as Set
@@ -65,6 +65,12 @@ gitResetSubdir dir = do
   (readProcess "git" ["checkout", "--", dir] "" >>
    readProcess "git" ["clean", "-f", dir] "" >> pure ())
   `IO.catch` \(e :: SomeException) -> hPutStrLn stderr ("gitResetSubdir " ++ show dir ++ " failed: " ++ show e) >> throw e
+
+{-
+traceIOException :: MonadIO m => Loc -> m a -> m a
+traceIOException loc action =
+    action `catch` (\(e :: SomeException) -> liftIO (hPutStrLn stderr ("exception seen at " ++ ++ __LOC ++ ": " ++ show (V e))
+-}
 
 -- | Determine whether the repository containing the working directory
 -- is in a clean state.
@@ -218,3 +224,10 @@ class SetLike a where
 instance Ord a => SetLike (Set.Set a) where
     union = Set.union
     difference = Set.difference
+
+-- | cartesianProduct [[1,2,3], [4,5],[6]] -> [[1,4,6],[1,5,6],[2,4,6],[2,5,6],[3,4,6],[3,5,6]]
+cartesianProduct :: [[a]] -> [[a]]
+cartesianProduct = sequence
+
+groupOn :: (a -> Bool) -> [a] -> [[a]]
+groupOn p s = filter (\(c : _) -> not (p c)) (groupBy (\a b -> (p a) == (p b)) s)

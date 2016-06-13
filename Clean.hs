@@ -7,8 +7,9 @@
 
 module Clean (cleanImports) where
 
-import CPP (cppEndif, cppIf, extensionsForHSEParser, GHCOpts(..), ghcProcessArgs)
-import Control.Monad (void, when)
+import Control.Lens (over, view)
+import CPP (cppEndif, cppIf, enabled, extensionsForHSEParser, GHCOpts, ghcProcessArgs, hc)
+import Control.Monad (void)
 import Control.Monad.RWS (MonadWriter(tell))
 import Data.List (find, foldl1', transpose)
 import Data.Monoid ((<>))
@@ -41,9 +42,9 @@ doOpts mods opts =
     withTempDirectory True "." "scratch" $ \scratch -> do
          hPutStrLn stderr ("cleanImports: " ++ ezPrint opts ++ " (scratch=" ++ scratch ++ ")")
          let args' = ["--make", "-c", "-ddump-minimal-imports", "-outputdir", scratch] ++
-                     ghcProcessArgs (opts {enabled = enabled opts ++ extensionsForHSEParser}) ++
+                     ghcProcessArgs (over enabled (++ extensionsForHSEParser) opts) ++
                      map _modulePath mods
-         _out <- readProcess (hc opts) args' ""
+         _out <- readProcess (view hc opts) args' ""
          map (opts,) <$> mapM (newImports opts scratch) mods
 
 doModule :: ModuleInfo SrcSpanInfo -> [(GHCOpts, [ImportDecl ()])] -> IO ()
@@ -85,7 +86,7 @@ newModuleText mi@(ModuleInfo {_module = m}) pairs =
                           withTrailingWhitespace skip (startOfDecls mi)
                           keepAll) mi
     where
-      oi = getImports m
+      -- oi = getImports m
       doOptImports opts ni =
           -- let ni'' = fixNewImports' True mi ni in
           -- if dropAnn oi == map dropAnn ni' then keep ... else

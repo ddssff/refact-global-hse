@@ -1,9 +1,12 @@
+#!/usr/bin/runhaskell
+
 {-# LANGUAGE FlexibleContexts, TemplateHaskell #-}
 
 import Control.Exception
 import Control.Lens
 import Control.Monad.State
 import Control.Monad.Writer
+import CPP (GHCOpts, ghcOptsOptions)
 import Data.Default
 import Data.Generics
 import Data.Set as Set (insert)
@@ -22,19 +25,33 @@ import System.IO (hPutStrLn, stderr)
 import Test.HUnit (errors, failures, runTestTT, Test(TestList))
 
 import SrcLoc
+
 data Params
     = Params { _topDir :: FilePath
              , _paths :: [FilePath]
-             }
+             , _ghcOpts :: GHCOpts
+             } deriving Show
+
+$(makeLenses ''Params)
 
 params0 :: Params
-params0 = Params {_topDir = ".", _paths = []}
+params0 = Params {_topDir = ".", _paths = [], _ghcOpts = def}
+
+options =
+    [ Option "" ["cd"] (ReqArg (set topDir) "DIR") "Set current directory" ] ++
+    map (fmap (over ghcOpts)) ghcOptsOptions
+
+readOptions :: [String] -> Params
+readOptions args = do
+  case getOpt' Permute options args of
+    (fns, ps, [], []) -> set paths ps $ foldr ($) params0 fns
+    _ -> error (usageInfo "specify modules and at least one move spec" options)
 
 main = do
-  [file] <- getArgs
-  m <- loadModule def file
-  putStrLn (scanModule (f m) m)
-  pure ()
+  params <- readOptions <$> getArgs
+  putStrLn (show params)
+  ms <- withCurrentDirectory (view topDir params) $ mapM (loadModule (view ghcOpts params)) (view paths params)
+  mapM_ (\m -> putStrLn (scanModule (f m) m)) ms
     where
       f :: ModuleInfo SrcSpanInfo -> ScanM ()
       f (ModuleInfo {_module = Module l mh ps is ds}) = do

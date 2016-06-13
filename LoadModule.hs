@@ -6,7 +6,8 @@ module LoadModule
     , Annot
     ) where
 
-import CPP (extensionsForHSEParser, GHCOpts(..))
+import Control.Lens (view)
+import CPP (extensionsForHSEParser, GHCOpts, applyHashDefine, enabled, hashDefines)
 import qualified CPP (defaultCpphsOptions, parseFileWithCommentsAndCPP)
 import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
@@ -49,7 +50,8 @@ addScoping mods =
 loadModule :: GHCOpts -> FilePath -> IO (ModuleInfo SrcSpanInfo)
 loadModule opts path = do
   moduleText <- liftIO $ readFile path
-  (parsed', comments, _processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions mode path
+  let cpphsOptions' = foldr applyHashDefine cpphsOptions (view hashDefines opts)
+  (parsed', comments, _processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions' mode path
   let parsed = mapTopAnnotations (fixEnds comments moduleText) $ everywhere (mkT fixSpan) parsed'
   -- liftIO $ writeFile (path ++ ".cpp") processed
   -- putStr processed
@@ -66,7 +68,7 @@ loadModule opts path = do
                     , _moduleSpan = spanOfText path moduleText
                     , _moduleGlobals = mempty }
     where
-      mode = Exts.defaultParseMode {Exts.extensions = map EnableExtension (enabled opts ++ extensionsForHSEParser),
+      mode = Exts.defaultParseMode {Exts.extensions = map EnableExtension (view enabled opts ++ extensionsForHSEParser),
                                     Exts.parseFilename = path,
                                     Exts.fixities = Nothing }
 
