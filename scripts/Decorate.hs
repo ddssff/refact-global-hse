@@ -2,8 +2,14 @@
 
 {-# LANGUAGE FlexibleContexts, TemplateHaskell #-}
 
+module Decorate
+    ( Params(..)
+    , options
+    , go
+    ) where
+
 import Control.Exception
-import Control.Lens
+import Control.Lens (makeLenses, use, view)
 import Control.Monad.State
 import Control.Monad.Writer
 import CPP (GHCOpts, ghcOptsOptions)
@@ -16,6 +22,7 @@ import Language.Haskell.Exts
 import Language.Haskell.Exts.SrcLoc
 import LoadModule (loadModule)
 import ModuleInfo
+import Options.Applicative
 import SrcLoc
 import System.Console.GetOpt
 import System.Environment (getArgs)
@@ -34,21 +41,33 @@ data Params
 
 $(makeLenses ''Params)
 
+options :: Parser Params
+options =
+    Params <$> t <*> p <*> g
+    where
+      t :: Parser FilePath
+      t = strOption (long "cd" <> metavar "DIR" <> help "Set working directory")
+      p :: Parser [FilePath]
+      p = some (argument str (metavar "PATH"))
+      g :: Parser GHCOpts
+      g = ghcOptsOptions
+
 params0 :: Params
 params0 = Params {_topDir = ".", _paths = [], _ghcOpts = def}
 
-options =
+{-
+options' =
     [ Option "" ["cd"] (ReqArg (set topDir) "DIR") "Set current directory" ] ++
     map (fmap (over ghcOpts)) ghcOptsOptions
 
 readOptions :: [String] -> Params
 readOptions args = do
-  case getOpt' Permute options args of
+  case getOpt' Permute options' args of
     (fns, ps, [], []) -> set paths ps $ foldr ($) params0 fns
-    _ -> error (usageInfo "specify modules and at least one move spec" options)
+    _ -> error (usageInfo "specify modules and at least one move spec" options')
+-}
 
-main = do
-  params <- readOptions <$> getArgs
+go params = do
   putStrLn (show params)
   ms <- withCurrentDirectory (view topDir params) $ mapM (loadModule (view ghcOpts params)) (view paths params)
   mapM_ (\m -> putStrLn (scanModule (f m) m)) ms

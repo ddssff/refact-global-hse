@@ -1,22 +1,39 @@
 -- Example:
 -- runhaskell scripts/Move.hs --move=FoldDeclared,Symbols,Tmp --unsafe
 
-{-# LANGUAGE RankNTypes, ScopedTypeVariables, TemplateHaskell #-}
+{-# LANGUAGE CPP, RankNTypes, ScopedTypeVariables, TemplateHaskell #-}
+
+module MoveDecls
+    ( Params(..)
+    , options
+    , go
+    ) where
+
 import Control.Lens (makeLenses, over, set, view)
-import CPP (GHCOpts, hsSourceDirs)
+import Control.Monad (foldM)
+import CPP (GHCOpts, ghcOptsOptions, hsSourceDirs)
 import Data.Default (def)
 import Data.List (groupBy)
 import Data.Monoid ((<>))
+import Data.Tuple.HT (uncurry3)
 import Decls (moveDeclsAndClean)
 
 import MoveSpec (instClassPred, splicePred)
 import LoadModule (loadModules)
 import MoveSpec (moveDeclsByName, moveInstDecls, moveSpliceDecls, MoveSpec, traceMoveSpec)
+import Options.Applicative (eitherReader, help, long, many, metavar, option, Parser, ReadM, strOption, switch)
 import System.Console.GetOpt (ArgDescr(NoArg, ReqArg), ArgOrder(Permute), getOpt', OptDescr(..), usageInfo)
 import System.Environment (getArgs)
 import System.FilePath ((</>), makeRelative)
 import System.FilePath.Find ((&&?), (==?), depth, extension, fileType, FileType(RegularFile), find)
 import Utils (gitResetSubdir, withCleanRepo, withTempDirectory, withCurrentDirectory)
+
+#if !MIN_VERSION_optparse_applicative(0,13,0)
+-- | Convert a function in the 'Maybe' monad to a reader.
+maybeReader :: (String -> Maybe a) -> ReadM a
+maybeReader f = eitherReader $ \arg ->
+  maybe (Left $ "cannot parse value `" ++ arg ++ "'") pure . f $ arg
+#endif
 
 data Params
     = Params { _moveSpec :: MoveSpec
@@ -30,11 +47,40 @@ data Params
 
 $(makeLenses ''Params)
 
+options :: Parser Params
+options =
+    Params
+    <$> ms
+    <*> cd
+    <*> go
+    <*> lds
+    <*> fds
+    <*> mverse
+    <*> us
+    <*> gr
+    where
+      ms :: Parser MoveSpec
+      ms =
+          let ds :: Parser MoveSpec
+              ds = mconcat <$> (many (uncurry3 moveDeclsByName <$> option (maybeReader splitTriple) (long "decl" <> metavar "SYMBOL,DEPARTMOD,ARRIVEMOD" <> help "Move the declaration of a symbol")))
+              is :: Parser MoveSpec
+              is = mconcat <$> (many ((moveInstDecls . uncurry3 instClassPred) <$> option (maybeReader splitTriple) (long "inst" <> metavar "CLASSNAME,DEPARTMOD,ARRIVEMOD" <> help "Move all instances of a class")))
+              ss :: Parser MoveSpec
+              ss = mconcat <$> many ((moveSpliceDecls . uncurry3 splicePred) <$> option (maybeReader splitTriple) (long "splice" <> metavar "SYMBOL,DEPARTMOD,ARRIVEMOD" <> help "Move all splices that reference a symbol")) in
+          (<>) <$> ds <*> ((<>) <$> is <*> ss)
+      cd = strOption (long "cd" <> metavar "DIR" <> help "Set the process working directory")
+      go = ghcOptsOptions
+      lds = many (strOption (long "ls"<> metavar "DIR" <> help "Directory relative to top to search (non-recursively) for .hs files to add to the moduverse"))
+      fds = many (strOption (long "find" <> metavar "DIR" <> help "Directory relative to top to search (recursively) for .hs files to add to the moduverse"))
+      mverse = many (strOption (long "mod" <> metavar "PATH" <> help "Add a module to the moduverse"))
+      us = switch (long "unsafe" <> help "Skip the safety check - allow uncommitted edits in repo where clean is performed")
+      gr = switch (long "reset" <> help "Do a hard reset and git clean on the working directory (requires --unsafe)")
+
 params0 :: Params
 params0 = Params {_moveSpec = mempty, _gitReset = False,_cd = ".", _ghcOpts = def, _findDirs = [], _lsDirs = [], _moduverse = [], _unsafe = False}
 
-options :: [OptDescr (Params -> Params)]
-options =
+options' :: [OptDescr (Params -> Params)]
+options' =
     [ Option "" ["decl"] (ReqArg (\s -> maybe (error s)
                                               (\(name, depart, arrive) -> over moveSpec ((<>) (moveDeclsByName name depart arrive)))
                                               (splitTriple s)) "SYMBOL,DEPARTMOD,ARRIVEMOD")
@@ -63,9 +109,9 @@ splitTriple s =
 
 buildParams :: [String] -> IO Params
 buildParams args = do
-  case getOpt' Permute options args of
+  case getOpt' Permute options' args of
     (fns, [], [], []) -> finalize (foldr ($) params0 fns)
-    (x, y, z, w) -> error (usageInfo ("error: " ++ show (y, z, w) ++ "\nspecify modules and at least one move spec") (options :: [OptDescr (Params -> Params)]))
+    (x, y, z, w) -> error (usageInfo ("error: " ++ show (y, z, w) ++ "\nspecify modules and at least one move spec") (options' :: [OptDescr (Params -> Params)]))
     where
       -- Search the findDir directories for paths and add them to moduverse.
       finalize :: Params -> IO Params
@@ -82,12 +128,8 @@ buildParams args = do
                        (_findDirs params)
         pure $ over moduverse (++ (concat (paths1 ++ paths2))) params
 
-main :: IO ()
-main = getArgs >>= run
-
-run :: [String] -> IO ()
-run args = do
-  params <- buildParams args
+go :: Params -> IO ()
+go params = do
   withCurrentDirectory (_cd params) $ maybeReset params $ do
     modules <- loadModules def (view moduverse params)
     moveDeclsAndClean (view moveSpec params) (view ghcOpts params) modules

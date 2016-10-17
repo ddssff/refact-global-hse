@@ -20,7 +20,6 @@ import Data.Map.Strict as Map (adjust, elems, foldlWithKey', insertWith, Map)
 import Data.Maybe (catMaybes, maybeToList)
 import Data.Monoid ((<>))
 import Language.Haskell.Exts.Syntax (ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(..))
-import Language.Haskell.Exts.SrcLoc (SrcInfo)
 import Language.Haskell.Names.SyntaxUtils (dropAnn)
 import Utils (prettyPrint', SetLike(union, difference))
 

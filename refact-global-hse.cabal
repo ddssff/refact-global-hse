@@ -25,6 +25,7 @@ Library
     lifted-base,
     monad-control,
     mtl,
+    optparse-applicative,
     pretty,
     process,
     syb,
@@ -45,44 +46,26 @@ Library
     Utils
   GHC-options: -Wall -O2
 
-executable move-decls
+executable refactor
   Hs-Source-Dirs: scripts
-  Main-Is: MoveDecls.hs
+  Main-Is: Main.hs
   Build-Depends:
     base,
-    data-default,
-    refact-global-hse,
-    filemanip > 0.3.6.3,
-    filepath,
-    lens
-
-executable clean-imports
-  Hs-Source-Dirs: scripts
-  Main-Is: CleanImports.hs
-  Build-Depends:
-    base,
+    containers,
     data-default,
     directory,
-    haskell-names,
-    refact-global-hse,
     filemanip > 0.3.6.3,
     filepath,
-    lens
-
-executable decorate
-  Hs-Source-Dirs: scripts
-  Main-Is: Decorate.hs
-  Build-Depends:
-    base,
-    refact-global-hse,
-    lens,
-    mtl,
-    syb,
-    data-default,
+    haskell-names,
     haskell-src-exts,
     HUnit,
-    filepath,
-    containers
+    lens,
+    optparse-applicative,
+    optparse-generic,
+    mtl,
+    refact-global-hse,
+    syb,
+    utility-ht
 
 Test-Suite refact-global-hse-tests
   Type: exitcode-stdio-1.0

@@ -1,14 +1,14 @@
-:set -hide-package haskell-src-exts
-:set -itests
+:set -i.:scripts:tests
 -- :set -itests:../haskell-names/src:../haskell-names/dist/build/autogen
 :set -XScopedTypeVariables
-:load tests/Tests
+:set -DMIN_VERSION_optparse_applicative(major1,major2,minor)=((major1)<0||(major1)==0&&(major2)<12||(major1)==0&&(major2)==12&&(minor)<=1)
+-- :load tests/Tests
 :m +Data.Monoid System.Process
 :m +Language.Haskell.Exts
 :m +Language.Haskell.Names
+:m +Options.Applicative
 :m +Test.HUnit
-:m +Decls
-:m +LoadModule
-:m +Utils
+:m +System.Environment
 :m +System.FilePath.Find
+:load Decls LoadModule Utils
 :set prompt "λ "

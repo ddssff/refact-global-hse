@@ -1,15 +1,23 @@
 -- Example:
 -- runhaskell scripts/Clean.hs --top=tests --top=. --top=scripts --mod=scripts/Tests.hs --unsafe
 
-{-# LANGUAGE RankNTypes, TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric, RankNTypes, TemplateHaskell #-}
+
+module CleanImports
+    ( Params(..)
+    , options
+    , go
+    ) where
 
 import Clean (cleanImports)
-import CPP (GHCOpts, hsSourceDirs)
+import CPP (GHCOpts, ghcOptsOptions, hsSourceDirs)
 import Control.Lens (makeLenses, over, set, view)
 import Data.Default (def)
 import Language.Haskell.Names (Scoped(Scoped))
 import LoadModule (loadModules)
-import System.Console.GetOpt (ArgDescr(NoArg, ReqArg), ArgOrder(Permute), getOpt', OptDescr(..), usageInfo)
+import Options.Applicative (help, many, metavar, Parser, strOption, switch, long, (<>))
+import Options.Generic
+-- import System.Console.GetOpt (ArgDescr(NoArg, ReqArg), ArgOrder(Permute), getOpt', OptDescr(..), usageInfo)
 import System.Directory (canonicalizePath)
 import System.Environment (getArgs)
 import System.FilePath (makeRelative)
@@ -20,26 +28,25 @@ data Params
     = Params { _ghcOpts :: GHCOpts
              , _findDirs :: [FilePath]
              , _moduverse :: [FilePath]
-             , _unsafe :: Bool }
+             , _unsafe :: Bool } deriving (Generic, Show)
 
 $(makeLenses ''Params)
 
+options :: Parser Params
+options =
+    Params <$> g <*> f <*> m <*> u
+    where
+      g :: Parser GHCOpts
+      g = ghcOptsOptions -- many (strOption (long "top" <> metavar "DIR" <> help "Add a top directory, like the cabal hs-source-dirs option")) <*> pure def
+      f :: Parser [FilePath]
+      f = many (strOption (long "mod" <> metavar "PATH" <> help "Add a module to the moduverse"))
+      m :: Parser [FilePath]
+      m = many (strOption (long "find" <> metavar "DIR" <> help "Add modules found (non-recursively) in a directory"))
+      u :: Parser Bool
+      u = switch (long "unsafe" <> help "Skip the safety check - allow uncommitted edits in repo where clean is performed")
+
 params0 :: Params
 params0 = Params {_ghcOpts = def, _findDirs = [], _moduverse = [], _unsafe = False}
-
-options :: [OptDescr (Params -> Params)]
-options =
-    [ Option "" ["mod"] (ReqArg (\s -> over moduverse (s :)) "PATH") "Add a module to the moduverse"
-    , Option "" ["top"] (ReqArg (\s -> over (ghcOpts . hsSourceDirs) (s :)) "DIR") "Add a top directory, like the cabal hs-source-dirs option"
-    , Option "" ["find"] (ReqArg (\s -> over findDirs (s :)) "DIR") "Add modules found (non-recursively) in a directory"
-    , Option "" ["unsafe"] (NoArg (set unsafe True)) "Skip the safety check - allow uncommitted edits in repo where clean is performed" ]
-
-buildParams :: IO Params
-buildParams = do
-  args <- getArgs
-  case getOpt' Permute options args of
-    (fns, [], [], []) -> pure $ foldr ($) params0 fns
-    _ -> error (usageInfo "specify modules and at least one move spec" options)
 
 finalParams :: Params -> IO Params
 finalParams params = do
@@ -79,8 +86,8 @@ finalParams params = do
         pure $ over moduverse (++ paths) params
 -}
 
-main = do
-  params <- buildParams >>= finalParams
+go params0 = do
+  params <- finalParams params0
   (if (view unsafe params) then id else withCleanRepo) $ withTempDirectory True "." "scratch" $ \scratch -> do
     modules <- loadModules def (view moduverse params)
     cleanImports [set hsSourceDirs (view (ghcOpts . hsSourceDirs) params) def] (map (fmap (\(Scoped _ x) -> x)) modules)

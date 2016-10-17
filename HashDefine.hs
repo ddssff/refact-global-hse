@@ -120,9 +120,9 @@ parseHashDefine ansi def = (command . skip) def
 simplifyHashDefines :: [HashDefine] -> [(String,String)]
 simplifyHashDefines = concatMap simp
   where
-    simp hd@LineDrop{}    = []
-    simp hd@Pragma{}      = []
-    simp hd@AntiDefined{} = []
+    simp LineDrop{}    = []
+    simp Pragma{}      = []
+    simp AntiDefined{} = []
     simp hd@SymbolReplacement{} = [(name hd, replacement hd)]
     simp hd@MacroExpansion{}    = [(name hd++"("++intercalate "," (arguments hd)
                                            ++")"

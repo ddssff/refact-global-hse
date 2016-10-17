@@ -36,8 +36,8 @@
 
  1. There are scripts to do simple import cleaning and declaration moving:
 
-        $ runhaskell scripts/Clean.hs --top=/path/to/somerepo --find=Foo
-        $ runhaskell scripts/Move.hs --help
+        $ runhaskell scripts/CleanImports.hs --top=/path/to/somerepo --find=Foo
+        $ runhaskell scripts/MoveDecls.hs --help
 
  (Does not handle instances.)
 

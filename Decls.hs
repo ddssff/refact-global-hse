@@ -1,5 +1,12 @@
 {-# LANGUAGE CPP, FlexibleContexts, PackageImports, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections, TypeFamilies #-}
-module Decls (runSimpleMove, runSimpleMoveUnsafe, runMoveUnsafe, moveDeclsAndClean, moveDecls) where
+module Decls
+    ( environment, importGraph
+    , runSimpleMove
+    , runSimpleMoveUnsafe
+    , runMoveUnsafe
+    , moveDeclsAndClean
+    , moveDecls
+    ) where
 
 import Clean (cleanImports)
 import CPP (GHCOpts, hsSourceDirs)

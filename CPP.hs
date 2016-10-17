@@ -16,19 +16,21 @@ module CPP
   , ghcOptsOptions
   ) where
 
-import Control.Lens (makeLenses, over, view)
+import Control.Lens (makeLenses, view)
 import Data.Char (isDigit)
 import Data.Default (Default(def))
 import Data.List (intercalate, isSuffixOf)
-import Data.Monoid ((<>))
+import Data.Maybe (catMaybes)
+--import Data.Monoid ((<>))
 import HashDefine (HashDefine(..), parseHashDefine)
 import Language.Haskell.Exts (Comment, impliesExts, KnownExtension(CPP), Module, ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
 import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
 import Language.Preprocessor.Cpphs (BoolOptions(hashline, locations, stripC89, stripEol), CpphsOptions(boolopts, defines), runCpphs)
 import qualified Language.Preprocessor.Cpphs as Orig (defaultCpphsOptions)
 import Language.Preprocessor.Unlit (unlit)
-import System.Console.GetOpt
-import Utils (EZPrint(ezPrint), groupOn)
+import Options.Applicative
+--import System.Console.GetOpt
+import Utils (EZPrint(ezPrint))
 
 parseFileWithCommentsAndCPP ::  CpphsOptions -> ParseMode -> FilePath
                       -> IO (ParseResult (Module SrcSpanInfo, [Comment], String))
@@ -64,10 +66,10 @@ updateExtensions p modname =
        }
 
 cpp :: CpphsOptions -> ParseMode -> String -> IO String
-cpp cppopts p str
+cpp cppopts p s
   | CPP `elem` impliesExts (toExtensionList (baseLanguage p) (extensions p))
-  = runCpphs cppopts (parseFilename p) str
-  | otherwise = return str
+  = runCpphs cppopts (parseFilename p) s
+  | otherwise = return s
 
 delit :: String -> String -> String
 delit fn = if ".lhs" `isSuffixOf` fn then unlit fn else id
@@ -166,8 +168,26 @@ ppExtension :: Extension -> [String]
 ppExtension (EnableExtension x) = ["-X" <> show x]
 ppExtension _ = []
 
-ghcOptsOptions :: [OptDescr (GHCOpts -> GHCOpts)]
+
+ghcOptsOptions :: Parser GHCOpts
 ghcOptsOptions =
+    GHCOpts <$> pure "ghc" <*> sds <*> pure defaultCpphsOptions <*> pure [] <*> hds <*> pure []
+    where
+      sds :: Parser [FilePath]
+      sds = many (strOption (short 'i' <> metavar "DIR" <> help "Add a top directory, as in cabal's hs-source-dirs"))
+      hds :: Parser [HashDefine]
+      hds = (++) <$> ((catMaybes . map (parseHashDefine False . prepareDefine)) <$> many (strOption (short 'D' <> help "Add a #define to the compiler options")))
+                 <*> ((catMaybes . map (parseHashDefine False . (\s -> ["undef", s]))) <$> many (strOption (short 'U' <> help "Add a #undef to the compiler options")))
+
+      prepareDefine :: String -> [String]
+      prepareDefine s = "define" : case break (== '=') s of
+                                     (_, "") -> [s]
+                                     (name, '=' : val) -> [name, val]
+                                     _ -> error "ghcOptsOptions"
+
+{-
+ghcOptsOptions' :: [OptDescr (GHCOpts -> GHCOpts)]
+ghcOptsOptions' =
     [ Option "i" ["hs-source-dir"] (ReqArg (\s -> over hsSourceDirs ((groupOn (== ':') s) <>)) "DIR")
              "Add a directory to the haskell source path"
     , Option "D" [] (ReqArg (\s -> let Just x = parseHashDefine False
@@ -181,3 +201,4 @@ ghcOptsOptions =
     , Option "U" [] (ReqArg (\s -> let Just x = parseHashDefine False ["undef", s] in
                                    over hashDefines (x :)) "NAME")
              "Add a #define to the compiler options" ]
+-}
