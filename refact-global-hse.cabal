@@ -10,6 +10,7 @@ Cabal-Version: >= 1.9
 Build-Type: Simple
 
 Library
+  Hs-Source-Dirs: src
   Build-Depends:
     base,
     containers,

@@ -275,7 +275,7 @@ simple3 =
         runMoveUnsafe "tests/input/simple3" opts0 (moveDeclsByName "MoveType" "C" "D" :: MoveSpec)
 
 opts0 :: GHCOpts
-opts0 = set hsSourceDirs ["."] $ set ghcOptions ["-hide-package", "haskell-src-exts-1ast"] $ def
+opts0 = set hsSourceDirs ["src"] def
 
 -- Perform the same move with these CPP flag combinations:
 --
