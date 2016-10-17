@@ -26,7 +26,7 @@ withInfo :: Parser a -> String -> ParserInfo a
 withInfo opts desc = info (helper <*> opts) $ progDesc desc
 
 main :: IO ()
-main = execParser (Main.options `withInfo` "One of: refactor clean --help, refactor move --help, refactor decorate --help") >>= go
+main = execParser (Main.options `withInfo` "Global refactoring tools") >>= go
     where
       go (CleanImports p) = CleanImports.go p
       go (MoveDecls p) = MoveDecls.go p
