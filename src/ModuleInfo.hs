@@ -28,7 +28,7 @@ data ModuleInfo l =
                , _moduleText :: String
                , _moduleSpan :: SrcSpanInfo
                , _moduleGlobals :: Global.Table
-               } deriving (Data, Typeable, Functor)
+               } deriving (Data, Typeable, Functor, Show)
 
 instance EZPrint (ModuleInfo l) where
     ezPrint (ModuleInfo {_module = Module _ (Just (ModuleHead _ n _ _)) _ _ _}) = prettyPrint n

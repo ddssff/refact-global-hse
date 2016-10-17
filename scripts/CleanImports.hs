@@ -37,11 +37,11 @@ options =
     Params <$> g <*> f <*> m <*> u
     where
       g :: Parser GHCOpts
-      g = ghcOptsOptions -- many (strOption (long "top" <> metavar "DIR" <> help "Add a top directory, like the cabal hs-source-dirs option")) <*> pure def
+      g = ghcOptsOptions
       f :: Parser [FilePath]
-      f = many (strOption (long "find" <> metavar "DIR" <> help "Add modules found (non-recursively) in a directory"))
+      f = many (strOption (long "find" <> metavar "DIR" <> help "Add modules found (non-recursively) in a directory to be cleaned"))
       m :: Parser [FilePath]
-      m = many (strOption (long "mod" <> metavar "PATH" <> help "Add a module to the moduverse"))
+      m = many (strOption (long "mod" <> metavar "PATH" <> help "Add a module to the moduverse."))
       u :: Parser Bool
       u = switch (long "unsafe" <> help "Skip the safety check - allow uncommitted edits in repo where clean is performed")
 
