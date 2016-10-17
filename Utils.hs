@@ -18,9 +18,9 @@ import Data.List (groupBy, intercalate, stripPrefix)
 import Data.Maybe (mapMaybe)
 import Data.Sequence ((|>), Seq)
 import qualified Data.Set as Set
-import "haskell-src-exts-1ast" Language.Haskell.Exts.Pretty
-import "haskell-src-exts-1ast" Language.Haskell.Exts.Syntax
-import "haskell-src-exts-1ast" Language.Haskell.Exts.SrcLoc
+import Language.Haskell.Exts.Pretty
+import Language.Haskell.Exts.Syntax
+import Language.Haskell.Exts.SrcLoc
 import System.Directory (createDirectoryIfMissing, doesFileExist, getCurrentDirectory, removeDirectoryRecursive, removeFile, renameFile, setCurrentDirectory)
 import System.Exit (ExitCode(..))
 import System.FilePath (takeDirectory)

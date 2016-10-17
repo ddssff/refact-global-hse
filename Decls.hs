@@ -15,14 +15,14 @@ import Data.Maybe (catMaybes, listToMaybe, mapMaybe, maybeToList)
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, toList)
 import Debug.Trace (trace)
 import Graph (findModuleByKey, findModuleByKeyUnsafe, makeImportGraph, moveType, MoveType(Down, Up), Rd(Rd))
-import "haskell-src-exts-1ast" Language.Haskell.Exts.Syntax (Annotated(ann), Decl(TypeSig), EWildcard(..), ExportSpec, ExportSpecList(ExportSpecList),
+import Language.Haskell.Exts.Syntax (Annotated(ann), Decl(TypeSig), EWildcard(..), ExportSpec, ExportSpecList(ExportSpecList),
                                                              ImportDecl(..), ImportSpec, ImportSpecList(ImportSpecList), Module(Module),
                                                              ModuleHead(ModuleHead), ModuleName(..), ModulePragma, Name, ExportSpec(..),
                                                              ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..),
                                                              ModulePragma(..), Name(..), QName(Qual, Special, UnQual))
 -- import Language.Haskell.Exts.Annotated.Simplify (sExportSpec, sModuleName, sModulePragma, sName)
-import "haskell-src-exts-1ast" Language.Haskell.Exts.Pretty (prettyPrint)
-import "haskell-src-exts-1ast" Language.Haskell.Exts.SrcLoc (SrcInfo, SrcLoc(..), SrcSpanInfo(..))
+import Language.Haskell.Exts.Pretty (prettyPrint)
+import Language.Haskell.Exts.SrcLoc (SrcInfo, SrcLoc(..), SrcSpanInfo(..))
 import Language.Haskell.Names (resolve, Symbol(symbolName))
 import Language.Haskell.Names.SyntaxUtils (dropAnn, getImports, getModuleDecls)
 import LoadModule (Annot, loadModule, loadModules)

@@ -54,9 +54,9 @@ import Control.Monad.State (get, put, runState, State)
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd)
 import Data.Monoid ((<>))
-import "haskell-src-exts-1ast" Language.Haskell.Exts.Syntax -- (Annotated(ann), Module(..))
-import "haskell-src-exts-1ast" Language.Haskell.Exts.Comments (Comment(..))
-import "haskell-src-exts-1ast" Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcInfo(..), SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
+import Language.Haskell.Exts.Syntax -- (Annotated(ann), Module(..))
+import Language.Haskell.Exts.Comments (Comment(..))
+import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcInfo(..), SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import Language.Haskell.Names
 import ModuleInfo
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)

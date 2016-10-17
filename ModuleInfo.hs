@@ -8,10 +8,10 @@ module ModuleInfo
     ) where
 
 import Data.Generics (Data, Typeable)
-import "haskell-src-exts-1ast" Language.Haskell.Exts.Comments (Comment(..))
-import "haskell-src-exts-1ast" Language.Haskell.Exts.Pretty (prettyPrint)
-import "haskell-src-exts-1ast" Language.Haskell.Exts.SrcLoc
-import "haskell-src-exts-1ast" Language.Haskell.Exts.Syntax -- (Decl(TypeSig), Module(Module), ModuleHead(ModuleHead), Name)
+import Language.Haskell.Exts.Comments (Comment(..))
+import Language.Haskell.Exts.Pretty (prettyPrint)
+import Language.Haskell.Exts.SrcLoc
+import Language.Haskell.Exts.Syntax -- (Decl(TypeSig), Module(Module), ModuleHead(ModuleHead), Name)
 import Language.Haskell.Names (Symbol(Value))
 import Language.Haskell.Names.GetBound (getBound)
 import Language.Haskell.Names.GlobalSymbolTable as Global (Table)
