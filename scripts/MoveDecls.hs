@@ -44,6 +44,7 @@ data Params
              , _moduverse :: [FilePath]
              , _unsafe :: Bool
              , _gitReset :: Bool }
+      deriving Show
 
 $(makeLenses ''Params)
 

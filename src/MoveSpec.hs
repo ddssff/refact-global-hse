@@ -31,6 +31,9 @@ import Utils (gFind)
 -- departure module key and a declaration, return an arrival module key.
 newtype MoveSpec = MoveSpec (ModuleInfo () -> Decl () -> ModuleKey)
 
+instance Show MoveSpec where
+    show _ = "<MoveSpec>"
+
 instance Monoid MoveSpec where
     mempty = MoveSpec $ \i _ -> _moduleKey i
     mappend (MoveSpec f) (MoveSpec g) = MoveSpec $

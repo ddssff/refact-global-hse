@@ -50,21 +50,20 @@ params0 = Params {_ghcOpts = def, _findDirs = [], _moduverse = [], _unsafe = Fal
 
 finalParams :: Params -> IO Params
 finalParams params = do
-  params' <- mapM canonicalizePath (view (ghcOpts . hsSourceDirs) params) >>= \topDirs' -> return $ set (ghcOpts . hsSourceDirs) topDirs' params
-  mapM canonicalizePath (view findDirs params') >>= \topDirs' -> return $ set findDirs topDirs' params'
+  mapM canonicalizePath (view findDirs params) >>= \topDirs' -> return $ set findDirs topDirs' params
 
   -- The elements of moduverse are paths relative to ".",
   -- now figure out which top they are 
   -- we want t
-  findModules <- concat <$> mapM (\dir -> find (depth ==? 0) (extension ==? ".hs" &&? fileType ==? RegularFile) dir) (view findDirs params')
+  findModules <- concat <$> mapM (\dir -> find (depth ==? 0) (extension ==? ".hs" &&? fileType ==? RegularFile) dir) (view findDirs params)
   findModules' <- mapM canonicalizePath findModules
   relModules <- mapM (\path -> do
-                        let relpaths = filter (/= path) (map (\top -> makeRelative top path) (view (ghcOpts . hsSourceDirs) params'))
+                        let relpaths = filter (/= path) (map (\top -> makeRelative top path) (view (ghcOpts . hsSourceDirs) params))
                         case relpaths of
                           [] -> error $ "Module not found: " ++ path
                           [x] -> pure x
                           xs -> error $ "Multiple modules found: " ++ show xs) findModules'
-  pure (over moduverse (++ relModules) params')
+  pure (over moduverse (++ relModules) params)
 {-
     where
       -- Search the findDir directories for paths and add them to moduverse.

@@ -7,6 +7,7 @@ data Action
     = CleanImports CleanImports.Params
     | MoveDecls MoveDecls.Params
     | Decorate Decorate.Params
+    deriving Show
 
 options :: Parser Action
 options =
