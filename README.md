@@ -26,28 +26,14 @@
  * Figure out what exports are created by a template haskell splice (and move them)
  * Update your .cabal file when modules appear or disappear
 
-# Requirements
-
- The only requirement currently not in hackage is filemanip >= 0.3.6.4,
- you may get it from https://github.com/ddssff/filemanip.  It fixes a
- bug where the find function doesn't notice working directory changes.
-
 # How To
 
- 1. There are scripts to do simple import cleaning and declaration moving:
+The refactor tool has sub-commands to do import cleaning, declaration
+moving, and source code decoration:
 
-        $ runhaskell scripts/CleanImports.hs --top=/path/to/somerepo --find=Foo
-        $ runhaskell scripts/MoveDecls.hs --help
-
- (Does not handle instances.)
-
- 2. Use the interpreter.  Best examples are in the test suite.  Make sure
-    your file permissions are set up so you can read the .ghci script:
-
-        $ chmod g-w . .ghci
-        $ ghci
-        λ runSimpleMove "/path/to/somerepo" (moveDeclsByName "funcname1" "Foo.OldMod" "Foo.NewMod" <>
-                                             moveDeclsByName "funcname2" "Foo.OldMod" "Foo.NewMod")
+  refactor clean --cd /path/to/somerepo --find=Foo
+  refactor move --cd /path/to/somerepo --decl funcname1,Foo.OldMod,Foo.NewMod \\
+     --decl funcname2,Foo.OldMod,Foo.NewMod
 
 # About reformatted import lists
 
@@ -62,14 +48,27 @@ insert a new one.  If you need a symbol that isn't imported and know what
 module it is in, just delete the symbol list and start using the symbol.
 The tool will find it for you the next time it runs.
 
-# Answers to unasked questions
+# Reasons why refactor move might fail
 
-  1. EMPTY IMPORT LISTS - when an import list becomes empty it is not
+  1. It created a circular import.  If you move a symbol s from module
+     A to module B, but
+
+       (1) declarations in A still reference s, and
+       (2) s references symbols still in A,
+
+     then the resulting circular imports will cause the compile to
+     fail.  You must pull all the symbols that use s over to B.
+     Sometimes you can avoid this problem with circular imports by
+     moving a declaration in two steps, first to a temporary module
+     and then to where you actually wanted it.  (Note to self - is
+     this still true?  Why?)
+
+  2. Two different symbols with the same name may be pulled together by
+     a move, and this will (as of right now) cause a compiler error.
+
+  3. EMPTY IMPORT LISTS - when an import list becomes empty it is not
      necessarily safe to remove it - it may be importing necessary
      instances.  So at present it doesn't.
-
-  2. Sometimes you can avoid circular imports by moving a declaration to
-     a temporary module and then to where you actually wanted it.
 
 # To Do
 
@@ -80,3 +79,4 @@ The tool will find it for you the next time it runs.
      that decl.
   8. Finish the HasSymbols and HasCNames instances in Symbols.hs.  Retire FoldDeclared.
   9. Port from haskell-src-exts to ghc-exactprint.
+ 10. Add qualifiers to symbols when they need to be disambiguated after a move.
