@@ -68,7 +68,6 @@ readOptions args = do
 -}
 
 go params = do
-  putStrLn (show params)
   ms <- withCurrentDirectory (view topDir params) $ mapM (loadModule (view ghcOpts params)) (view paths params)
   mapM_ (\m -> putStrLn (scanModule (f m) m)) ms
     where
@@ -80,11 +79,15 @@ go params = do
          mapM_ (decorate "d" . ann) ds
       decorate s x = do
          cs <- use comments
-         mapM_ (\(Comment _ sp _) -> keep (srcLoc sp) >> tell "[c|" >> keep (endLoc sp) >> tell "|]") (takeWhile (\(Comment _ sp _) -> srcLoc sp < srcLoc x) cs)
-         keep (srcLoc x)
+         mapM_ (\(Comment _ sp _) -> tell "[w|" >> keep (srcLoc sp) >> tell "|]" >>
+                                     tell "[c|" >> keep (endLoc sp) >> tell "|]")
+               (takeWhile (\(Comment _ sp _) -> srcLoc sp < srcLoc x) cs)
+         tell "[w|" >> keep (srcLoc x) >> tell "|]"
          tell ("[" ++ s ++ "|")
          cs <- use comments
-         mapM_ (\(Comment _ sp _) -> keep (srcLoc sp) >> tell "[c|" >> keep (endLoc sp) >> tell "|]") (takeWhile (\(Comment _ sp _) -> srcLoc sp < endLoc x) cs)
+         mapM_ (\(Comment _ sp _) -> keep (srcLoc sp) >>
+                                     tell "[c|" >> keep (endLoc sp) >> tell "|]")
+               (takeWhile (\(Comment _ sp _) -> srcLoc sp < endLoc x) cs)
          -- mapM_ (keep . srcLoc) (srcInfoPoints $ ann x)
          keep (endLoc x)
          tell "|]"

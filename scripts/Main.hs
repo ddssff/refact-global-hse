@@ -14,7 +14,7 @@ options =
     subparser $
       (command "clean" (clean `withInfo` "Clean the import lists of one or more modules")) <>
       (command "move" (move `withInfo` "Move declarations between modules")) <>
-      (command "decorate" (decorate `withInfo` "Illustrate the parse result of a source module"))
+      (command "decorate" (decorate `withInfo` "Print a source module with boundries of header, imports, declarations, comments and whitespace marked."))
     where
       -- clean :: ParserInfo Action
       clean = CleanImports <$> CleanImports.options
