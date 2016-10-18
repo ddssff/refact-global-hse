@@ -68,7 +68,7 @@ executable refactor
     syb,
     utility-ht
 
-Test-Suite refact-global-hse-tests
+Test-Suite refactor-tests
   Type: exitcode-stdio-1.0
   Hs-Source-Dirs: tests
   Main-Is: Tests.hs
