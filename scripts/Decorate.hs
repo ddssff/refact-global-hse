@@ -1,5 +1,3 @@
-#!/usr/bin/runhaskell
-
 {-# LANGUAGE FlexibleContexts, TemplateHaskell #-}
 
 module Decorate
