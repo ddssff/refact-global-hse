@@ -53,7 +53,7 @@ options =
     Params
     <$> ms
     <*> cd
-    <*> go
+    <*> gco
     <*> lds
     <*> fds
     <*> mverse
@@ -70,13 +70,14 @@ options =
               ss = mconcat <$> many ((moveSpliceDecls . uncurry3 splicePred) <$> option (maybeReader splitTriple) (long "splice" <> metavar "SYMBOL,DEPARTMOD,ARRIVEMOD" <> help "Move all splices that reference a symbol")) in
           (<>) <$> ds <*> ((<>) <$> is <*> ss)
       cd = strOption (value "." <> long "cd" <> metavar "DIR" <> help "Set the process working directory")
-      go = ghcOptsOptions
+      gco = ghcOptsOptions
       lds = many (strOption (long "ls"<> metavar "DIR" <> help "Directory relative to top to search (non-recursively) for .hs files to add to the moduverse"))
       fds = many (strOption (long "find" <> metavar "DIR" <> help "Directory relative to top to search (recursively) for .hs files to add to the moduverse"))
       mverse = many (strOption (long "mod" <> metavar "PATH" <> help "Add a module to the moduverse"))
       us = switch (long "unsafe" <> help "Skip the safety check - allow uncommitted edits in repo where clean is performed")
       gr = switch (long "reset" <> help "Do a hard reset and git clean on the working directory (requires --unsafe)")
 
+#if 0
 params0 :: Params
 params0 = Params {_moveSpec = mempty, _gitReset = False,_cd = ".", _ghcOpts = def, _findDirs = [], _lsDirs = [], _moduverse = [], _unsafe = False}
 
@@ -102,38 +103,41 @@ options' =
     , Option "" ["unsafe"] (NoArg (set unsafe True)) "Skip the safety check - allow uncommitted edits in repo where clean is performed"
     , Option "" ["reset"] (NoArg (set gitReset True)) "Do a hard reset and git clean on the working directory (requires --unsafe)" ]
 
-splitTriple :: String -> Maybe (String, String, String)
-splitTriple s =
-    case filter (not . elem ',') (groupBy (\a b -> (a == ',') == (b == ',')) s) of
-      [a,b,c] -> Just (a, b, c)
-      _ -> Nothing
-
 buildParams :: [String] -> IO Params
 buildParams args = do
   case getOpt' Permute options' args of
     (fns, [], [], []) -> finalize (foldr ($) params0 fns)
     (x, y, z, w) -> error (usageInfo ("error: " ++ show (y, z, w) ++ "\nspecify modules and at least one move spec") (options' :: [OptDescr (Params -> Params)]))
     where
-      -- Search the findDir directories for paths and add them to moduverse.
-      finalize :: Params -> IO Params
-      finalize params = withCurrentDirectory (_cd params) $ do
-        paths1 <- mapM (\dir -> {-map (makeRelative (view topDir params))
-                                            <$>-} (find (depth ==? 0)
-                                                        (extension ==? ".hs" &&? fileType ==? RegularFile)
-                                                        ({-view topDir params </>-} dir)))
-                       (_lsDirs params)
-        paths2 <- mapM (\dir -> {-map (makeRelative (view topDir params))
-                                            <$>-} (find (depth ==? 0)
-                                                        (extension ==? ".hs" &&? fileType ==? RegularFile)
-                                                        ({-view topDir params </>-} dir)))
-                       (_findDirs params)
-        pure $ over moduverse (++ (concat (paths1 ++ paths2))) params
+#endif
+
+-- Search the findDir directories for paths and add them to moduverse.
+finalize :: Params -> IO Params
+finalize params = withCurrentDirectory (_cd params) $ do
+  paths1 <- mapM (\dir -> {-map (makeRelative (view topDir params))
+                                      <$>-} (find (depth ==? 0)
+                                                  (extension ==? ".hs" &&? fileType ==? RegularFile)
+                                                  ({-view topDir params </>-} dir)))
+                 (_lsDirs params)
+  paths2 <- mapM (\dir -> {-map (makeRelative (view topDir params))
+                                      <$>-} (find (depth ==? 0)
+                                                  (extension ==? ".hs" &&? fileType ==? RegularFile)
+                                                  ({-view topDir params </>-} dir)))
+                 (_findDirs params)
+  pure $ over moduverse (++ (concat (paths1 ++ paths2))) params
 
 go :: Params -> IO ()
-go params = do
+go params' = do
+  params <- finalize params'
   withCurrentDirectory (_cd params) $ maybeReset params $ do
     modules <- loadModules def (view moduverse params)
     moveDeclsAndClean (view moveSpec params) (view ghcOpts params) modules
     where
       maybeReset :: Params -> IO () -> IO ()
       maybeReset params = if _unsafe params then (if _gitReset params then (\action -> gitResetSubdir "." >> action)  else id) else withCleanRepo
+
+splitTriple :: String -> Maybe (String, String, String)
+splitTriple s =
+    case filter (not . elem ',') (groupBy (\a b -> (a == ',') == (b == ',')) s) of
+      [a,b,c] -> Just (a, b, c)
+      _ -> Nothing
