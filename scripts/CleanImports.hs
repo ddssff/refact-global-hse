@@ -52,9 +52,6 @@ finalParams :: Params -> IO Params
 finalParams params = do
   mapM canonicalizePath (view findDirs params) >>= \topDirs' -> return $ set findDirs topDirs' params
 
-  -- The elements of moduverse are paths relative to ".",
-  -- now figure out which top they are 
-  -- we want t
   findModules <- concat <$> mapM (\dir -> find (depth ==? 0) (extension ==? ".hs" &&? fileType ==? RegularFile) dir) (view findDirs params)
   findModules' <- mapM canonicalizePath findModules
   relModules <- mapM (\path -> do
@@ -64,26 +61,6 @@ finalParams params = do
                           [x] -> pure x
                           xs -> error $ "Multiple modules found: " ++ show xs) findModules'
   pure (over moduverse (++ relModules) params)
-{-
-    where
-      -- Search the findDir directories for paths and add them to moduverse.
-      finalize :: Params -> IO Params
-      finalize params = do
-        -- Find all the module paths
-        let paths1 = view moduverse params
-        paths2 <- mapM (\dir -> mapM (find (depth ==? 0) (extension ==? ".hs" &&? fileType ==? RegularFile) dir)) (view findDirs params) >>= mapM moduleRelPath . concat
-        pure (paths1 ++ paths2)
-      findModule :: FilePath -> IO FilePath
-      findModule relpath = mapM (\top -> doesFileExist (top </> relpath) >>= bool Nothing (Just relpath
-
-        paths <- concat <$> mapM (\dir ->
-                                      map (makeRelative (view topDirs params </> dir))
-                                              <$> (find (depth ==? 0)
-                                                        (extension ==? ".hs" &&? fileType ==? RegularFile)
-                                                        (view topDirs params </> dir)))
-                                 (_findDirs params)
-        pure $ over moduverse (++ paths) params
--}
 
 go params0 = do
   params <- finalParams params0

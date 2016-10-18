@@ -46,7 +46,7 @@ options =
     Params <$> t <*> p <*> g
     where
       t :: Parser FilePath
-      t = strOption (long "cd" <> metavar "DIR" <> help "Set working directory")
+      t = strOption (value "." <> long "cd" <> metavar "DIR" <> help "Set working directory")
       p :: Parser [FilePath]
       p = some (argument str (metavar "PATH"))
       g :: Parser GHCOpts
@@ -54,18 +54,6 @@ options =
 
 params0 :: Params
 params0 = Params {_topDir = ".", _paths = [], _ghcOpts = def}
-
-{-
-options' =
-    [ Option "" ["cd"] (ReqArg (set topDir) "DIR") "Set current directory" ] ++
-    map (fmap (over ghcOpts)) ghcOptsOptions
-
-readOptions :: [String] -> Params
-readOptions args = do
-  case getOpt' Permute options' args of
-    (fns, ps, [], []) -> set paths ps $ foldr ($) params0 fns
-    _ -> error (usageInfo "specify modules and at least one move spec" options')
--}
 
 go params = do
   ms <- withCurrentDirectory (view topDir params) $ mapM (loadModule (view ghcOpts params)) (view paths params)

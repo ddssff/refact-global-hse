@@ -21,7 +21,7 @@ import Decls (moveDeclsAndClean)
 import MoveSpec (instClassPred, splicePred)
 import LoadModule (loadModules)
 import MoveSpec (moveDeclsByName, moveInstDecls, moveSpliceDecls, MoveSpec, traceMoveSpec)
-import Options.Applicative (eitherReader, help, long, many, metavar, option, Parser, ReadM, strOption, switch)
+import Options.Applicative (eitherReader, help, long, many, metavar, option, Parser, ReadM, strOption, switch, value)
 import System.Console.GetOpt (ArgDescr(NoArg, ReqArg), ArgOrder(Permute), getOpt', OptDescr(..), usageInfo)
 import System.Environment (getArgs)
 import System.FilePath ((</>), makeRelative)
@@ -69,7 +69,7 @@ options =
               ss :: Parser MoveSpec
               ss = mconcat <$> many ((moveSpliceDecls . uncurry3 splicePred) <$> option (maybeReader splitTriple) (long "splice" <> metavar "SYMBOL,DEPARTMOD,ARRIVEMOD" <> help "Move all splices that reference a symbol")) in
           (<>) <$> ds <*> ((<>) <$> is <*> ss)
-      cd = strOption (long "cd" <> metavar "DIR" <> help "Set the process working directory")
+      cd = strOption (value "." <> long "cd" <> metavar "DIR" <> help "Set the process working directory")
       go = ghcOptsOptions
       lds = many (strOption (long "ls"<> metavar "DIR" <> help "Directory relative to top to search (non-recursively) for .hs files to add to the moduverse"))
       fds = many (strOption (long "find" <> metavar "DIR" <> help "Directory relative to top to search (recursively) for .hs files to add to the moduverse"))
