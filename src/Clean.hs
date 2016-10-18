@@ -34,7 +34,6 @@ import Utils (ezPrint, prettyPrint', replaceFile, SetLike(intersection, differen
 cleanImports :: [GHCOpts] -> [ModuleInfo SrcSpanInfo] -> IO ()
 cleanImports _ [] = trace ("cleanImports - no modules") (pure ())
 cleanImports optSets mods = do
-  hPutStrLn stderr ("cleanImports " ++ show optSets ++ " " ++ show mods)
   imodSets <- mapM (doOpts mods) optSets :: IO [[(GHCOpts, [ImportDecl ()])]]
   mapM_ (uncurry doModule) (zip mods (transpose imodSets))
 
