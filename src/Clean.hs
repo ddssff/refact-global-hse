@@ -13,7 +13,7 @@ import Control.Monad (void)
 import Control.Monad.RWS (MonadWriter(tell))
 import Data.List (find, foldl1', transpose)
 import Data.Monoid ((<>))
-import Data.Set as Set (empty, member, Set, singleton, union, unions)
+import Data.Set as Set (empty, member, Set, singleton, unions)
 import Debug.Trace (trace)
 import Imports (mergeDecls)
 import Language.Haskell.Exts.Syntax (Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs),
@@ -28,7 +28,7 @@ import SrcLoc (EndLoc, endOfHeader, {-endOfImports,-} keep, keepAll, scanModule,
 import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcess)
-import Utils (ezPrint, prettyPrint', replaceFile, SetLike(intersection, difference), withTempDirectory)
+import Utils (ezPrint, prettyPrint', replaceFile, SetLike(intersection, difference, union), withTempDirectory)
 
 -- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
 cleanImports :: [GHCOpts] -> [ModuleInfo SrcSpanInfo] -> IO ()
