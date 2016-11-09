@@ -57,7 +57,7 @@ import Data.Monoid ((<>))
 import Language.Haskell.Exts.Syntax -- (Annotated(ann), Module(..))
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcInfo(..), SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
-import Language.Haskell.Names
+import Language.Haskell.Names hiding (PatSyn)
 import ModuleInfo
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)
 import Utils (EZPrint(ezPrint), lines')
@@ -411,12 +411,15 @@ void :: Monad m => m ()
 void = pure ()
 
 -- | Modify end locations so they precede any trailing whitespace
-mapTopAnnotations :: (a -> a) -> Module a -> Module a
+mapTopAnnotations :: forall a. (a -> a) -> Module a -> Module a
 mapTopAnnotations fn (Module loc mh ps is ds) =
     Module loc (fmap fixMH mh) ps (map fixImport is) (map fixDecl ds)
     where
+      fixMH :: ModuleHead a -> ModuleHead a
       fixMH (ModuleHead sp name warn specs) = ModuleHead (fn sp) name warn specs
+      fixImport :: ImportDecl a -> ImportDecl a
       fixImport i = i {importAnn = fn (importAnn i)}
+      fixDecl :: Decl a -> Decl a
       fixDecl (TypeDecl l a b) = (TypeDecl (fn l) a b)
       fixDecl (TypeFamDecl l a b c) = (TypeFamDecl (fn l) a b c)
       fixDecl (ClosedTypeFamDecl l a b c d) = (ClosedTypeFamDecl (fn l) a b c d)

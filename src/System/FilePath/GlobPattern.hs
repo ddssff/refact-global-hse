@@ -56,7 +56,7 @@ spanClass c = gs []
                                      _ -> error "unterminated escape"
                         | otherwise = gs (d:acc) ds
 
-data Ix a => SRange a = SRange [a] [(a, a)]
+data {-Ix a =>-} SRange a = SRange [a] [(a, a)]
                       deriving (Show)
 
 inSRange :: Ix a => a -> SRange a -> Bool
