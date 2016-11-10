@@ -15,7 +15,7 @@ import Language.Haskell.Names.ModuleSymbols (moduleTable)
 import Language.Haskell.Names.Imports (importTable)
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(..))
-import SrcLoc (debugRender)
+import ScanM (debugRender)
 import System.Exit (ExitCode(..), exitWith)
 import Test.HUnit (assertEqual, errors, failures, runTestTT, Test(TestCase, TestList))
 import Utils

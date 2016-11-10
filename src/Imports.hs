@@ -132,17 +132,15 @@ mergeDecls = map mergeDecls' . setify importMergable
       -- mergeSpecs _ y@(IAbs _ s n) = y
       mergeSpecs x@(IThingAll _ _) _ = x
       mergeSpecs _ y@(IThingAll _ _) = y
-      mergeSpecs x@(IThingWith l n ns) (IThingWith _ _ ms) = IThingWith l n (nub (ns ++ ms))
+      mergeSpecs (IThingWith l n ns) (IThingWith _ _ ms) = IThingWith l n (nub (ns ++ ms))
       -- mergeSpecs x@(IThingWith l n ns) (IAbs _ s _) = error "mergeSpecs: IThingWith + IAbs"
-      mergeSpecs x@(IThingWith l n ns) _ = x
+      mergeSpecs x@(IThingWith _l _n _ns) _ = x
       mergeSpecs x _ = x
 
       specSym (IVar _ n) = n
       specSym (IAbs _ _ n) = n -- Is this right?
       specSym (IThingAll _ n) = n
       specSym (IThingWith _ n _) = n
-
-mergeSpecs xs = xs
 
 -- | Compare the two import declarations ignoring the things that are
 -- actually being imported.  Equality here indicates that the two

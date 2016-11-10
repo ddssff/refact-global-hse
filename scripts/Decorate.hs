@@ -21,6 +21,7 @@ import Language.Haskell.Exts.SrcLoc
 import LoadModule (loadModule)
 import ModuleInfo
 import Options.Applicative
+import ScanM (ScanM, scanModule, comments, keep)
 import SrcLoc
 import System.Console.GetOpt
 import System.Environment (getArgs)

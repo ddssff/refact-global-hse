@@ -24,19 +24,21 @@ import Language.Haskell.Names.SyntaxUtils (dropAnn, getImports, getModuleDecls)
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath)
-import SrcLoc (EndLoc, endOfHeader, {-endOfImports,-} keep, keepAll, scanModule, skip, startOfDecls, {-startOfImports,-} withTrailingWhitespace)
+import ScanM (keep, keepAll, scanModule)
+import SrcLoc (EndLoc, endOfHeader)
 import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcess)
 import Utils (ezPrint, prettyPrint', replaceFile, SetLike(intersection, difference, union), withTempDirectory)
 
--- | Run ghc with -ddump-minimal-imports and capture the resulting .imports file.
+-- | Replace the original imports with cleaned imports produced by ghc
 cleanImports :: [GHCOpts] -> [ModuleInfo SrcSpanInfo] -> IO ()
 cleanImports _ [] = trace ("cleanImports - no modules") (pure ())
 cleanImports optSets mods = do
   imodSets <- mapM (doOpts mods) optSets :: IO [[(GHCOpts, [ImportDecl ()])]]
   mapM_ (uncurry doModule) (zip mods (transpose imodSets))
 
+-- | Run ghc on the input files with the -ddump-minimal imports flag
 doOpts :: [ModuleInfo SrcSpanInfo] -> GHCOpts -> IO [(GHCOpts, [ImportDecl ()])]
 doOpts mods opts =
     withTempDirectory True "." "scratch" $ \scratch -> do
@@ -47,6 +49,8 @@ doOpts mods opts =
          _out <- readProcess (view hc opts) args' ""
          map (opts,) <$> mapM (newImports opts scratch) mods
 
+-- | Insert the cleaned and parsed imports into the parsed module,
+-- rewrite files as necessary
 doModule :: ModuleInfo SrcSpanInfo -> [(GHCOpts, [ImportDecl ()])] -> IO ()
 doModule m pairs =
     do let newText = newModuleText m pairs

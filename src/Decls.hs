@@ -37,7 +37,9 @@ import ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
 import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
 import MoveSpec (applyMoveSpec, MoveSpec)
 import Names (topDeclExportSpec)
-import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, endOfImportSpecs, endOfModule, keep, keepAll, ScanM, scanModule, skip, srcLoc, startOfDecls, startOfImports, withTrailingWhitespace)
+import ScanM (keep, keepAll, ScanM, scanModule, skip, withTrailingWhitespace)
+import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, endOfImportSpecs, endOfModule,
+               srcLoc, startOfDecls, startOfImports)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
 import Utils (EZPrint(ezPrint), gFind, prettyPrint', replaceFile, withCleanRepo, withCurrentDirectory)
 

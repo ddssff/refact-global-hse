@@ -46,6 +46,7 @@ Library
     ModuleInfo
     MoveSpec
     Names
+    ScanM
     SrcLoc
     Utils
   GHC-options: -Wall -O2
