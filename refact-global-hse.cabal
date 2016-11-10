@@ -25,6 +25,7 @@ Library
     filepath,
     haskell-names,
     haskell-src-exts >= 1.18,
+    HUnit,
     lens,
     lifted-base,
     monad-control,

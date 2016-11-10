@@ -14,6 +14,8 @@ module CPP
   , cppEndif
   , extensionsForHSEParser
   , ghcOptsOptions
+  , cabalMacro
+  , tests
   ) where
 
 import Control.Lens (makeLenses, view)
@@ -22,6 +24,7 @@ import Data.Default (Default(def))
 import Data.List (intercalate, isSuffixOf)
 import Data.Maybe (catMaybes)
 import Data.Monoid ((<>))
+import Data.Version(Version(Version))
 import HashDefine (HashDefine(..), parseHashDefine)
 import Language.Haskell.Exts (Comment, impliesExts, KnownExtension(CPP), Module, ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
 import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
@@ -29,7 +32,7 @@ import Language.Preprocessor.Cpphs (BoolOptions(hashline, locations, stripC89, s
 import qualified Language.Preprocessor.Cpphs as Orig (defaultCpphsOptions)
 import Language.Preprocessor.Unlit (unlit)
 import Options.Applicative
---import System.Console.GetOpt
+import Test.HUnit
 import Utils (EZPrint(ezPrint))
 
 parseFileWithCommentsAndCPP ::  CpphsOptions -> ParseMode -> FilePath
@@ -202,3 +205,27 @@ ghcOptsOptions' =
                                    over hashDefines (x :)) "NAME")
              "Add a #define to the compiler options" ]
 -}
+
+tests = TestList [test1]
+
+test1 = TestCase (assertEqual "test1" expected actual)
+    where
+      expected = Just (SymbolReplacement { name = "MIN_VERSION_base(major1,major2,minor)"
+                                         , replacement = " (  (major1) <  4 ||   (major1) = 4 && (major2) <  8 ||   (major1) == 4 && (major2) == 8 && (minor) <= 2)"
+                                         , linebreaks = 4})
+      -- This doesn't work.  Use cabalMacro for now.
+      actual = parseHashDefine True ["define", s]
+      s = "#define MIN_VERSION_base(major1,major2,minor) (\\\n" <>
+          "  (major1) <  4 || \\\n" <>
+          "  (major1) == 4 && (major2) <  8 || \\\n" <>
+          "  (major1) == 4 && (major2) == 8 && (minor) <= 2)\n"
+      s' = "#define MIN_VERSION_base(major1,major2,minor) (  (major1) <  4 ||   (major1) == 4 && (major2) <  8 ||   (major1) == 4 && (major2) == 8 && (minor) <= 2)"
+
+-- | Return a HashDefine such as those in dist/build/autogen/cabal_macros.h
+cabalMacro :: String -> Version -> HashDefine
+cabalMacro name ver@(Version branch _tags) =
+    SymbolReplacement
+      ("MIN_VERSION_" ++ name ++ "(major1,major2,minor)")
+      ("((major1)<" ++ show major1 ++ "||(major1)==" ++ show major1 ++ "&&(major2)<" ++ show major2 ++ "||(major1)==" ++ show major1 ++ "&&(major2)==" ++ show major2 ++ "&&(minor)<="++ show minor ++ ")")
+      0
+    where (major1 : major2 : minor : _) = branch ++ repeat 0

@@ -12,14 +12,15 @@
 module DeclTests where
 
 import Clean (cleanImports)
-import Control.Lens (set)
+import Control.Lens (set, over)
 import Control.Monad (when)
-import CPP (cppOptions, defaultCpphsOptions, enabled, GHCOpts, ghcOptions, hashDefines, hc, hsSourceDirs)
+import CPP (cabalMacro, cppOptions, defaultCpphsOptions, enabled, GHCOpts, ghcOptions, hashDefines, hc, hsSourceDirs)
 import Data.Data (Data)
 import Data.Default (def)
 import Data.List hiding (find)
 import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
+import Data.Version (Version(Version))
 import Decls (runMoveUnsafe)
 import HashDefine (parseHashDefine)
 import Language.Haskell.Exts (Decl(FunBind, TypeSig), Match(InfixMatch, Match),
@@ -297,7 +298,9 @@ simple3 =
         runMoveUnsafe "tests/input/simple3" opts0 (moveDeclsByName "MoveType" "C" "D" :: MoveSpec)
 
 opts0 :: GHCOpts
-opts0 = set hsSourceDirs ["src"] def
+opts0 =
+    over hashDefines (++ [cabalMacro "base" (Version [4,8] [])]) o
+    where o = set hsSourceDirs ["src"] def
 
 -- Perform the same move with these CPP flag combinations:
 --
