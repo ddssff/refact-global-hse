@@ -15,11 +15,11 @@ import Data.Default (Default(def))
 import Data.Foldable (foldl')
 import Data.Function (on)
 import Data.Generics (everywhere, mkT)
-import Data.List (groupBy, nub, sortBy)
+import Data.List (groupBy, nub, partition, sortBy)
 import Data.Map.Strict as Map (adjust, elems, foldlWithKey', insertWith, Map)
-import Data.Maybe (catMaybes, maybeToList)
+import Data.Maybe (catMaybes, isNothing, maybeToList)
 import Data.Monoid ((<>))
-import Language.Haskell.Exts.Syntax (ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec, ImportSpecList(..))
+import Language.Haskell.Exts.Syntax (ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec(..), ImportSpecList(..))
 import Language.Haskell.Names.SyntaxUtils (dropAnn)
 import Utils (prettyPrint', SetLike(union, difference))
 
@@ -59,25 +59,95 @@ instance SetLike [ImportDecl ()] where
           specs :: ImportDecl () -> [ImportSpec ()]
           specs i  = maybe [] (\(ImportSpecList _ _ ss) -> ss) (importSpecs i)
 
+-- data ImportDecl l
+--   = ImportDecl {importAnn :: l,
+--                 importModule :: ModuleName l,
+--                 importQualified :: Bool,
+--                 importSrc :: Bool,
+--                 importSafe :: Bool,
+--                 importPkg :: Maybe String,
+--                 importAs :: Maybe (ModuleName l),
+--                 importSpecs :: Maybe (ImportSpecList l)}
+
 importMap :: [ImportDecl ()] -> ImportMap ()
 importMap xs = foldl' (\mp x -> Map.insertWith (<>) (importKey x) [x] mp) mempty xs
 
+-- Build equivalence groups according to a function.
+setify :: (a -> a -> Ordering) -> [a] -> [[a]]
+setify f xs = groupBy (\a b -> f a b == EQ) . sortBy f $ xs
+
+partitionMaybes :: [Maybe a] -> (Int, [a])
+partitionMaybes xs = let (ns, js) = partition isNothing xs in (length ns, catMaybes js)
+
+-- groupBy (\ a b -> importMergable a b == EQ) . sortBy importMergable
+
+-- data ImportSpecList l = ImportSpecList l Bool [ImportSpec l]
+--
+-- data ImportSpec l
+--     = IVar l (Name l)
+--     | IAbs l (Namespace l) (Name l)
+--     | IThingAll l (Name l)
+--     | IThingWith l (Name l) [CName l]
+--
+-- data Namespace l = NoNamespace l | TypeNamespace l | PatternNamespace l
+
 mergeDecls :: forall l. Eq l => [ImportDecl l] -> [ImportDecl l]
-mergeDecls = map mergeDecls' . groupBy (\ a b -> importMergable a b == EQ) . sortBy importMergable
+mergeDecls = map mergeDecls' . setify importMergable
     where
+      -- Merge a group of decls that differ only in the spec list
       mergeDecls' :: [ImportDecl l] -> ImportDecl l
       mergeDecls' [] = error "mergeDecls"
-      mergeDecls' xs@(x : _) = x {importSpecs = mergeSpecLists (catMaybes (fmap importSpecs xs))}
+      mergeDecls' xs@(x : _) = x {importSpecs = mergeSpecLists (fmap importSpecs xs)}
 
-      -- Merge a list of specs for the same module
-      mergeSpecLists :: [ImportSpecList l] -> Maybe (ImportSpecList l)
-      mergeSpecLists (ImportSpecList loc flag specs : ys) =
-          Just (ImportSpecList loc flag (mergeSpecs (sortBy compareSpecs (nub (concat (specs : fmap (\ (ImportSpecList _ _ specs') -> specs') ys))))))
-      mergeSpecLists [] = error "mergeSpecLists"
+      -- Merge a list of specs for the same module.  A Nothing means
+      -- all symbols are imported, Just [] means only instances are
+      -- imported.
+      mergeSpecLists :: [Maybe (ImportSpecList l)] -> Maybe (ImportSpecList l)
+      mergeSpecLists xs =
+          case partitionMaybes xs of
+            (n, _) | n > 0 -> Nothing
+            (_, []) -> error "groupBy failure"
+            (_, ImportSpecList loc flag specs : more) ->
+                Just (ImportSpecList loc flag (map (foldl1 mergeSpecs) (setify compareSpecs (specs ++ specLists more))))
+
+      -- Merge several ImportSpecLists of matching ImportDecls
+      specLists :: [ImportSpecList l] -> [ImportSpec l]
+      specLists [] = []
+      specLists (ImportSpecList _ _ specs : xs) = specs ++ specLists xs
+
+      -- Compare function used to sort the symbols within an import,
+      -- affects the order in which the results appear.
+      compareSpecs :: ImportSpec l -> ImportSpec l -> Ordering
+      compareSpecs a b =
+          case (compare `on` everywhere (mkT (map toLower))) a' b' of
+            EQ -> compare b' a' -- capitalized symbols should preceded lower case
+            x -> x
+          where
+            a' = prettyPrint' a
+            b' = prettyPrint' b
+
+      -- Merge several import specs of the same symbol into one
+      mergeSpecs :: ImportSpec l -> ImportSpec l -> ImportSpec l
+      -- mergeSpecs x@(IAbs _ s n) _ = x
+      -- mergeSpecs _ y@(IAbs _ s n) = y
+      mergeSpecs x@(IThingAll _ _) _ = x
+      mergeSpecs _ y@(IThingAll _ _) = y
+      mergeSpecs x@(IThingWith l n ns) (IThingWith _ _ ms) = IThingWith l n (nub (ns ++ ms))
+      -- mergeSpecs x@(IThingWith l n ns) (IAbs _ s _) = error "mergeSpecs: IThingWith + IAbs"
+      mergeSpecs x@(IThingWith l n ns) _ = x
+      mergeSpecs x _ = x
+
+      specSym (IVar _ n) = n
+      specSym (IAbs _ _ n) = n -- Is this right?
+      specSym (IThingAll _ n) = n
+      specSym (IThingWith _ n _) = n
+
+mergeSpecs xs = xs
 
 -- | Compare the two import declarations ignoring the things that are
 -- actually being imported.  Equality here indicates that the two
--- imports could be merged.
+-- imports could be merged.  Note that this also means the hiding flag
+-- matches.
 importMergable :: ImportDecl l -> ImportDecl l -> Ordering
 importMergable a b =
     case (compare `on` noSpecs) a' b' of
@@ -98,39 +168,3 @@ importMergable a b =
                                         Just (ImportSpecList l True _) -> Just (ImportSpecList l True []) -- hiding
                                         Just (ImportSpecList _ False _) -> Nothing
                                         Nothing -> Nothing }
-
--- Merge elements of a sorted spec list as possible
--- unimplemented, should merge Foo and Foo(..) into Foo(..), and the like
-mergeSpecs :: [ImportSpec l] -> [ImportSpec l]
-mergeSpecs [] = []
-mergeSpecs [x] = [x]
-{-
--- We need to do this using the simplified syntax
-mergeSpecs (x : y : zs) =
-    case (name x' == name y', x, y) of
-      (True, S.IThingAll _ _, _) -> mergeSpecs (x : zs)
-      (True, _, S.IThingAll _ _) -> mergeSpecs (y : zs)
-      (True, S.IThingWith _ n xs, S.IThingWith _ ys) -> mergeSpecs (S.IThingWith n (nub (xs ++ ys)))
-      (True, S.IThingWith _ _, _) -> mergeSpecs (x' : zs)
-      (True, _, S.IThingWith _ _) -> mergeSpecs (y' : zs)
-      _ -> x : mergeSpecs (y : zs)
-    where
-      x' = sImportSpec x
-      y' = sImportSpec y
-      name (S.IVar n) = n
-      name (S.IAbs n) = n
-      name (S.IThingAll n) = n
-      name (S.IThingWith n _) = n
--}
-mergeSpecs xs = xs
-
--- Compare function used to sort the symbols within an import.
-compareSpecs :: ImportSpec l -> ImportSpec l -> Ordering
--- compareSpecs a b = (compare `on` sImportSpec) a b
-compareSpecs a b =
-    case (compare `on` (everywhere (mkT (map toLower)))) a' b' of
-      EQ -> compare b' a' -- upper case first
-      x -> x
-    where
-      a' = prettyPrint' a
-      b' = prettyPrint' b
