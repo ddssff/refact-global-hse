@@ -11,7 +11,7 @@ import Control.Lens (over, view)
 import CPP (cppEndif, cppIf, enabled, extensionsForHSEParser, GHCOpts, ghcProcessArgs, hc)
 import Control.Monad (void)
 import Control.Monad.RWS (MonadWriter(tell))
-import Data.List (find, foldl1', transpose)
+import Data.List (find, foldl1', intercalate, transpose)
 import Data.Monoid ((<>))
 import Data.Set as Set (empty, member, Set, singleton, unions)
 import Debug.Trace (trace)
@@ -81,27 +81,23 @@ newModuleText mi@(ModuleInfo {_module = m}) pairs =
     Just $ scanModule (do keep {-(startOfImports mi)-} (endOfHeader m)
                           let (common, pairs') = fixNewImports True mi pairs
                           tell "\n\n"
-                          tell (unlines (map prettyPrint' common))
-                          mapM_ (uncurry doOptImports) pairs'
-#if 1
+                          let lines :: [String]
+                              lines = map prettyPrint' common ++ concatMap (uncurry doOptImports) pairs'
+                          tell (intercalate "\n" lines)
                           -- Skip just past end of last original import
                           skip (endOfImports m)
-#else
-                          -- when (not (null oi)) (skip (endOfImports m))
-                          tell "\n"
-                          -- FIXME: This will eat the header comment of the first Decl
-                          skip (startOfDecls mi)
-#endif
-                          withTrailingWhitespace keep (startOfDecls mi)
+                          -- Keep the comments between last import and first decl
+                          -- keep (startOfDecls mi)
                           keepAll) mi
     where
       -- oi = getImports m
+      doOptImports :: GHCOpts -> [ImportDecl ()] -> [String]
       doOptImports opts ni =
           -- let ni'' = fixNewImports' True mi ni in
           -- if dropAnn oi == map dropAnn ni' then keep ... else
-          do tell (cppIf opts)
-             tell (unlines (map prettyPrint' ni))
-             tell (cppEndif opts)
+          cppIf opts <>
+          map prettyPrint' ni <>
+          cppEndif opts
 
 fixNewImports :: forall l. Bool -> ModuleInfo l -> [(GHCOpts, [ImportDecl ()])] -> ([ImportDecl ()], [(GHCOpts, [ImportDecl ()])])
 fixNewImports _ _ [] = ([], [])

@@ -20,6 +20,7 @@ module ScanM
 import Control.Lens ((.=), (%=), makeLenses, makeLensesFor, use, view)
 import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS)
 import Data.Char (isSpace)
+import Debug.Trace (trace)
 import Language.Haskell.Exts.Syntax -- (Annotated(ann), Module(..))
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
@@ -66,6 +67,19 @@ keep loc = do
   point .= {-trace ("keep " ++ show loc)-} loc
   comments %= dropWhile (\(Comment _ sp _) -> loc > srcLoc sp)
 
+{-
+keepV :: String -> SrcLoc -> ScanM ()
+keepV msg loc = do
+  t' <- use remaining
+  p <- use point
+  -- pure $ testSpan "keep" (SrcSpan (srcFilename loc) (srcLine p) (srcColumn p) (srcLine loc) (srcColumn loc))
+  let (s', t'') = splitText (locDiff loc p) t'
+  tell (trace (msg ++ ": " ++ show s') s')
+  remaining .= t''
+  point .= {-trace ("keep " ++ show loc)-} loc
+  comments %= dropWhile (\(Comment _ sp _) -> loc > srcLoc sp)
+-}
+
 keepAll :: ScanM ()
 keepAll = do
   p@(SrcLoc _ _ _) <- use point
@@ -82,6 +96,19 @@ skip loc = do
   remaining .= t''
   point .= {-trace ("skip " ++ show loc)-} loc
   comments %= dropWhile (\(Comment _ sp _) -> loc > srcLoc sp)
+
+{-
+skipV :: String -> SrcLoc -> ScanM ()
+skipV msg loc = do
+  t' <- use remaining
+  p <- use point
+  -- pure $ testSpan "skip" (SrcSpan (srcFilename loc) (srcLine p) (srcColumn p) (srcLine loc) (srcColumn loc))
+  let (s, t'') = splitText (locDiff loc p) t'
+  trace (msg ++ ": " ++ show s) (pure ())
+  remaining .= t''
+  point .= {-trace ("skip " ++ show loc)-} loc
+  comments %= dropWhile (\(Comment _ sp _) -> loc > srcLoc sp)
+-}
 
 -- | Assuming the spans of the ast have been adjusted (tightened)
 -- using fixEnds, look at the text between point and the beginning of

@@ -143,13 +143,13 @@ ghcProcessArgs opts =
       xs -> ["-i" <> intercalate ":" xs]
 
 -- | Somewhere there should be a library to do this.
-cppIf :: GHCOpts -> String
-cppIf opts | null (view hashDefines opts) = ""
-cppIf opts = "#if " <> intercalate " && " (map asPredicate (view hashDefines opts)) <> "\n"
+cppIf :: GHCOpts -> [String]
+cppIf opts | null (view hashDefines opts) = []
+cppIf opts = ["#if " <> intercalate " && " (map asPredicate (view hashDefines opts))]
 
-cppEndif :: GHCOpts -> String
-cppEndif opts | null (view hashDefines opts) = ""
-cppEndif _ = "#endif\n"
+cppEndif :: GHCOpts -> [String]
+cppEndif opts | null (view hashDefines opts) = []
+cppEndif _ = ["#endif"]
 
 -- | From hsx2hs, but removing Arrows because it makes test case
 -- fold3c and others fail.  Maybe we should parse the headers and then
