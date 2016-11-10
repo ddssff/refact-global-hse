@@ -54,6 +54,7 @@ scanModule action m@(ModuleInfo {_module = Module _ _ _ _ _}) =
                                 , _comments = _moduleComments m })
 scanModule _ _ = error "scanModule"
 
+-- | Keep everything from the point to loc
 keep :: SrcLoc -> ScanM ()
 keep loc = do
   t' <- use remaining

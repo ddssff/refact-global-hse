@@ -24,8 +24,8 @@ import Language.Haskell.Names.SyntaxUtils (dropAnn, getImports, getModuleDecls)
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(..))
 import ModuleKey (moduleFullPath)
-import ScanM (keep, keepAll, scanModule)
-import SrcLoc (EndLoc, endOfHeader)
+import ScanM (keep, keepAll, scanModule, skip, withTrailingWhitespace)
+import SrcLoc (EndLoc, endOfHeader, endOfImports, startOfDecls)
 import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcess)
@@ -83,11 +83,16 @@ newModuleText mi@(ModuleInfo {_module = m}) pairs =
                           tell "\n\n"
                           tell (unlines (map prettyPrint' common))
                           mapM_ (uncurry doOptImports) pairs'
+#if 1
+                          -- Skip just past end of last original import
+                          skip (endOfImports m)
+#else
                           -- when (not (null oi)) (skip (endOfImports m))
                           tell "\n"
                           -- FIXME: This will eat the header comment of the first Decl
                           skip (startOfDecls mi)
-                          withTrailingWhitespace skip (startOfDecls mi)
+#endif
+                          withTrailingWhitespace keep (startOfDecls mi)
                           keepAll) mi
     where
       -- oi = getImports m
