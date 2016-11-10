@@ -1,4 +1,6 @@
-{-# LANGUAGE BangPatterns, CPP, FlexibleInstances, ScopedTypeVariables, TemplateHaskell, UndecidableInstances #-}
+-- | Utility functions for the haskell-src-exts type SrcLoc.
+
+{-# LANGUAGE BangPatterns, CPP, FlexibleInstances, PackageImports, ScopedTypeVariables, TemplateHaskell, UndecidableInstances #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 module SrcLoc
     ( -- * SpanInfo queries
@@ -17,64 +19,35 @@ module SrcLoc
     -- * Repair spans that have column set to 0
     , fixSpan
     , testSpan
-    -- RWS monad to scan a text file
-    , ScanM
-    , point
-    , comments
-    , remaining
-    , scanModule
-    , keep
-    , keepAll
-    , skip
     , fixEnds
-    , trailingWhitespace
-    , withTrailingWhitespace
-    , debugRender
     , mapTopAnnotations
     , locSum
     , locDiff
-    , locFilename
 
-    , endOfDecls
-    , endOfImports
-    , endOfHeader
     , endOfPragmas
-    , startOfDecls
-    , startOfImports
-    , startOfHeader
+    , endOfHeader
+    , endOfImports
+    , endOfImportSpecs
+    , endOfDecls
+    , endOfModule
+    , startOfModule
     , startOfPragmas
+    , startOfHeader
+    , startOfImports
+    , startOfDecls
     ) where
 
-import Control.Lens ((.=), (%=), makeLenses, makeLensesFor, use, view)
-import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS)
 import Control.Monad.State (get, put, runState, State)
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd)
 import Data.Monoid ((<>))
-import Language.Haskell.Exts.Annotated.Syntax as A -- (Annotated(ann), Module(..))
+import Language.Haskell.Exts.Syntax -- (Annotated(ann), Module(..))
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcInfo(..), SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
-import Language.Haskell.Names
+import Language.Haskell.Names hiding (PatSyn)
 import ModuleInfo
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)
 import Utils (EZPrint(ezPrint), lines')
-
-data St = St { _point :: SrcLoc -- The current position in the full text
-             , _remaining :: String  -- The text remaining after _point
-             , _comments :: [Comment] -- The comments remaining after _point
-             }
-
-$(makeLenses ''St)
-$(makeLensesFor [("srcFilename", "locFilename"){-,
-                 ("srcLine", "locLine"),
-                 ("srcColumn", "locColumn")-}] ''SrcLoc)
-$(makeLensesFor [{-("srcSpanFilename", "spanFilename"),
-                 ("srcSpanStartLine", "spanStartLine"),
-                 ("srcSpanStartColumn", "spanStartColumn"),
-                 ("srcSpanEndLine", "spanEndLine"),
-                 ("srcSpanEndColumn", "spanEndColumn")-}] ''SrcSpan)
-$(makeLensesFor [{-("srcInfoSpan", "infoSpan"),
-                 ("srcInfoPoints", "infoPoints")-}] ''SrcSpanInfo)
 
 class SpanInfo a where
     srcSpan :: a -> SrcSpan
@@ -85,8 +58,8 @@ instance SpanInfo SrcSpan where
 instance SpanInfo SrcSpanInfo where
     srcSpan = srcSpan . srcInfoSpan
 
-instance A.Annotated ast => SpanInfo (ast SrcSpanInfo) where
-    srcSpan = srcSpan . A.ann
+instance Annotated ast => SpanInfo (ast SrcSpanInfo) where
+    srcSpan = srcSpan . ann
 
 instance SpanInfo (SrcLoc, SrcLoc) where
     srcSpan (b, e) = mkSrcSpan (SrcLoc (srcFilename b) (srcLine b) (srcColumn b))
@@ -147,7 +120,8 @@ textOfSpan sp s =
 testSpan :: (SrcInfo a, EndLoc a) => String -> a -> a
 testSpan msg sp =
     case (srcLoc sp, endLoc sp) of
-      (SrcLoc _ _ c1, SrcLoc _ _ c2) | c1 < 1 || c2 < 1 -> error ("testSpan - " ++ msg)
+      (SrcLoc _ l1 c1, SrcLoc _ l2 c2) | c1 < 1 || c2 < 1 || l1 < 1 || l2 < 1 ||
+                                         l2 < l1 || (l2 == l1 && c2 < c1) -> error ("testSpan - " ++ msg)
       _ -> sp
 
 splitText :: SrcLoc -> String -> (String, String)
@@ -219,7 +193,7 @@ splits' file spans s =
 -- text.  They could still be in the wrong places, so this doesn't
 -- guarantee the parse is valid, but its a pretty good bet.
 #if 0
-validateParseResults :: A.Module SrcSpanInfo -> String -> IO ()
+validateParseResults :: Module SrcSpanInfo -> String -> IO ()
 validateParseResults modul t =
     mapM_ validateSpan (nub (sort (gFind modul :: [SrcSpan])))
     where
@@ -233,6 +207,13 @@ validateParseResults modul t =
 instance Pretty SrcLoc where
     pPrint l = text ("(l" <> show (srcLine l) ++ ",c" ++ show (srcColumn l) ++ ")")
 
+instance Pretty SrcSpan where
+    pPrint (SrcSpan _ bl bc el ec) = text ("(l" <> show bl ++ ",c" ++ show bc ++ ")->" ++
+                                           "(l" <> show el ++ ",c" ++ show ec ++ ")")
+
+instance Pretty SrcSpanInfo where
+    pPrint = pPrint . srcInfoSpan
+
 -- This happens, a span with end column 0, even though column
 -- numbering begins at 1.  Is it a bug in haskell-src-exts?
 fixSpan :: SrcSpanInfo -> SrcSpanInfo
@@ -243,27 +224,11 @@ fixSpan sp =
     where
       t1 sp' = {-trace ("fixSpan " ++ show (srcInfoSpan sp) ++ " -> " ++ show (srcInfoSpan sp'))-} sp'
 
-type ScanM = RWS () String St
-
-scanModule :: ScanM () -> ModuleInfo l -> String
-scanModule action m@(ModuleInfo {_module = A.Module _ _ _ _ _}) =
-    snd $ evalRWS action () (St { _point = SrcLoc (_modulePath m) 1 1
-                                , _remaining = _moduleText m
-                                , _comments = _moduleComments m })
-scanModule _ _ = error "scanModule"
-
 instance EZPrint SrcLoc where
     ezPrint = prettyShow
 
-keep :: SrcLoc -> ScanM ()
-keep loc = do
-  t' <- use remaining
-  p <- use point
-  let (s', t'') = splitText (locDiff (max p loc) p) t'
-  tell s'
-  remaining .= t''
-  point .= {-trace ("keep " ++ show loc)-} loc
-  comments %= dropWhile (\(Comment _ sp _) -> loc > srcLoc sp)
+instance EZPrint SrcSpanInfo where
+    ezPrint = prettyShow
 
 -- | Tighten the start and end points of a span to exclude any leading
 -- and trailing whitespace and comments.
@@ -328,84 +293,19 @@ realBegin sp cs s =
       isWhite (Span _ _) = True
       isWhite _ = False
 
-
-
-keepAll :: ScanM ()
-keepAll = do
-  p@(SrcLoc _ _ _) <- use point
-  t <- use remaining
-  let e' = locSum p (endLocOfText "" t)
-  keep e'
-
-skip :: SrcLoc -> ScanM ()
-skip loc = do
-  p <- use point
-  pure $ testSpan "skip" (SrcSpan (srcFilename loc) (srcLine p) (srcColumn p) (srcLine loc) (srcColumn loc))
-  t' <- use remaining
-  let (_, t'') = splitText (locDiff (max p loc) p) t'
-  remaining .= t''
-  point .= {-trace ("skip " ++ show loc)-} loc
-  comments %= dropWhile (\(Comment _ sp _) -> loc > srcLoc sp)
-
--- | Assuming the spans of the ast have been adjusted (tightened)
--- using fixEnds, look at the text between point and the beginning of
--- the next span and decide which part belongs to the preceding
--- declaration (or import or whatever) and which belongs to the next
--- one.
-trailingWhitespace :: Maybe SrcLoc -> ScanM String
-trailingWhitespace next = do
-  t <- use remaining
-  loc@(SrcLoc file _ _) <- use point
-  let loc'' = maybe (locSum loc (endLocOfText file t)) id next
-  case loc'' >= loc of
-    False -> error $ "trailingWhitespace: " ++ show loc'' ++ " < " ++ show loc
-    True -> do
-      let (s', _) = splitText (locDiff loc'' loc) t
-      case lines' s' of
-        [] -> pure s'
-        (x : xs) ->
-            -- x is the end of the last line of the declaration (or
-            -- whatever), so we always keep that.  Also keep subsequent
-            -- nonblank lines.
-            case break (all isSpace) xs of
-              (_, []) -> pure s'
-              (comments', _) -> pure (unlines (x : comments'))
-
-withTrailingWhitespace :: (SrcLoc -> ScanM ()) -> Maybe SrcLoc -> ScanM ()
-withTrailingWhitespace fn next = do
-  s <- trailingWhitespace next
-  p <- use point
-  fn (locSum p (endLocOfText (view locFilename p) s))
-
-debugRender :: A.Module SrcSpanInfo -> [Comment] -> String -> String
-debugRender m@(A.Module _ mh ps is ds) cs s =
-    snd $ evalRWS render () (St {_point = (srcLoc (A.ann m)) {srcLine = 1, srcColumn = 1}, _comments = cs, _remaining = s})
-    where
-      -- Put [] around the spans (and eventually | at the divisions of the point list)
-      render :: ScanM ()
-      render = do
-        tell "["
-        mapM_ (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") ps
-        maybe void (\h -> keep (srcLoc (A.ann h)) >> tell "[" >> keep (endLoc (A.ann h)) >> tell "]") mh
-        mapM_ (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") is
-        mapM_ (\x -> keep (srcLoc (A.ann x)) >> tell "[" >> keep (endLoc (A.ann x)) >> tell "]") ds
-        keep (endLoc (A.ann m))
-        tell "]"
-debugRender _ _ _ = error "debugRender"
-
-void :: Monad m => m ()
-void = pure ()
-
 -- | Modify end locations so they precede any trailing whitespace
-mapTopAnnotations :: (a -> a) -> A.Module a -> A.Module a
-mapTopAnnotations fn (A.Module loc mh ps is ds) =
-    A.Module loc (fmap fixMH mh) ps (map fixImport is) (map fixDecl ds)
+mapTopAnnotations :: forall a. (a -> a) -> Module a -> Module a
+mapTopAnnotations fn (Module loc mh ps is ds) =
+    Module loc (fmap fixMH mh) ps (map fixImport is) (map fixDecl ds)
     where
-      fixMH (A.ModuleHead sp name warn specs) = A.ModuleHead (fn sp) name warn specs
+      fixMH :: ModuleHead a -> ModuleHead a
+      fixMH (ModuleHead sp name warn specs) = ModuleHead (fn sp) name warn specs
+      fixImport :: ImportDecl a -> ImportDecl a
       fixImport i = i {importAnn = fn (importAnn i)}
+      fixDecl :: Decl a -> Decl a
       fixDecl (TypeDecl l a b) = (TypeDecl (fn l) a b)
-      fixDecl (TypeFamDecl l a b) = (TypeFamDecl (fn l) a b)
-      fixDecl (ClosedTypeFamDecl l a b c) = (ClosedTypeFamDecl (fn l) a b c)
+      fixDecl (TypeFamDecl l a b c) = (TypeFamDecl (fn l) a b c)
+      fixDecl (ClosedTypeFamDecl l a b c d) = (ClosedTypeFamDecl (fn l) a b c d)
       fixDecl (DataDecl l a b c d e) = (DataDecl (fn l) a b c d e)
       fixDecl (GDataDecl l a b c d e f) = GDataDecl (fn l) a b c d e f
       fixDecl (DataFamDecl l a b c) = (DataFamDecl (fn l) a b c)
@@ -438,52 +338,76 @@ mapTopAnnotations fn (A.Module loc mh ps is ds) =
       fixDecl (RoleAnnotDecl l a b) = (RoleAnnotDecl (fn l) a b)
 mapTopAnnotations _ _ = error "mapTopAnnotations"
 
-class EndLoc a where endLoc :: a -> SrcLoc
-instance EndLoc SrcSpan where endLoc x = SrcLoc (fileName x) (srcSpanEndLine x) (srcSpanEndColumn x)
-instance EndLoc SrcSpanInfo where endLoc = endLoc . srcInfoSpan
-instance EndLoc a => EndLoc (Scoped a) where endLoc (Scoped _ x) = endLoc x
-instance EndLoc (SrcLoc, SrcLoc) where endLoc = snd
+class EndLoc a where
+    endLoc :: a -> SrcLoc
+    srcPoints :: a -> [SrcSpan] -- a hack - we should maybe use concrete types?
 
-endOfDecls :: EndLoc l => A.Module l -> SrcLoc
-endOfDecls m@(A.Module _l _mh _ps _ []) = endOfImports m
-endOfDecls (A.Module _l _mh _ps _is ds) = endLoc (A.ann (last ds))
+instance EndLoc SrcSpan where
+    endLoc x = SrcLoc (fileName x) (srcSpanEndLine x) (srcSpanEndColumn x)
+    srcPoints _ = []
+instance EndLoc SrcSpanInfo where
+    endLoc = endLoc . srcInfoSpan
+    srcPoints = srcInfoPoints
+instance EndLoc a => EndLoc (Scoped a) where
+    endLoc (Scoped _ x) = endLoc x
+    srcPoints (Scoped _ x) = srcPoints x
+instance EndLoc (SrcLoc, SrcLoc) where
+    endLoc = snd
+    srcPoints _ = []
+
+endOfDecls :: EndLoc l => Module l -> SrcLoc
+endOfDecls m@(Module _l _mh _ps _ []) = endOfImports m
+endOfDecls (Module _l _mh _ps _is ds) = endLoc (ann (last ds))
 endOfDecls _ = error "endOfDecls"
 
-endOfImports :: EndLoc l => A.Module l -> SrcLoc
-endOfImports m@(A.Module _l _mh _ps [] _) = endOfHeader m
-endOfImports (A.Module _l _mh _ps is _) = endLoc (A.ann (last is))
+endOfImports :: EndLoc l => Module l -> SrcLoc
+endOfImports m@(Module _l _mh _ps [] _) = endOfHeader m
+endOfImports (Module _l _mh _ps is _) = endLoc (ann (last is))
 endOfImports _ = error "endOfImports"
 
-endOfHeader :: EndLoc l => A.Module l -> SrcLoc
-endOfHeader m@(A.Module _l Nothing _ps _ _) = endOfPragmas m
-endOfHeader (A.Module _l (Just h) _ps _is _) = endLoc (A.ann h)
+endOfImportSpecs :: (EndLoc l, Show l) => ImportDecl l -> SrcLoc
+endOfImportSpecs (ImportDecl {importSpecs = Just i}) =
+    case srcPoints (ann i) of
+      [] -> error $ "endOfImportSpecs: " ++ show i
+      pts -> srcLoc (last pts)
+endOfImportSpecs (ImportDecl {importSpecs = Nothing}) = error "endOfImportSpecs"
+
+endOfHeader :: EndLoc l => Module l -> SrcLoc
+endOfHeader m@(Module _l Nothing _ps _ _) = endOfPragmas m
+endOfHeader (Module _l (Just h) _ps _is _) = endLoc (ann h)
 endOfHeader _ = error "endOfHeader"
 
-endOfPragmas :: EndLoc l => A.Module l -> SrcLoc
-endOfPragmas (A.Module l _ [] _ _) = endLoc l
-endOfPragmas (A.Module _l _ ps _ _) = endLoc (A.ann (last ps))
+endOfPragmas :: EndLoc l => Module l -> SrcLoc
+endOfPragmas (Module l _ [] _ _) = endLoc l
+endOfPragmas (Module _l _ ps _ _) = endLoc (ann (last ps))
 endOfPragmas _ = error "endOfPragmas"
 
+endOfModule :: ModuleInfo l -> SrcLoc
+endOfModule mi = endLocOfText (_modulePath mi) (_moduleText mi)
+
+startOfModule :: ModuleInfo l -> SrcLoc
+startOfModule mi = SrcLoc (_modulePath mi) 1 1
+
 -- | The beginning of the first thing after the imports
-startOfDecls :: SrcInfo l => A.Module l -> Maybe SrcLoc
-startOfDecls (A.Module _l _mh _ps _is []) = Nothing
-startOfDecls (A.Module _l _mh _ps _is (d : _)) = Just (srcLoc (A.ann d))
+startOfDecls :: SrcInfo l => ModuleInfo l -> SrcLoc
+startOfDecls mi@(ModuleInfo {_module = Module _l _mh _ps _is []}) = endLocOfText (_modulePath mi) (_moduleText mi)
+startOfDecls (ModuleInfo {_module = Module _l _mh _ps _is (d : _)}) = srcLoc (ann d)
 startOfDecls _ = error "startOfDecls"
 
 -- | The beginning of the first thing after the header.
-startOfImports :: SrcInfo l => A.Module l -> Maybe SrcLoc
-startOfImports m@(A.Module _l _mh _ps [] _) = startOfDecls m
-startOfImports (A.Module _l _mh _ps (i : _) _) = Just (srcLoc (A.ann i))
+startOfImports :: SrcInfo l => ModuleInfo l -> SrcLoc
+startOfImports mi@(ModuleInfo {_module = Module _l _mh _ps [] _}) = startOfDecls mi
+startOfImports (ModuleInfo {_module = Module _l _mh _ps (i : _) _}) = srcLoc (ann i)
 startOfImports _ = error "startOfImports"
 
 -- | The beginning of the first thing after the pragmas.
-startOfHeader :: SrcInfo l => A.Module l -> Maybe SrcLoc
-startOfHeader m@(A.Module _l Nothing _ps _ _) = startOfImports m
-startOfHeader (A.Module _l (Just h) _ps _is _) = Just (srcLoc (A.ann h))
+startOfHeader :: SrcInfo l => ModuleInfo l -> SrcLoc
+startOfHeader mi@(ModuleInfo {_module = Module _l Nothing _ps _ _}) = startOfImports mi
+startOfHeader (ModuleInfo {_module = Module _l (Just h) _ps _is _}) = srcLoc (ann h)
 startOfHeader _ = error "startOfHeader"
 
 -- | The beginning of the first thing
-startOfPragmas :: SrcInfo l => A.Module l -> Maybe SrcLoc
-startOfPragmas (A.Module _l _ [] _ _) = Nothing
-startOfPragmas (A.Module _l _ (p : _) _ _) = Just (srcLoc (A.ann p))
+startOfPragmas :: SrcInfo l => ModuleInfo l -> SrcLoc
+startOfPragmas (ModuleInfo {_module = m@(Module _l _ [] _ _)}) = SrcLoc (fileName (ann m)) 1 1
+startOfPragmas (ModuleInfo {_module = Module _l _ (p : _) _ _}) = srcLoc (ann p)
 startOfPragmas _ = error "startOfPragmas"

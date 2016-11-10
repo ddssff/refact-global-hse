@@ -1,4 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
+{-# LANGUAGE PackageImports #-}
 
 module ModuleKey
     ( ModuleKey(ModuleKey, _moduleTop, _moduleName, _moduleExt, ModuleFullPath, _moduleFullPath)
@@ -11,7 +12,7 @@ module ModuleKey
 import Data.Generics (Data, Typeable)
 import Data.List (groupBy, intercalate)
 import Data.Maybe (fromMaybe)
-import Language.Haskell.Exts.Annotated as A (ModuleName(..))
+import Language.Haskell.Exts.Syntax (ModuleName(..))
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import System.FilePath ((<.>), (</>))
 import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), text)
@@ -31,7 +32,7 @@ data ModuleKey
         -- finds this module (canonicalized)
         _moduleTop :: FilePath,
         -- | The module name, if it has one.
-        _moduleName :: A.ModuleName (),
+        _moduleName :: ModuleName (),
         -- | The extension, including the dot
         _moduleExt :: String }
     | ModuleFullPath
@@ -41,17 +42,17 @@ data ModuleKey
 
 moduleFullPath :: ModuleKey -> FilePath
 moduleFullPath (ModuleFullPath {_moduleFullPath = x}) = x
-moduleFullPath (ModuleKey {_moduleTop = top, _moduleName = A.ModuleName () mname}) =
+moduleFullPath (ModuleKey {_moduleTop = top, _moduleName = ModuleName () mname}) =
     top </>
     (intercalate "/" . filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))) mname <.>
     "hs"
 
-moduleName :: ModuleKey -> Maybe (A.ModuleName ())
+moduleName :: ModuleKey -> Maybe (ModuleName ())
 moduleName (ModuleKey {_moduleName = name}) = Just name
 moduleName (ModuleFullPath {}) = Nothing
 
-moduleName' :: ModuleKey -> A.ModuleName ()
-moduleName' = fromMaybe (A.ModuleName () "Main") . moduleName
+moduleName' :: ModuleKey -> ModuleName ()
+moduleName' = fromMaybe (ModuleName () "Main") . moduleName
 
 moduleTop :: ModuleKey -> Maybe FilePath
 moduleTop (ModuleKey {_moduleTop = x}) = Just x
@@ -62,5 +63,5 @@ instance EZPrint ModuleKey where
     ezPrint (ModuleFullPath p) = p
 
 instance Pretty ModuleKey where
-    pPrint (ModuleKey {_moduleName = A.ModuleName () m}) = text m
+    pPrint (ModuleKey {_moduleName = ModuleName () m}) = text m
     pPrint (ModuleFullPath p) = text ("Main (in " ++ p ++ ")")
