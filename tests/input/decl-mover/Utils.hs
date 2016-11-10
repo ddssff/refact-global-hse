@@ -12,15 +12,14 @@ import Control.Exception.Lifted as IO (bracket, catch)
 import Control.Monad (MonadPlus, msum, when)
 import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
---import Data.Bool (bool)
 import Data.Generics (Data(gmapM), GenericM, listify, toConstr, Typeable)
 import Data.List (groupBy, intercalate, stripPrefix)
 import Data.Maybe (mapMaybe)
 import Data.Sequence ((|>), Seq)
-import qualified Data.Set as Set
-import Language.Haskell.Exts.Pretty
-import Language.Haskell.Exts.Syntax
-import Language.Haskell.Exts.SrcLoc
+import qualified Data.Set as Set (difference, Set, union)
+import Language.Haskell.Exts.Pretty (defaultMode, Mode(OneLineMode), Pretty, prettyPrint, prettyPrintStyleMode, style, Style(mode))
+import Language.Haskell.Exts.SrcLoc (SrcInfo)
+import Language.Haskell.Exts.Syntax (Exp, InstHead(..), InstRule(..), ModuleName(..), Name, QName, Type)
 import System.Directory (createDirectoryIfMissing, doesFileExist, getCurrentDirectory, removeDirectoryRecursive, removeFile, renameFile, setCurrentDirectory)
 import System.Exit (ExitCode(..))
 import System.FilePath (takeDirectory)
@@ -177,24 +176,6 @@ replaceFileWithBackup path text = do
           do exists <- doesFileExist src
              when exists (System.Directory.renameFile src dst)
 
--- | Slightly modified lines function from Data.List.  It preserves
--- the presence or absence of a terminating newline by appending [""]
--- if string ends with a newline.  Thus, the corresponding unlines
--- function is intercalate "\n".
-lines'                   :: String -> [String]
-lines' ""                =  []
--- Somehow GHC doesn't detect the selector thunks in the below code,
--- so s' keeps a reference to the first line via the pair and we have
--- a space leak (cf. #4334).
--- So we need to make GHC see the selector thunks with a trick.
-lines' s                 =  cons (case break (== '\n') s of
-                                    (l, s') -> (l, case s' of
-                                                    []      -> [] -- no newline
-                                                    _:""    -> [""]
-                                                    _:s''   -> lines' s''))
-  where
-    cons ~(h, t)        =  h : t
-
 listPairs :: [a] -> [(Maybe a, Maybe a)]
 listPairs [] = [(Nothing, Nothing)]
 listPairs (x : xs) =
@@ -237,3 +218,24 @@ cartesianProduct = sequence
 
 groupOn :: (a -> Bool) -> [a] -> [[a]]
 groupOn p s = filter (\(c : _) -> not (p c)) (groupBy (\a b -> (p a) == (p b)) s)
+
+
+
+
+-- | Slightly modified lines function from Data.List.  It preserves
+-- the presence or absence of a terminating newline by appending [""]
+-- if string ends with a newline.  Thus, the corresponding unlines
+-- function is intercalate "\n".
+lines'                   :: String -> [String]
+lines' ""                =  []
+-- Somehow GHC doesn't detect the selector thunks in the below code,
+-- so s' keeps a reference to the first line via the pair and we have
+-- a space leak (cf. #4334).
+-- So we need to make GHC see the selector thunks with a trick.
+lines' s                 =  cons (case break (== '\n') s of
+                                    (l, s') -> (l, case s' of
+                                                    []      -> [] -- no newline
+                                                    _:""    -> [""]
+                                                    _:s''   -> lines' s''))
+  where
+    cons ~(h, t)        =  h : t

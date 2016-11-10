@@ -37,7 +37,7 @@ import Test.HUnit (assertString, Test(..))
 import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, withCleanRepo, withCurrentDirectory)
 
 declTests :: Test
-declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, {-decl7,-} decl8, {-decl9,-}
+declTests = TestList [decl1, decl2, decl3, simple4, decl5, decl6, {-decl7,-} decl8, {-decl9,-}
                       clean10,
                       simple1, simple2, simple3]
 
@@ -102,23 +102,16 @@ decl3 :: Test
 decl3 = TestLabel "decl3" $ TestCase $ do
           let input = "tests/input/decl-mover"
           testMoveSpec' "tests/expected/decl3" input
-            (runMoveUnsafe input opts0 (moveDeclsByName "lines'" "SrcLoc" "Tmp" :: MoveSpec) >>
+            (runMoveUnsafe input opts0 (moveDeclsByName "lines'" "Utils" "Tmp" :: MoveSpec) >>
              runMoveUnsafe input opts0 (moveDeclsByName "lines'" "Tmp" "Utils" :: MoveSpec))
 
-decl4 :: Test
-decl4 = TestLabel "decl4" $ TestCase $ do
-          let input = "tests/input/decl-mover"
-          testMoveSpec' "tests/expected/decl4" input (runMoveUnsafe input opts0 spec)
+simple4 :: Test
+simple4 = TestLabel "simple4" $ TestCase $ do
+            let input = "tests/input/simple4"
+            testMoveSpec' "tests/expected/simple4" input (runMoveUnsafe input opts0 spec)
     where
       spec :: MoveSpec
-      spec = foldl1' (<>) [moveDeclsByName "withTempDirectory" "IO" "Utils",
-                           moveDeclsByName "ignoringIOErrors" "IO" "Utils",
-                           moveDeclsByName "FoldDeclared" "Symbols" "Tmp",
-                           moveInstDecls instpred]
-      instpred i name _types
-          | (gFind name :: [Name ()]) == [Ident () "FoldDeclared"] =
-              (_moduleKey i) {_moduleName = ModuleName () "Tmp"}
-      instpred i _ _ = _moduleKey i
+      spec = foldl1' (<>) [moveDeclsByName "s2" "M1" "M2"]
 
 decl5 :: Test
 decl5 = TestLabel "decl5" $ TestCase $ testMoveSpec "tests/expected/decl5" "tests/input/decl-mover" spec

@@ -92,6 +92,7 @@ newModuleText mi@(ModuleInfo {_module = m}) pairs =
     where
       -- oi = getImports m
       doOptImports :: GHCOpts -> [ImportDecl ()] -> [String]
+      doOptImports opts [] = []
       doOptImports opts ni =
           -- let ni'' = fixNewImports' True mi ni in
           -- if dropAnn oi == map dropAnn ni' then keep ... else

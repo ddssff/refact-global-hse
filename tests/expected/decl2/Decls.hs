@@ -8,8 +8,8 @@ module Decls
     , moveDecls
     ) where
 
-import Clean (cleanImports)
 import CPP (GHCOpts, hsSourceDirs)
+import Clean (cleanImports)
 import Control.Lens (makeLenses, set, view)
 import Control.Monad (foldM, void, when)
 import Control.Monad.RWS (modify, MonadWriter(tell))
@@ -22,14 +22,9 @@ import Data.Maybe (catMaybes, listToMaybe, mapMaybe, maybeToList)
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, toList)
 import Debug.Trace (trace)
 import Graph (findModuleByKey, findModuleByKeyUnsafe, makeImportGraph, moveType, MoveType(Down, Up), Rd(Rd))
-import Language.Haskell.Exts.Syntax (Annotated(ann), Decl(TypeSig), EWildcard(..), ExportSpec, ExportSpecList(ExportSpecList),
-                                                             ImportDecl(..), ImportSpec, ImportSpecList(ImportSpecList), Module(Module),
-                                                             ModuleHead(ModuleHead), ModuleName(..), ModulePragma, Name, ExportSpec(..),
-                                                             ImportDecl(..), ImportSpec(IThingAll, IThingWith, IVar), ModuleName(..),
-                                                             ModulePragma(..), Name(..), QName(Qual, Special, UnQual))
--- import Language.Haskell.Exts.Annotated.Simplify (sExportSpec, sModuleName, sModulePragma, sName)
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcInfo, SrcLoc(..), SrcSpanInfo(..))
+import Language.Haskell.Exts.Syntax (Annotated(ann), Decl(TypeSig), EWildcard(..), ExportSpec, ExportSpec(..), ExportSpecList(ExportSpecList), ImportDecl(..), ImportSpec, ImportSpec(IThingAll, IThingWith, IVar), ImportSpecList(ImportSpecList), Module(Module), ModuleHead(ModuleHead), ModuleName(..), ModulePragma, ModulePragma(..), Name, Name(..), QName(Qual, Special, UnQual))
 import Language.Haskell.Names (resolve, Symbol(symbolName))
 import Language.Haskell.Names.SyntaxUtils (dropAnn, getImports, getModuleDecls)
 import LoadModule (Annot, loadModule, loadModules)
@@ -38,10 +33,10 @@ import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
 import MoveSpec (applyMoveSpec, MoveSpec)
 import Names (topDeclExportSpec)
 import ScanM (keep, keepAll, ScanM, scanModule, skip, withTrailingWhitespace)
-import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, endOfImportSpecs, endOfModule,
-               srcLoc, startOfDecls, startOfImports)
+import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, endOfImportSpecs, endOfModule, srcLoc, startOfDecls, startOfImports)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
-import Utils (EZPrint(ezPrint), gFind, prettyPrint', replaceFile, withCleanRepo, withCurrentDirectory)
+import Tmp (withCurrentDirectory)
+import Utils (EZPrint(ezPrint), gFind, prettyPrint', replaceFile, withCleanRepo)
 
 $(makeLenses ''Rd)
 

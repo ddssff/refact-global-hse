@@ -12,16 +12,15 @@ import Control.Exception.Lifted as IO (bracket, catch)
 import Control.Monad (MonadPlus, msum, when)
 import Control.Monad.Trans (liftIO, MonadIO)
 import Control.Monad.Trans.Control (MonadBaseControl)
---import Data.Bool (bool)
 import Data.Generics (Data(gmapM), GenericM, listify, toConstr, Typeable)
 import Data.List (groupBy, intercalate, stripPrefix)
 import Data.Maybe (mapMaybe)
 import Data.Sequence ((|>), Seq)
-import qualified Data.Set as Set
-import Language.Haskell.Exts.Pretty
-import Language.Haskell.Exts.Syntax
-import Language.Haskell.Exts.SrcLoc
-import System.Directory (createDirectoryIfMissing, doesFileExist, getCurrentDirectory, removeDirectoryRecursive, removeFile, renameFile, setCurrentDirectory)
+import qualified Data.Set as Set (difference, Set, union)
+import Language.Haskell.Exts.Pretty (defaultMode, Mode(OneLineMode), Pretty, prettyPrint, prettyPrintStyleMode, style, Style(mode))
+import Language.Haskell.Exts.SrcLoc (SrcInfo)
+import Language.Haskell.Exts.Syntax (Exp, InstHead(..), InstRule(..), ModuleName(..), Name, QName, Type)
+import System.Directory (createDirectoryIfMissing, doesFileExist, getCurrentDirectory, removeDirectoryRecursive, removeFile, renameFile)
 import System.Exit (ExitCode(..))
 import System.FilePath (takeDirectory)
 import System.IO (hPutStrLn, stderr)
@@ -132,14 +131,6 @@ instance SrcInfo l => EZPrint (Exp l) where
 
 maybeStripPrefix :: Eq a => [a] -> [a] -> [a]
 maybeStripPrefix pre lst = maybe lst id (stripPrefix pre lst)
-
-withCurrentDirectory :: forall m a. (MonadIO m, MonadBaseControl IO m) => FilePath -> m a -> m a
-withCurrentDirectory path action =
-    liftIO (putStrLn ("cd " ++ path)) >>
-    IO.bracket (liftIO getCurrentDirectory >>= \save -> liftIO (setCurrentDirectory path) >> return save)
-               (liftIO . setCurrentDirectory)
-               (const (action `IO.catch` (\(e :: SomeException) -> liftIO (putStrLn ("in " ++ path)) >> throw e)) :: String -> m a)
-               -- (const action `catch` (\e -> liftIO (putStrLn ("in " ++ path) >> throw e)))
 
 withTempDirectory :: (MonadIO m, MonadBaseControl IO m) =>
                      Bool
