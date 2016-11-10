@@ -45,7 +45,7 @@ import Data.Map.Strict as Map (empty, fromList, Map)
 import Data.Set as Set (empty, map, minView, partition, Set, singleton, toList, union)
 import Data.String (IsString(..))
 import Prelude (($), (++), (.), (<$>), Applicative(pure), Bool(False), Enum(fromEnum, pred, succ, toEnum), Eq((==)), error, Foldable(length), fst, id, Int, Maybe(..), Monad((>>=), return), Num((*), (+)), Ord((<)), Show(show), snd, zip)
-import Prelude hiding (map, map)
+import Prelude hiding (map)
 import Test.HUnit (Test(..))
 import Test.HUnit hiding (State)
 
