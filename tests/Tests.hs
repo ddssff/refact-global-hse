@@ -20,6 +20,11 @@ import System.Exit (ExitCode(..), exitWith)
 import Test.HUnit (assertEqual, errors, failures, runTestTT, Test(TestCase, TestList))
 import Utils
 
+-- Note that running one of these tests by itself will leave the input
+-- subdirectory in a modified state.  This allows you to look at what
+-- actually happened, that is, what you saw in the error diff.  These
+-- changes are reset before the next test begins.
+
 main :: IO ()
 main = runTestTT (TestList [importTests, declTests, cpp1]) >>= doCounts
     where

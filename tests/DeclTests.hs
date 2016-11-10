@@ -37,6 +37,7 @@ import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, withCleanRepo, withCurren
 
 declTests :: Test
 declTests = TestList [decl1, decl2, decl3, decl4, decl5, decl6, {-decl7,-} decl8, {-decl9,-}
+                      clean10,
                       simple1, simple2, simple3]
 
 -- Test moving a declaration to a module that currently imports it
@@ -255,6 +256,27 @@ clean9 = TestLabel "load9" $ TestCase $
       actual = "/home/dsf/git/happstack-ghcjs/happstack-ghcjs-client"
       spec :: MoveSpec
       spec = foldl1' (<>) [moveDeclsByName "foo" "Bar" "Baz"]
+
+clean10 :: Test
+clean10 =
+    TestLabel "clean10" $ TestCase $ do
+      gitResetSubdir "tests/input/atp-haskell/Data/Logic/ATP"
+      withCurrentDirectory "tests/input/atp-haskell" $ do
+        let opts = set hc "ghc" $
+                   set hsSourceDirs [] $
+                   set cppOptions defaultCpphsOptions $
+                   set enabled [] $
+                   opts0
+        m <- loadModule opts "Data/Logic/ATP/Lib.hs"
+        cleanImports [opts] [m]
+      (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
+      case code of
+        ExitSuccess -> assertString diff -- No differences
+        ExitFailure 1 -> assertString diff -- Differences, no error
+        ExitFailure 2 -> assertString err -- error
+    where
+      expected = "tests/expected/clean10/Lib.hs"
+      actual = "tests/input/atp-haskell/Data/Logic/ATP/Lib.hs"
 
 simple1 :: Test
 simple1 =

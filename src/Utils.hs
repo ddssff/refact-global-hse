@@ -73,20 +73,26 @@ traceIOException loc action =
 -}
 
 -- | Determine whether the repository containing the working directory
--- is in a clean state.
-gitIsClean :: IO Bool
-gitIsClean = do
+-- is in a modified state, if so return the messages.
+gitUnclean :: IO (Maybe String)
+gitUnclean = do
+  here <- getCurrentDirectory
+  hPutStrLn stderr ("here: " ++ show here)
   (code, out, _err) <- readProcessWithExitCode "git" ["status", "--porcelain"] ""
   case code of
     ExitFailure _ -> error "gitCheckClean failure"
-    ExitSuccess | all unmodified (lines out) -> pure True
-    ExitSuccess -> pure False
+    ExitSuccess | all unmodified (lines out) -> pure Nothing
+    ExitSuccess -> pure $ Just out
     where
       unmodified (a : b : _) = elem a "?! " && elem b "?! "
       unmodified _ = False
 
+gitIsClean :: IO Bool
+gitIsClean = maybe True (const False) <$> gitUnclean
+
 withCleanRepo :: IO a -> IO a
-withCleanRepo action = gitIsClean >>= bool (error "withCleanRepo: please commit or revert changes") action
+withCleanRepo action = do
+  gitUnclean >>= maybe action (\s -> error $ "withCleanRepo: please commit or revert changes:\n" ++ s)
 
 -- | Print a very short and readable version for trace output.
 class EZPrint a where
