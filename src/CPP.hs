@@ -5,8 +5,7 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE TemplateHaskell #-}
 module CPP
-  ( parseFileWithCommentsAndCPP
-  , defaultCpphsOptions
+  ( defaultCpphsOptions
   , GHCOpts(GHCOpts), hc, cppOptions, enabled, hashDefines, hsSourceDirs, ghcOptions
   , applyHashDefine
   , ghcProcessArgs
@@ -21,73 +20,17 @@ module CPP
 import Control.Lens (makeLenses, view)
 import Data.Char (isDigit)
 import Data.Default (Default(def))
-import Data.List (intercalate, isSuffixOf)
+import Data.List (intercalate)
 import Data.Maybe (catMaybes)
-import Data.Monoid ((<>))
 import Data.Version(Version(Version))
 import HashDefine (HashDefine(..), parseHashDefine)
-import Language.Haskell.Exts (Comment, impliesExts, KnownExtension(CPP), Module, ParseMode(baseLanguage, extensions, ignoreLanguagePragmas, parseFilename), parseModuleWithComments, ParseResult, readExtensions, SrcSpanInfo, toExtensionList)
+import Language.Haskell.Exts (KnownExtension)
 import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
-import Language.Preprocessor.Cpphs (BoolOptions(hashline, locations, stripC89, stripEol), CpphsOptions(boolopts, defines), runCpphs)
-import qualified Language.Preprocessor.Cpphs as Orig (defaultCpphsOptions)
-import Language.Preprocessor.Unlit (unlit)
+import Language.Preprocessor.Cpphs (CpphsOptions(defines), defaultCpphsOptions)
+import Language.Preprocessor.Cpphs ()
 import Options.Applicative
 import Test.HUnit
 import Utils (EZPrint(ezPrint))
-
-parseFileWithCommentsAndCPP ::  CpphsOptions -> ParseMode -> FilePath
-                      -> IO (ParseResult (Module SrcSpanInfo, [Comment], String))
-parseFileWithCommentsAndCPP cppopts parseMode0 file = do
-    content <- readFile file
-    parseFileContentsWithCommentsAndCPP cppopts parseMode content
-  where
-    parseMode = parseMode0 { parseFilename = file }
-
-parseFileContentsWithCommentsAndCPP
-    :: CpphsOptions -> ParseMode -> String
-    -> IO (ParseResult (Module SrcSpanInfo, [Comment], String))
-parseFileContentsWithCommentsAndCPP cppopts p rawStr = do
-    let file = parseFilename p
-        md = delit file rawStr
-        cppMode = updateExtensions p md
-    processedSrc <- cpp cppopts cppMode md
-    let finalMode = updateExtensions cppMode processedSrc
-    return $ parseModuleWithComments finalMode processedSrc >>= \(m, cs) -> pure (m, cs, processedSrc)
-
-updateExtensions :: ParseMode -> String -> ParseMode
-updateExtensions p modname =
-  let oldLang = baseLanguage p
-      exts = extensions p
-      (bLang, extraExts) =
-          case (ignoreLanguagePragmas p, readExtensions modname) of
-            (False, Just (mLang, es)) ->
-                 (case mLang of {Nothing -> oldLang;Just newLang -> newLang}, es)
-            _ -> (oldLang, [])
-  in p { extensions = exts <> extraExts
-       , ignoreLanguagePragmas = False
-       , baseLanguage = bLang
-       }
-
-cpp :: CpphsOptions -> ParseMode -> String -> IO String
-cpp cppopts p s
-  | CPP `elem` impliesExts (toExtensionList (baseLanguage p) (extensions p))
-  = runCpphs cppopts (parseFilename p) s
-  | otherwise = return s
-
-delit :: String -> String -> String
-delit fn = if ".lhs" `isSuffixOf` fn then unlit fn else id
-
-defaultCpphsOptions :: CpphsOptions
-defaultCpphsOptions =
-  Orig.defaultCpphsOptions
-  { boolopts = (boolopts Orig.defaultCpphsOptions)
-      { locations = True
-      , stripC89 = True
-      , stripEol = False
-      , hashline = False
-      }
-  }
-
 
 -- | Support a tiny subset of the GHC command line options.
 data GHCOpts =
@@ -206,8 +149,10 @@ ghcOptsOptions' =
              "Add a #define to the compiler options" ]
 -}
 
+tests :: Test
 tests = TestList [test1]
 
+test1 :: Test
 test1 = TestCase (assertEqual "test1" expected actual)
     where
       expected = Just (SymbolReplacement { name = "MIN_VERSION_base(major1,major2,minor)"
@@ -223,7 +168,7 @@ test1 = TestCase (assertEqual "test1" expected actual)
 
 -- | Return a HashDefine such as those in dist/build/autogen/cabal_macros.h
 cabalMacro :: String -> Version -> HashDefine
-cabalMacro name ver@(Version branch _tags) =
+cabalMacro name (Version branch _tags) =
     SymbolReplacement
       ("MIN_VERSION_" ++ name ++ "(major1,major2,minor)")
       ("((major1)<" ++ show major1 ++ "||(major1)==" ++ show major1 ++ "&&(major2)<" ++ show major2 ++ "||(major1)==" ++ show major1 ++ "&&(major2)==" ++ show major2 ++ "&&(minor)<="++ show minor ++ ")")

@@ -8,11 +8,12 @@ module LoadModule
 
 import Control.Lens (view)
 import CPP (extensionsForHSEParser, GHCOpts, applyHashDefine, enabled, hashDefines)
-import qualified CPP (defaultCpphsOptions, parseFileWithCommentsAndCPP)
+import qualified CPP (defaultCpphsOptions)
 import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
 import Data.List (groupBy, intercalate)
 import Debug.Trace (trace)
+import Language.Haskell.Exts.CPP (parseFileWithCommentsAndCPP)
 import Language.Haskell.Exts.Syntax (Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName))
 import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Parser as Exts (defaultParseMode, fromParseResult, ParseMode(extensions, parseFilename, fixities))
@@ -51,7 +52,7 @@ loadModule :: GHCOpts -> FilePath -> IO (ModuleInfo SrcSpanInfo)
 loadModule opts path = do
   moduleText <- liftIO $ readFile path
   let cpphsOptions' = foldr applyHashDefine cpphsOptions (view hashDefines opts)
-  (parsed', comments, _processed) <- Exts.fromParseResult <$> CPP.parseFileWithCommentsAndCPP cpphsOptions' mode path
+  (parsed', comments) <- Exts.fromParseResult <$> parseFileWithCommentsAndCPP cpphsOptions' mode path
   let parsed = mapTopAnnotations (fixEnds comments moduleText) $ everywhere (mkT fixSpan) parsed'
   -- liftIO $ writeFile (path ++ ".cpp") processed
   -- putStr processed

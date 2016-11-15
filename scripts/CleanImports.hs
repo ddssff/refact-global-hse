@@ -16,7 +16,6 @@ import Data.Default (def)
 import Language.Haskell.Names (Scoped(Scoped))
 import LoadModule (loadModules)
 import Options.Applicative (help, many, metavar, Parser, strOption, switch, long, (<>))
-import Options.Generic
 -- import System.Console.GetOpt (ArgDescr(NoArg, ReqArg), ArgOrder(Permute), getOpt', OptDescr(..), usageInfo)
 import System.Directory (canonicalizePath)
 import System.Environment (getArgs)
@@ -28,7 +27,7 @@ data Params
     = Params { _ghcOpts :: GHCOpts
              , _findDirs :: [FilePath]
              , _moduverse :: [FilePath]
-             , _unsafe :: Bool } deriving (Generic, Show)
+             , _unsafe :: Bool } deriving (Show)
 
 $(makeLenses ''Params)
 
