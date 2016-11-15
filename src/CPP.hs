@@ -236,7 +236,7 @@ parsePackageIdentifier s =
       _ -> Nothing
 
 tests :: Test
-tests = TestList [test1, test2, test3, test4, test5, test6a, test6b, test6c]
+tests = TestList [test1, test2, test3, test4, test5, test6a, test6b, test6c, test7]
 
 test1 :: Test
 test1 = TestCase (assertEqual "test1" expected actual)
