@@ -1,4 +1,4 @@
-{-# LANGUAGE FlexibleContexts, TemplateHaskell #-}
+{-# LANGUAGE FlexibleContexts, TemplateHaskell, TupleSections #-}
 
 module Decorate
     ( Params(..)
@@ -34,7 +34,7 @@ import SrcLoc
 
 data Params
     = Params { _topDir :: FilePath
-             , _paths :: [FilePath]
+             , _paths :: [(Maybe FilePath, FilePath)]
              , _ghcOpts :: GHCOpts
              } deriving Show
 
@@ -46,8 +46,8 @@ options =
     where
       t :: Parser FilePath
       t = strOption (value "." <> long "cd" <> metavar "DIR" <> help "Set working directory")
-      p :: Parser [FilePath]
-      p = some (argument str (metavar "PATH"))
+      p :: Parser [(Maybe FilePath, FilePath)]
+      p = map (Nothing,) <$> some (argument str (metavar "PATH"))
       g :: Parser GHCOpts
       g = ghcOptsOptions
 

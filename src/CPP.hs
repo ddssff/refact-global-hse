@@ -11,6 +11,7 @@ module CPP
   , turnOffLocations
   , GHCOpts(GHCOpts), hc, cppOptions, enabled, hashDefines, hsSourceDirs, ghcOptions
   , applyHashDefine
+  , applyHashDefine'
   , ghcProcessArgs
   , cppIf
   , cppEndif

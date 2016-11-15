@@ -6,8 +6,9 @@ module LoadModule
     , Annot
     ) where
 
-import Control.Lens (view)
-import CPP (extensionsForHSEParser, GHCOpts, applyHashDefine, enabled, hashDefines)
+import Control.Lens (over, view)
+import CPP (applyHashDefine, applyHashDefine', cppOptions, defaultParseMode, enabled, extensionsForHSEParser,
+            GHCOpts, hashDefines, turnOffLocations)
 import qualified CPP (defaultCpphsOptions)
 import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
@@ -16,7 +17,7 @@ import Debug.Trace (trace)
 import Language.Haskell.Exts.CPP (parseFileWithCommentsAndCPP)
 import Language.Haskell.Exts.Syntax (Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName))
 import Language.Haskell.Exts.Extension (Extension(EnableExtension))
-import Language.Haskell.Exts.Parser as Exts (defaultParseMode, fromParseResult, ParseMode(extensions, parseFilename, fixities))
+import Language.Haskell.Exts.Parser as Exts (fromParseResult, ParseMode(extensions, parseFilename, fixities))
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo(..))
 import Language.Haskell.Names (annotate, resolve, Scoped(..))
 import Language.Haskell.Names.Imports (importTable)
@@ -26,7 +27,8 @@ import ModuleInfo (ModuleInfo(..))
 import ModuleKey (ModuleKey(..))
 import SrcLoc (fixEnds, fixSpan, mapTopAnnotations, spanOfText)
 import System.Directory (canonicalizePath)
-import System.FilePath (joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
+import System.FilePath ((</>), joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
+import System.IO (hPutStrLn, stderr)
 import Utils (EZPrint(ezPrint))
 
 type Annot = Scoped SrcSpanInfo
@@ -35,9 +37,9 @@ instance EZPrint Annot where
     ezPrint (Scoped _ x) = ezPrint x
 
 -- | Load a list of modules and compute their global scoping info.
-loadModules :: GHCOpts -> [FilePath] -> IO [ModuleInfo Annot]
-loadModules opts paths = do
-  t1 <$> addScoping <$> mapM (loadModule opts) paths
+loadModules :: GHCOpts -> [(Maybe FilePath, FilePath)] -> IO [ModuleInfo Annot]
+loadModules opts pairs = do
+  t1 <$> addScoping <$> mapM (loadModule opts) pairs
     where
       t1 :: [ModuleInfo l] -> [ModuleInfo l]
       t1 modules = trace ("modules loaded: " ++ show (map ezPrint modules)) modules
@@ -48,11 +50,18 @@ addScoping mods =
                   _moduleGlobals = moduleTable (importTable env (_module m)) (_module m)}) mods
     where env = resolve (map _module mods) mempty
 
-loadModule :: GHCOpts -> FilePath -> IO (ModuleInfo SrcSpanInfo)
-loadModule opts path = do
+pairPath :: (Maybe FilePath, FilePath) -> FilePath
+pairPath (mtop, path) = maybe path (\top -> top </> path) mtop
+
+loadModule :: GHCOpts -> (Maybe FilePath, FilePath) -> IO (ModuleInfo SrcSpanInfo)
+loadModule opts pair = do
+  let path = pairPath pair
+      mode = defaultParseMode opts path
   moduleText <- liftIO $ readFile path
-  let cpphsOptions' = foldr applyHashDefine cpphsOptions (view hashDefines opts)
-  (parsed', comments) <- Exts.fromParseResult <$> parseFileWithCommentsAndCPP cpphsOptions' mode path
+  let opts' = foldr applyHashDefine opts (view hashDefines opts)
+      opts'' = over cppOptions turnOffLocations opts'
+  hPutStrLn stderr ("loadModule " ++ show pair)
+  (parsed', comments {-, _processed-}) <- Exts.fromParseResult <$> parseFileWithCommentsAndCPP (view cppOptions opts'') mode path
   let parsed = mapTopAnnotations (fixEnds comments moduleText) $ everywhere (mkT fixSpan) parsed'
   -- liftIO $ writeFile (path ++ ".cpp") processed
   -- putStr processed
@@ -68,24 +77,6 @@ loadModule opts path = do
                     , _moduleText = moduleText
                     , _moduleSpan = spanOfText path moduleText
                     , _moduleGlobals = mempty }
-    where
-      mode = Exts.defaultParseMode {Exts.extensions = map EnableExtension (view enabled opts ++ extensionsForHSEParser),
-                                    Exts.parseFilename = path,
-                                    Exts.fixities = Nothing }
-
--- | Turn of the locations flag.  This means simple #if macros will not
--- affect the line numbers of the output text, so we can use the
--- resulting SrcSpan info on the original text.  Macro expansions
--- could still mess this up.
-cpphsOptions :: CpphsOptions
-cpphsOptions =
-    CPP.defaultCpphsOptions
-    { boolopts =
-          ( boolopts CPP.defaultCpphsOptions )
-          { locations = False
-      }
-    }
-
 -- | Compute the module key from a filepath (absolute or relative to
 -- ".") and the parsed module.
 moduleKey :: FilePath -> Module SrcSpanInfo -> IO ModuleKey

@@ -53,12 +53,16 @@ runSimpleMove top spec = withCleanRepo $ runSimpleMoveUnsafe top spec
 runSimpleMoveUnsafe :: FilePath -> MoveSpec -> IO ()
 runSimpleMoveUnsafe top mv = runMoveUnsafe top (set hsSourceDirs ["."] def) mv
 
+-- | Run a move declaration action without doing a git reset first.
 runMoveUnsafe :: FilePath -> GHCOpts -> MoveSpec -> IO ()
-runMoveUnsafe top opts mv =
-    withCurrentDirectory top $ do
-      paths <- (catMaybes . map (stripPrefix "./"))
-               <$> (FilePath.find always (extension ==? ".hs" &&? fileType ==? RegularFile) ".")
-      loadModules def paths >>= moveDeclsAndClean mv opts
+runMoveUnsafe root opts mv =
+    withCurrentDirectory root $ do
+      -- Find all the haskell files in directories of the hs-source-dirs list
+      pairs <- concat
+                 <$> mapM (\top -> (map (Just top,) . catMaybes . map (stripPrefix (top ++ "/")))
+                                     <$> FilePath.find always (extension ==? ".hs" &&? fileType ==? RegularFile) top)
+                          (view hsSourceDirs opts)
+      loadModules def pairs >>= moveDeclsAndClean mv opts
 
 moveDeclsAndClean :: MoveSpec -> GHCOpts -> [ModuleInfo Annot] -> IO ()
 moveDeclsAndClean mv opts mods = do
@@ -72,12 +76,12 @@ moveDeclsAndClean mv opts mods = do
               let p = _modulePath m
               case _moduleText m == s of
                 True -> return Nothing
-                False -> replaceFile p s >> return (Just p))
+                False -> replaceFile p s >> return (Just (Nothing, p)))
            (zip mods (moveDecls rd mv))
   newPaths <- mapM (\(k, s) -> do
                       let path = moduleFullPath k
                       void $ replaceFile (trace ("New file: " ++ show path) path) s
-                      pure path)
+                      pure (Nothing, path))
                    (Map.toList (newModuleMap rd mv))
   -- Re-read the updated modules and clean their imports
   -- (Later we will need to find the newly created modules here)

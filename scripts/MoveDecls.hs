@@ -1,7 +1,7 @@
 -- Example:
 -- runhaskell scripts/Move.hs --move=FoldDeclared,Symbols,Tmp --unsafe
 
-{-# LANGUAGE CPP, RankNTypes, ScopedTypeVariables, TemplateHaskell #-}
+{-# LANGUAGE CPP, RankNTypes, ScopedTypeVariables, TemplateHaskell, TupleSections #-}
 
 module MoveDecls
     ( Params(..)
@@ -41,7 +41,7 @@ data Params
              , _ghcOpts :: GHCOpts
              , _lsDirs :: [FilePath]
              , _findDirs :: [FilePath]
-             , _moduverse :: [FilePath]
+             , _moduverse :: [(Maybe FilePath, FilePath)]
              , _unsafe :: Bool
              , _gitReset :: Bool }
       deriving Show
@@ -73,7 +73,7 @@ options =
       gco = ghcOptsOptions
       lds = many (strOption (long "ls"<> metavar "DIR" <> help "Directory relative to top to search (non-recursively) for .hs files to add to the moduverse"))
       fds = many (strOption (long "find" <> metavar "DIR" <> help "Directory relative to top to search (recursively) for .hs files to add to the moduverse"))
-      mverse = many (strOption (long "mod" <> metavar "PATH" <> help "Add a module to the moduverse"))
+      mverse = map (Nothing,) <$>  many (strOption (long "mod" <> metavar "PATH" <> help "Add a module to the moduverse"))
       us = switch (long "unsafe" <> help "Skip the safety check - allow uncommitted edits in repo where clean is performed")
       gr = switch (long "reset" <> help "Do a hard reset and git clean on the working directory (requires --unsafe)")
 
@@ -124,7 +124,7 @@ finalize params = withCurrentDirectory (_cd params) $ do
                                                   (extension ==? ".hs" &&? fileType ==? RegularFile)
                                                   ({-view topDir params </>-} dir)))
                  (_findDirs params)
-  pure $ over moduverse (++ (concat (paths1 ++ paths2))) params
+  pure $ over moduverse (++ (map (Nothing,) (concat (paths1 ++ paths2)))) params
 
 go :: Params -> IO ()
 go params' = do

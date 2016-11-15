@@ -4,6 +4,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 
+import CPP (tests)
 import Data.Default (def)
 import Data.List (intercalate)
 import Data.Map.Strict as Map (fromList)
@@ -26,13 +27,13 @@ import Utils
 -- changes are reset before the next test begins.
 
 main :: IO ()
-main = runTestTT (TestList [importTests, declTests, cpp1]) >>= doCounts
+main = runTestTT (TestList [CPP.tests, importTests, declTests, cpp1]) >>= doCounts
     where
       doCounts counts' = exitWith (if errors counts' /= 0 || failures counts' /= 0 then ExitFailure 1 else ExitSuccess)
 
 cpp1 :: Test
 cpp1 = TestCase $ do
-         (ModuleInfo {_module = m, _moduleText = s, _moduleComments = cs}) <- loadModule def "tests/input/cpp/A.hs"
+         (ModuleInfo {_module = m, _moduleText = s, _moduleComments = cs}) <- loadModule def (Just "tests/input/cpp", "A.hs")
          assertEqual "cpp1" expected (debugRender m cs s)
     where
       expected =

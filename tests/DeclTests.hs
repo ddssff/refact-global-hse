@@ -43,7 +43,7 @@ declTests = TestList [decl1, decl2, decl3, simple4, simple5, decl6, {-decl7,-} d
 
 -- Test moving a declaration to a module that currently imports it
 decl1 :: Test
-decl1 = TestLabel "decl1" $ TestCase $ testMoveSpec "tests/expected/decl1" "tests/input/atp-haskell" moveSpec1
+decl1 = TestLabel "decl1 - move tryFindM from Lib to Tableaux" $ TestCase $ testMoveSpec "tests/expected/decl1" "tests/input/atp-haskell" moveSpec1
 
 -- Move tryfindM from Lib to Tableaux.  Tableaux already imports
 -- tryfindM, so that import should be removed.  The question is, now
@@ -85,13 +85,13 @@ moveSpec1 k (DerivDecl {}) = k
 moveSpec1 k d = error $ "Unexpected decl: " ++ take 120 (show d) ++ ".."
 -}
 
--- Test moving a declaration to a non-existant module
+-- Test moving a declaration to an as yet non-existant module
 -- Test updating import of decl that moved from A to B in module C
 decl2 :: Test
 decl2 = TestLabel "decl2" $ TestCase $ do
           let input = "tests/input/decl-mover"
-          testMoveSpec' "tests/expected/decl2" input
-            (runMoveUnsafe input opts0 (moveDeclsByName "withCurrentDirectory" "IO" "Tmp" :: MoveSpec))
+          testDirectory "tests/expected/decl2" input
+            (runMoveUnsafe input opts0 (moveDeclsByName "withCurrentDirectory" "Utils" "Tmp" :: MoveSpec))
 
 -- Test moving a declaration to a module that does *not* currently
 -- import it.  Now we don't know whether it leaves behind uses for
@@ -101,14 +101,14 @@ decl2 = TestLabel "decl2" $ TestCase $ do
 decl3 :: Test
 decl3 = TestLabel "decl3" $ TestCase $ do
           let input = "tests/input/decl-mover"
-          testMoveSpec' "tests/expected/decl3" input
+          testDirectory "tests/expected/decl3" input
             (runMoveUnsafe input opts0 (moveDeclsByName "lines'" "Utils" "Tmp" :: MoveSpec) >>
              runMoveUnsafe input opts0 (moveDeclsByName "lines'" "Tmp" "Utils" :: MoveSpec))
 
 simple4 :: Test
 simple4 = TestLabel "simple4" $ TestCase $ do
             let input = "tests/input/simple4"
-            testMoveSpec' "tests/expected/simple4" input (runMoveUnsafe input opts0 spec)
+            testDirectory "tests/expected/simple4" input (runMoveUnsafe input opts0 spec)
     where
       spec :: MoveSpec
       spec = foldl1' (<>) [moveDeclsByName "s2" "M1" "M2"]
@@ -117,7 +117,7 @@ simple4 = TestLabel "simple4" $ TestCase $ do
 simple5 :: Test
 simple5 = TestLabel "simple5" $ TestCase $ do
             let input = "tests/input/simple5"
-            testMoveSpec' "tests/expected/simple5" input (runMoveUnsafe input opts0 spec)
+            testDirectory "tests/expected/simple5" input (runMoveUnsafe input opts0 spec)
     where
       spec :: MoveSpec
       spec = foldl1' (<>) [moveDeclsByName "s2" "M1" "M2"]
@@ -133,7 +133,7 @@ decl6 = TestLabel "decl6" $ TestCase $ testMoveSpec "tests/expected/decl6" "test
 
 -- Need a way to add imports of the lenses created by makeLenses
 decl7 :: Test
-decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tests/input/rgh" $
+decl7 = TestLabel "decl7" $ TestCase $ testDirectory "tests/expected/decl7" "tests/input/rgh" $
           runMoveUnsafe "tests/input/rgh" (set hsSourceDirs [".", "tests"] opts0) spec
     where
       spec :: MoveSpec
@@ -180,7 +180,7 @@ decl7 = TestLabel "decl7" $ TestCase $ testMoveSpec' "tests/expected/decl7" "tes
 decl8 :: Test
 decl8 = TestLabel "decl8 - up move" $ TestCase $ do
           let input = "tests/input/decl-mover"
-          testMoveSpec' "tests/expected/decl8" input (runMoveUnsafe input opts0 spec)
+          testDirectory "tests/expected/decl8" input (runMoveUnsafe input opts0 spec)
     where
       spec :: MoveSpec
       spec = foldl1' (<>) [-- moveDeclsByName "defaultCpphsOptions" "CPP" "Types"
@@ -192,7 +192,7 @@ decl8 = TestLabel "decl8 - up move" $ TestCase $ do
 
 -- Need a way to add imports of the lenses created by makeLenses
 decl9 :: Test
-decl9 = TestLabel "decl9" $ TestCase $ testMoveSpec' "tests/expected/decl9" "tests/input/rgh" $
+decl9 = TestLabel "decl9" $ TestCase $ testDirectory "tests/expected/decl9" "tests/input/rgh" $
           runMoveUnsafe "tests/input/rgh" (set hsSourceDirs [".", "tests"] opts0) spec
     where
       spec = foldl1' (<>) [moveDeclsByName "MoveType" "Decls" "Graph",
@@ -215,7 +215,7 @@ clean8 = TestLabel "load8" $ TestCase $
                           , set hc "ghcjs" (set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "1"], ["define", "SERVER", "0"], ["define", "NO_TH"], ["define", "SERVE_DYNAMIC"]]) opts)
                           , set hc "ghc" (set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["undef", "SERVE_DYNAMIC"]]) opts)
                           , set hc "ghcjs" (set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "1"], ["define", "SERVER", "0"], ["define", "NO_TH"], ["undef", "SERVE_DYNAMIC"]]) opts) ]
-            m <- loadModule opts "client/Examples/MVExample.hs"
+            m <- loadModule opts (Just "client", "Examples/MVExample.hs")
             cleanImports optSets [m]
             (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
             case code of
@@ -239,7 +239,7 @@ clean9 = TestLabel "load9" $ TestCase $
                        set enabled [CPP, OverloadedStrings, ExtendedDefaultRules] $
                        set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["define", "SERVE_DYNAMIC"]]) $
                        opts0
-            m <- loadModule opts"client/Examples/MVExample.hs"
+            m <- loadModule opts (Just "client", "Examples/MVExample.hs")
             cleanImports [opts] [m]
             (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
             case code of
@@ -262,7 +262,7 @@ clean10 =
                    set cppOptions defaultCpphsOptions $
                    set enabled [] $
                    opts0
-        m <- loadModule opts "Data/Logic/ATP/Lib.hs"
+        m <- loadModule opts (Nothing, "Data/Logic/ATP/Lib.hs")
         cleanImports [opts] [m]
       (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
       case code of
@@ -276,25 +276,25 @@ clean10 =
 simple1 :: Test
 simple1 =
      TestLabel "simple1" $ TestCase $
-      testMoveSpec' "tests/expected/simple1" "tests/input/simple" $
+      testDirectory "tests/expected/simple1" "tests/input/simple" $
         runMoveUnsafe "tests/input/simple" opts0 (moveDeclsByName "listPairs" "A" "B" :: MoveSpec)
 
 simple2 :: Test
 simple2 =
      TestLabel "simple2" $ TestCase $
-      testMoveSpec' "tests/expected/simple2" "tests/input/simple2" $
+      testDirectory "tests/expected/simple2" "tests/input/simple2" $
         runMoveUnsafe "tests/input/simple2" opts0 (moveDeclsByName "MoveType" "C" "D" :: MoveSpec)
 
 simple3 :: Test
 simple3 =
      TestLabel "simple3" $ TestCase $
-      testMoveSpec' "tests/expected/simple3" "tests/input/simple3" $
+      testDirectory "tests/expected/simple3" "tests/input/simple3" $
         runMoveUnsafe "tests/input/simple3" opts0 (moveDeclsByName "MoveType" "C" "D" :: MoveSpec)
 
 opts0 :: GHCOpts
 opts0 =
     over hashDefines (++ [cabalMacro "base" (Version [4,8] [])]) o
-    where o = set hsSourceDirs ["src"] def
+    where o = set hsSourceDirs ["."] def
 
 -- Perform the same move with these CPP flag combinations:
 --
@@ -310,15 +310,19 @@ opts0 =
 decl10 :: Test
 decl10 =
     TestLabel "decl10" $ TestCase $
-    testMoveSpec' "tests/expected/decl10" "tests/input/decl10" $
+    testDirectory "tests/expected/decl10" "tests/input/decl10" $
     runMoveUnsafe "tests/input/simple3" opts0 undefined
 
+-- | Run a move spec on contents of directory actual and compare to
+-- contents of directory expected.
 testMoveSpec :: FilePath -> FilePath -> MoveSpec -> IO ()
 testMoveSpec expected actual moveSpec =
-    testMoveSpec' expected actual $ runMoveUnsafe actual opts0 moveSpec
+    testDirectory expected actual $ runMoveUnsafe actual opts0 moveSpec
 
-testMoveSpec' :: FilePath -> FilePath -> IO () -> IO ()
-testMoveSpec' expected actual action = do
+-- | Perform an IO action on directory actual and compare to the
+-- contents of directory expected.
+testDirectory :: FilePath -> FilePath -> IO () -> IO ()
+testDirectory expected actual action = do
   gitResetSubdir actual
   action
   (code, diff, _) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
