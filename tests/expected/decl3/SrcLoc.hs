@@ -1,5 +1,10 @@
 -- | Utility functions for the haskell-src-exts type SrcLoc.
 
+{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE TupleSections #-}
+{-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE BangPatterns, CPP, FlexibleInstances, PackageImports, ScopedTypeVariables, TemplateHaskell, UndecidableInstances #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
 module SrcLoc
@@ -35,19 +40,22 @@ module SrcLoc
     , startOfHeader
     , startOfImports
     , startOfDecls
+    , lines'
     ) where
 
 import Control.Monad.State (get, put, runState, State)
 import Data.Char (isSpace)
 import Data.List (dropWhileEnd)
 import Data.Monoid ((<>))
-import Language.Haskell.Exts.Syntax -- (Annotated(ann), Module(..))
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcInfo(..), SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
+import Language.Haskell.Exts.Syntax (Annotated(ann), Decl(..), ImportDecl(ImportDecl, importAnn, importSpecs), Module(Module), ModuleHead(..))
+import Language.Haskell.Names (Scoped(..))
 import Language.Haskell.Names hiding (PatSyn)
-import ModuleInfo
+import ModuleInfo (ModuleInfo(ModuleInfo, _module, _modulePath, _moduleText))
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)
-import Utils (EZPrint(ezPrint), lines')
+import Tmp ()
+import Utils (EZPrint(ezPrint))
 
 class SpanInfo a where
     srcSpan :: a -> SrcSpan
@@ -411,3 +419,27 @@ startOfPragmas :: SrcInfo l => ModuleInfo l -> SrcLoc
 startOfPragmas (ModuleInfo {_module = m@(Module _l _ [] _ _)}) = SrcLoc (fileName (ann m)) 1 1
 startOfPragmas (ModuleInfo {_module = Module _l _ (p : _) _ _}) = srcLoc (ann p)
 startOfPragmas _ = error "startOfPragmas"
+
+
+
+
+
+
+
+-- | Slightly modified lines function from Data.List.  It preserves
+-- the presence or absence of a terminating newline by appending [""]
+-- if string ends with a newline.  Thus, the corresponding unlines
+-- function is intercalate "\n".
+lines'                   :: String -> [String]
+lines' ""                =  []
+-- Somehow GHC doesn't detect the selector thunks in the below code,
+-- so s' keeps a reference to the first line via the pair and we have
+-- a space leak (cf. #4334).
+-- So we need to make GHC see the selector thunks with a trick.
+lines' s                 =  cons (case break (== '\n') s of
+                                    (l, s') -> (l, case s' of
+                                                    []      -> [] -- no newline
+                                                    _:""    -> [""]
+                                                    _:s''   -> lines' s''))
+  where
+    cons ~(h, t)        =  h : t

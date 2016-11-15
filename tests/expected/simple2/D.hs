@@ -3,6 +3,8 @@ module D(MoveType(Down, Up)
 
 
 
+
+
 -- | Declaration moves can be characterized as one of two types, Down
 -- or Up.  This must be computed by scanning the parsed code of the
 -- departure module (the module where the declaration is when we

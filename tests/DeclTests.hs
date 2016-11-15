@@ -97,13 +97,14 @@ decl2 = TestLabel "decl2" $ TestCase $ do
 -- import it.  Now we don't know whether it leaves behind uses for
 -- which we need to import it (which might be called "moving down") or
 -- if we are moving it to the place where it is used (which could be
--- called "moving up".)
+-- called "moving up".)  (Not sure whether this test still fits this
+-- description.)
 decl3 :: Test
 decl3 = TestLabel "decl3" $ TestCase $ do
           let input = "tests/input/decl-mover"
           testDirectory "tests/expected/decl3" input
             (runMoveUnsafe input opts0 (moveDeclsByName "lines'" "Utils" "Tmp" :: MoveSpec) >>
-             runMoveUnsafe input opts0 (moveDeclsByName "lines'" "Tmp" "Utils" :: MoveSpec))
+             runMoveUnsafe input opts0 (moveDeclsByName "lines'" "Tmp" "SrcLoc" :: MoveSpec))
 
 simple4 :: Test
 simple4 = TestLabel "simple4" $ TestCase $ do

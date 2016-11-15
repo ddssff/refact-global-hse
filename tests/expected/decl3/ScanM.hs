@@ -17,16 +17,14 @@ module ScanM
     , debugRender
     ) where
 
-import Control.Lens ((.=), (%=), makeLenses, makeLensesFor, use, view)
+import Control.Lens ((%=), (.=), makeLenses, makeLensesFor, use, view)
 import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS)
 import Data.Char (isSpace)
-import Debug.Trace (trace)
-import Language.Haskell.Exts.Syntax -- (Annotated(ann), Module(..))
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
-import ModuleInfo
-import Utils (lines')
-import SrcLoc
+import Language.Haskell.Exts.Syntax (Annotated(ann), Module(Module))
+import ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleComments, _modulePath, _moduleText))
+import SrcLoc (EndLoc(endLoc), endLocOfText, lines', locDiff, locSum, splitText, srcLoc)
 
 type ScanM = RWS () String St
 
