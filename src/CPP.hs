@@ -3,9 +3,12 @@
 -- Hopefully I won't need this, but it is useful for debugging.
 {-# LANGUAGE PackageImports #-}
 {-# LANGUAGE RecordWildCards #-}
+{-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
 module CPP
-  ( defaultCpphsOptions
+  ( CPP.defaultParseMode
+  , defaultCpphsOptions
+  , turnOffLocations
   , GHCOpts(GHCOpts), hc, cppOptions, enabled, hashDefines, hsSourceDirs, ghcOptions
   , applyHashDefine
   , ghcProcessArgs
@@ -17,20 +20,46 @@ module CPP
   , tests
   ) where
 
-import Control.Lens (makeLenses, view)
+import Control.Lens (makeLenses, makeLensesFor, set, view)
 import Data.Char (isDigit)
 import Data.Default (Default(def))
 import Data.List (intercalate)
 import Data.Maybe (catMaybes)
 import Data.Version(Version(Version))
+import Distribution.Compat.ReadP (readP_to_S)
+import Distribution.Package (PackageIdentifier(..), PackageName(..))
+import Distribution.Text (Text(parse))
 import HashDefine (HashDefine(..), parseHashDefine)
+import Language.Haskell.Exts (ParseMode(..))
 import Language.Haskell.Exts (KnownExtension)
 import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
-import Language.Preprocessor.Cpphs (CpphsOptions(defines), defaultCpphsOptions)
-import Language.Preprocessor.Cpphs ()
+import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensions, fixities, parseFilename))
+import Language.Preprocessor.Cpphs (BoolOptions(..), CpphsOptions(..), defaultCpphsOptions, parseOptions, runCpphs)
 import Options.Applicative
 import Test.HUnit
 import Utils (EZPrint(ezPrint))
+
+deriving instance Show ParseMode
+deriving instance Eq BoolOptions
+deriving instance Eq CpphsOptions
+
+$(makeLensesFor [ {-("infiles", "infilesL")
+                , ("outfiles", "outfilesL")
+                , ("defines", "definesL")
+                , ("includes", "includesL")
+                , ("preInclude", "preIncludeL")
+                , -} ("boolopts", "booloptsL") ] ''CpphsOptions)
+$(makeLensesFor [ ("macros", "macrosL")
+                {- , ("locations", "locationsL")
+                , ("hashline", "hashlineL")
+                , ("pragma", "pragmaL")
+                , ("stripEol", "stripEolL")
+                , ("stripC89", "stripC89L")
+                , ("lang", "langL")
+                , ("ansi", "ansiL")
+                , ("layout", "layoutL")
+                , ("literate", "literateL")
+                , ("warnings", "warningsL")-} ] ''BoolOptions)
 
 -- | Support a tiny subset of the GHC command line options.
 data GHCOpts =
@@ -41,7 +70,7 @@ data GHCOpts =
     , _enabled :: [KnownExtension]
     , _hashDefines :: [HashDefine]
     , _ghcOptions :: [String]
-    } deriving Show
+    } deriving (Eq, Show)
 
 $(makeLenses ''GHCOpts)
 
@@ -54,13 +83,44 @@ instance Default GHCOpts where
           , _hashDefines = []
           , _ghcOptions = [] }
 
-applyHashDefine :: HashDefine -> CpphsOptions -> CpphsOptions
-applyHashDefine d x = x {defines = applyHashDefine' d (defines x)}
+defaultParseMode :: GHCOpts -> String -> ParseMode
+defaultParseMode opts path =
+    Exts.defaultParseMode {Exts.extensions = map EnableExtension (view enabled opts ++ extensionsForHSEParser),
+                           Exts.parseFilename = path,
+                           Exts.fixities = Nothing }
+
+-- | Turn of the locations flag.  This means simple #if macros will not
+-- affect the line numbers of the output text, so we can use the
+-- resulting SrcSpan info on the original text.  Macro expansions
+-- could still mess this up.
+turnOffLocations :: CpphsOptions -> CpphsOptions
+turnOffLocations opts = opts { boolopts = (boolopts opts) {locations = False } }
+
+{-
+cpphsOptions :: CpphsOptions
+cpphsOptions =
+    CPP.defaultCpphsOptions
+    { boolopts =
+          ( boolopts CPP.defaultCpphsOptions )
+          { locations = False
+      }
+    }
+-}
+
+-- applyHashDefine :: HashDefine -> CpphsOptions -> CpphsOptions
+-- applyHashDefine d x = x {defines = applyHashDefine' d (defines x)}
+applyHashDefine :: HashDefine -> GHCOpts -> GHCOpts
+applyHashDefine d x = x { _hashDefines = d : _hashDefines x
+                        , _cppOptions = applyHashDefine' d (_cppOptions x) }
+
+applyHashDefine' :: HashDefine -> CpphsOptions -> CpphsOptions
+applyHashDefine' d x = x {defines = applyHashDefine'' d (defines x)}
     where
-      applyHashDefine' (AntiDefined {name = n}) xs = filter ((/= n) . fst) xs
-      applyHashDefine' (SymbolReplacement {name = n, replacement = r}) xs =
-          (n, r) : applyHashDefine' (AntiDefined {name = n, linebreaks = linebreaks d}) xs
-      applyHashDefine' _ xs = xs
+      applyHashDefine'' :: HashDefine -> [(String, String)] -> [(String, String)]
+      applyHashDefine'' (AntiDefined {name = n}) xs = filter ((/= n) . fst) xs
+      applyHashDefine'' (SymbolReplacement {name = n, replacement = r}) xs =
+          (n, r) : applyHashDefine'' (AntiDefined {name = n, linebreaks = linebreaks d}) xs
+      applyHashDefine'' _ xs = xs
 
 instance EZPrint GHCOpts where
     ezPrint x = unwords (view hc x : map asArgument (view hashDefines x))
@@ -122,14 +182,18 @@ ghcOptsOptions =
       sds :: Parser [FilePath]
       sds = many (strOption (short 'i' <> metavar "DIR" <> help "Add a top directory, as in cabal's hs-source-dirs"))
       hds :: Parser [HashDefine]
-      hds = (++) <$> ((catMaybes . map (parseHashDefine False . prepareDefine)) <$> many (strOption (short 'D' <> help "Add a #define to the compiler options")))
-                 <*> ((catMaybes . map (parseHashDefine False . (\s -> ["undef", s]))) <$> many (strOption (short 'U' <> help "Add a #undef to the compiler options")))
+      hds = (\a b c -> a <> b <> c)
+              <$> ((catMaybes . map (parseHashDefine False . prepareDefine)) <$> many (strOption (short 'D' <> help "Add a #define to the compiler options")))
+              <*> ((catMaybes . map (parseHashDefine False . prepareUndef)) <$> many (strOption (short 'U' <> help "Add a #undef to the compiler options")))
+              <*> ((catMaybes . map cabalMacro') <$> many (strOption (long "package" <> help "define a macro for a package id")))
 
-      prepareDefine :: String -> [String]
-      prepareDefine s = "define" : case break (== '=') s of
-                                     (_, "") -> [s]
-                                     (name, '=' : val) -> [name, val]
-                                     _ -> error "ghcOptsOptions"
+prepareDefine :: String -> [String]
+prepareDefine s = "define" : case break (== '=') s of
+                               (_, "") -> [s]
+                               (name, '=' : val) -> [name, val]
+                               _ -> error "ghcOptsOptions"
+prepareUndef :: String -> [String]
+prepareUndef s = ["undef", s]
 
 {-
 ghcOptsOptions' :: [OptDescr (GHCOpts -> GHCOpts)]
@@ -149,23 +213,6 @@ ghcOptsOptions' =
              "Add a #define to the compiler options" ]
 -}
 
-tests :: Test
-tests = TestList [test1]
-
-test1 :: Test
-test1 = TestCase (assertEqual "test1" expected actual)
-    where
-      expected = Just (SymbolReplacement { name = "MIN_VERSION_base(major1,major2,minor)"
-                                         , replacement = " (  (major1) <  4 ||   (major1) = 4 && (major2) <  8 ||   (major1) == 4 && (major2) == 8 && (minor) <= 2)"
-                                         , linebreaks = 4})
-      -- This doesn't work.  Use cabalMacro for now.
-      actual = parseHashDefine True ["define", s]
-      s = "#define MIN_VERSION_base(major1,major2,minor) (\\\n" <>
-          "  (major1) <  4 || \\\n" <>
-          "  (major1) == 4 && (major2) <  8 || \\\n" <>
-          "  (major1) == 4 && (major2) == 8 && (minor) <= 2)\n"
-      s' = "#define MIN_VERSION_base(major1,major2,minor) (  (major1) <  4 ||   (major1) == 4 && (major2) <  8 ||   (major1) == 4 && (major2) == 8 && (minor) <= 2)"
-
 -- | Return a HashDefine such as those in dist/build/autogen/cabal_macros.h
 cabalMacro :: String -> Version -> HashDefine
 cabalMacro name (Version branch _tags) =
@@ -174,3 +221,200 @@ cabalMacro name (Version branch _tags) =
       ("((major1)<" ++ show major1 ++ "||(major1)==" ++ show major1 ++ "&&(major2)<" ++ show major2 ++ "||(major1)==" ++ show major1 ++ "&&(major2)==" ++ show major2 ++ "&&(minor)<="++ show minor ++ ")")
       0
     where (major1 : major2 : minor : _) = branch ++ repeat 0
+
+cabalMacro' :: String -> Maybe HashDefine
+cabalMacro' s = fmap (\PackageIdentifier{..} -> cabalMacro (unPackageName pkgName) pkgVersion) (parsePackageIdentifier s)
+
+parsePackageIdentifier :: String -> Maybe PackageIdentifier
+parsePackageIdentifier s =
+    case filter ((== "") . snd) (readP_to_S parse s) of
+      [(x, _)] -> Just x
+      _ -> Nothing
+
+tests :: Test
+tests = TestList [test1, test2, test3, test4, test5, test6a, test6b, test6c]
+
+test1 :: Test
+test1 = TestCase (assertEqual "test1" expected actual)
+    where
+      expected = [ Just (AntiDefined {name = "FOO", linebreaks = 0})
+                 , Just (SymbolReplacement {name = "BAR", replacement = "", linebreaks = 0})
+                 , Just (SymbolReplacement {name = "BAZ", replacement = "1", linebreaks = 0})
+                 , Just (SymbolReplacement {name = "MIN_VERSION_base(major1,major2,minor)",
+                                            replacement = "(\\\n  (major1) <  4 || \\\n  (major1) == 4 && (major2) <  8 || \\\n  (major1) == 4 && (major2) == 8 && (minor) <= 2)\n",
+                                            linebreaks = 4}) ]
+      -- This doesn't work.  Use cabalMacro for now.
+      actual = [ parseHashDefine True ["undef", "FOO"]
+               , parseHashDefine True ["define", "BAR"]
+               , parseHashDefine True ["define", "BAZ", "1"]
+               , parseHashDefine True ["define",
+                                       "MIN_VERSION_base(major1,major2,minor)",
+                                       ("(\\\n" <>
+                                        "  (major1) <  4 || \\\n" <>
+                                        "  (major1) == 4 && (major2) <  8 || \\\n" <>
+                                        "  (major1) == 4 && (major2) == 8 && (minor) <= 2)\n") ] ]
+
+test2 :: Test
+test2 = TestCase (assertEqual "test2" expected actual)
+    where
+      expected = PackageIdentifier (PackageName "base") (Version [4,8] [])
+      actual = pid
+      Just pid = parsePackageIdentifier "base-4.8"
+
+test3 :: Test
+test3 = TestCase (assertEqual "test3" expected actual)
+    where
+      expected = GHCOpts { _hc = "ghc"
+                         , _hsSourceDirs = []
+                         , _cppOptions =
+                             CpphsOptions { infiles = []
+                                          , outfiles = []
+                                          , defines = [("MIN_VERSION_base(major1,major2,minor)","((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=0)")]
+                                          , includes = []
+                                          , preInclude = []
+                                          , boolopts =
+                                              BoolOptions { macros = True
+                                                          , locations = True
+                                                          , hashline = True -- False
+                                                          , pragma = False
+                                                          , stripEol = False
+                                                          , stripC89 = False -- True
+                                                          , lang = True
+                                                          , ansi = False
+                                                          , layout = False
+                                                          , literate = False
+                                                          , warnings = True } }
+                         , _enabled = []
+                         , _hashDefines =
+                             [SymbolReplacement
+                              {name = "MIN_VERSION_base(major1,major2,minor)",
+                               replacement = "((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=0)",
+                               linebreaks = 0}]
+                         , _ghcOptions = [] }
+      actual = applyHashDefine hd def
+      Just hd = cabalMacro' "base-4.8"
+
+test4 :: Test
+test4 = TestCase $ do
+          assertEqual "test4"
+                          ["define",
+                           "MIN_VERSION_base(major1,major2,minor)",
+                           "((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=2)"]
+                          (prepareDefine "MIN_VERSION_base(major1,major2,minor)=((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=2)")
+
+test5 :: Test
+test5 = TestCase $ do
+          assertEqual "test5" expected actual
+    where
+      expected = Right (CpphsOptions {infiles = [], outfiles = [], defines = [("FOO","1")], includes = [], preInclude = [],
+                                      boolopts = BoolOptions {macros = True, locations = True, hashline = True,
+                                                              pragma = False, stripEol = False, stripC89 = False,
+                                                              lang = True, ansi = False, layout = False, literate = False,
+                                                              warnings = True}})
+      actual = parseOptions ["-DFOO"]
+
+test6a :: Test
+test6a = TestCase $ do
+          let Right opts = parseOptions ["-DFOO", "-DMIN_VERSION_base(major1,major2,minor)=((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=2)"]
+              expected = output1
+          actual <- runCpphs opts "<input>" (input1 "4,8,0")
+          assertEqual "test6a" expected actual
+
+test6b :: Test
+test6b = TestCase $ do
+          let Right opts = parseOptions ["-DFOO", "-DMIN_VERSION_base(major1,major2,minor)=((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=2)"]
+              expected = output2
+          actual <- runCpphs opts "<input>" (input1 "4,8,3")
+          assertEqual "test6b" expected actual
+
+test6c :: Test
+test6c = TestCase $ do
+          let opts :: CpphsOptions
+              Right opts = parseOptions ["-DFOO", "-DMIN_VERSION_base(major1,major2,minor)=((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=2)", "--nomacro"]
+              opts' = set (booloptsL . macrosL) False opts
+              expected = output3
+          actual <- runCpphs opts' "<input>" (input1 "4,8,3")
+          assertEqual "test6c" expected actual
+
+input1 basever =
+    unlines
+        [ "-- Test moving s2 to a place that imports it"
+        , "module M1"
+        , "    ( s1"
+        , "#if MIN_VERSION_base(" ++ basever ++ ")"
+        , "    , s2"
+        , "#endif"
+        , "    ) where"
+        , ""
+        , "s1 :: Int"
+        , "s1 = 1"
+        , ""
+        , "#if FOO"
+        , "s2 :: Int"
+        , "s2 = s1 + 1"
+        , "#endif" ]
+
+output1 =
+    unlines
+        [ "#line 1 \"<input>\""
+        , "-- Test moving s2 to a place that imports it"
+        , "module M1"
+        , "    ( s1"
+        , ""
+        , "    , s2"
+        , ""
+        , "    ) where"
+        , ""
+        , "s1 :: Int"
+        , "s1 = 1"
+        , ""
+        , ""
+        , "s2 :: Int"
+        , "s2 = s1 + 1"
+        , "" ]
+
+output2 =
+    unlines
+        [ "#line 1 \"<input>\""
+        , "-- Test moving s2 to a place that imports it"
+        , "module M1"
+        , "    ( s1"
+        , ""
+        , ""
+        , ""
+        , "    ) where"
+        , ""
+        , "s1 :: Int"
+        , "s1 = 1"
+        , ""
+        , ""
+        , "s2 :: Int"
+        , "s2 = s1 + 1"
+        , "" ]
+
+output3 = output2 ++ "\n"
+
+{-
+test7 :: Test
+test7 = TestCase $ do
+          let expected = input1 "4,8,2"
+              path = "tests/input/simple5/M1.hs"
+              hd1 :: HashDefine
+              Just hd1 = (parseHashDefine False . prepareDefine) "FOO"
+              hd2 :: HashDefine
+              Just hd2 = (parseHashDefine False . prepareDefine) "MIN_VERSION_base(major1,major2,minor)=((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=2)"
+              let Right cppopts = parseOptions ["-DFOO", "-DMIN_VERSION_base(major1,major2,minor)=((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=2)"]
+              opts :: GHCOpts
+              opts = set cppOptions cppopts defFalse $ foldr applyHashDefine def [hd1, hd2]
+              parseMode = CPP.defaultParseMode opts path
+          rawStr <- readFile path
+          -- let cppMode = updateExtensions parseMode rawStr
+          -- trace ("cppOptions: " ++ show (_cppOptions opts)) (pure ())
+          -- trace ("cppMode: " ++ show cppMode) (pure ())
+          trace ("opts: " ++ show opts) (pure ())
+          p <- parseFileContentsWithCommentsAndCPP (_cppOptions opts) parseMode rawStr
+          case p of
+            ParseOk r -> assertEqual "test7" Nothing (Just r)
+            ParseFailed l e -> error (show l ++ ": " ++ show e)
+          -- processedSrc <- cpp (_cppOptions opts) cppMode rawStr
+-}

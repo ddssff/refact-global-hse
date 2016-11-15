@@ -17,6 +17,7 @@ Library
   Hs-Source-Dirs: src
   Build-Depends:
     base,
+    Cabal,
     containers,
     cpphs,
     data-default,
