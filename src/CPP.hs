@@ -31,10 +31,13 @@ import Distribution.Compat.ReadP (readP_to_S)
 import Distribution.Package (PackageIdentifier(..), PackageName(..))
 import Distribution.Text (Text(parse))
 import HashDefine (HashDefine(..), parseHashDefine)
-import Language.Haskell.Exts (ParseMode(..))
-import Language.Haskell.Exts (KnownExtension)
+import Language.Haskell.Exts (KnownExtension, ParseMode(..))
+import Language.Haskell.Exts.CPP (parseFileContentsWithCommentsAndCPP)
 import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
-import Language.Haskell.Exts.Parser as Exts (defaultParseMode, ParseMode(extensions, fixities, parseFilename))
+import Language.Haskell.Exts.Parser as Exts (defaultParseMode, fromParseResult, ParseMode(extensions, fixities, parseFilename))
+import Language.Haskell.Exts.Comments
+import Language.Haskell.Exts.SrcLoc
+import Language.Haskell.Exts.Syntax
 import Language.Preprocessor.Cpphs (BoolOptions(..), CpphsOptions(..), defaultCpphsOptions, parseOptions, runCpphs)
 import Options.Applicative
 import Test.HUnit
@@ -68,7 +71,7 @@ data GHCOpts =
     { _hc :: String
     , _hsSourceDirs :: [FilePath]
     , _cppOptions :: CpphsOptions
-    , _enabled :: [KnownExtension]
+    , _enabled :: [KnownExtension] -- FIXME - use the extensions field in ParseMode
     , _hashDefines :: [HashDefine]
     , _ghcOptions :: [String]
     } deriving (Eq, Show)
@@ -80,7 +83,7 @@ instance Default GHCOpts where
           { _hc = "ghc"
           , _hsSourceDirs = []
           , _cppOptions = defaultCpphsOptions
-          , _enabled = []
+          , _enabled = [CPP] -- FIXME - this should come from the source file and/or the cabal file
           , _hashDefines = []
           , _ghcOptions = [] }
 
@@ -285,7 +288,7 @@ test3 = TestCase (assertEqual "test3" expected actual)
                                                           , layout = False
                                                           , literate = False
                                                           , warnings = True } }
-                         , _enabled = []
+                         , _enabled = [CPP]
                          , _hashDefines =
                              [SymbolReplacement
                               {name = "MIN_VERSION_base(major1,major2,minor)",
@@ -337,6 +340,32 @@ test6c = TestCase $ do
           actual <- runCpphs opts' "<input>" (input1 "4,8,3")
           assertEqual "test6c" expected actual
 
+test7 :: Test
+test7 = TestCase $ do
+          let ghcopts = def
+              pmode = CPP.defaultParseMode ghcopts "<input>"
+              cppopts :: CpphsOptions
+              Right cppopts = parseOptions ["-DFOO", "-DMIN_VERSION_base(major1,major2,minor)=((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=2)", "--nomacro", "--noline"]
+              cppopts' = set (booloptsL . macrosL) False cppopts
+              expected = [(Module
+                           (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 2 1 17 1, srcInfoPoints = [SrcSpan "<input>" 2 1 2 1,SrcSpan "<input>" 2 1 2 1,SrcSpan "<input>" 9 1 9 1,SrcSpan "<input>" 10 1 10 1,SrcSpan "<input>" 13 1 13 1,SrcSpan "<input>" 14 1 14 1,SrcSpan "<input>" 17 1 17 1,SrcSpan "<input>" 17 1 17 1]})
+                           (Just
+                            (ModuleHead
+                             (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 2 1 7 12, srcInfoPoints = [SrcSpan "<input>" 2 1 2 7,SrcSpan "<input>" 7 7 7 12]})
+                             (ModuleName (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 2 8 2 10, srcInfoPoints = []}) "M1")
+                             Nothing
+                             (Just (ExportSpecList (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 3 5 7 6, srcInfoPoints = [SrcSpan "<input>" 3 5 3 6,SrcSpan "<input>" 5 5 5 6,SrcSpan "<input>" 7 5 7 6]}) [EVar (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 3 7 3 9, srcInfoPoints = []}) (UnQual (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 3 7 3 9, srcInfoPoints = []}) (Ident (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 3 7 3 9, srcInfoPoints = []}) "s1")),EVar (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 5 7 5 9, srcInfoPoints = []}) (UnQual (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 5 7 5 9, srcInfoPoints = []}) (Ident (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 5 7 5 9, srcInfoPoints = []}) "s2"))]))))
+                           []
+                           []
+                           [TypeSig (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 9 1 9 10, srcInfoPoints = [SrcSpan "<input>" 9 4 9 6]}) [Ident (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 9 1 9 3, srcInfoPoints = []}) "s1"] (TyCon (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 9 7 9 10, srcInfoPoints = []}) (UnQual (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 9 7 9 10, srcInfoPoints = []}) (Ident (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 9 7 9 10, srcInfoPoints = []}) "Int"))),
+                            PatBind (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 10 1 10 7, srcInfoPoints = []}) (PVar (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 10 1 10 3, srcInfoPoints = []}) (Ident (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 10 1 10 3, srcInfoPoints = []}) "s1")) (UnGuardedRhs (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 10 4 10 7, srcInfoPoints = [SrcSpan "<input>" 10 4 10 5]}) (Lit (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 10 6 10 7, srcInfoPoints = []}) (Int (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 10 6 10 7, srcInfoPoints = []}) 1 "1"))) Nothing,
+                            TypeSig (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 13 1 13 10, srcInfoPoints = [SrcSpan "<input>" 13 4 13 6]}) [Ident (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 13 1 13 3, srcInfoPoints = []}) "s2"] (TyCon (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 13 7 13 10, srcInfoPoints = []}) (UnQual (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 13 7 13 10, srcInfoPoints = []}) (Ident (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 13 7 13 10, srcInfoPoints = []}) "Int"))),
+                            PatBind (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 14 1 14 12, srcInfoPoints = []}) (PVar (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 14 1 14 3, srcInfoPoints = []}) (Ident (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 14 1 14 3, srcInfoPoints = []}) "s2")) (UnGuardedRhs (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 14 4 14 12, srcInfoPoints = [SrcSpan "<input>" 14 4 14 5]}) (InfixApp (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 14 6 14 12, srcInfoPoints = []}) (Var (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 14 6 14 8, srcInfoPoints = []}) (UnQual (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 14 6 14 8, srcInfoPoints = []}) (Ident (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 14 6 14 8, srcInfoPoints = []}) "s1"))) (QVarOp (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 14 9 14 10, srcInfoPoints = []}) (UnQual (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 14 9 14 10, srcInfoPoints = []}) (Symbol (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 14 9 14 10, srcInfoPoints = []}) "+"))) (Lit (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 14 11 14 12, srcInfoPoints = []}) (Int (SrcSpanInfo {srcInfoSpan = SrcSpan "<input>" 14 11 14 12, srcInfoPoints = []}) 1 "1")))) Nothing],
+                           [Comment False (SrcSpan "<input>" 1 1 1 45) " Test moving s2 to a place that imports it"])]
+          (parsed, comments) <- Exts.fromParseResult <$> parseFileContentsWithCommentsAndCPP cppopts' pmode (input1 "4,8,0")
+          assertEqual "test7" expected [(parsed, comments)]
+
+input1 :: String -> String
 input1 basever =
     unlines
         [ "-- Test moving s2 to a place that imports it"

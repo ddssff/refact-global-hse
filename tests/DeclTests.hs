@@ -27,6 +27,7 @@ import Language.Haskell.Exts (Decl(FunBind, TypeSig), Match(InfixMatch, Match),
    ModuleName(ModuleName), Name(Ident), Exp(App),
    KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules), Module(Module), SrcInfo)
 import Language.Haskell.Names.SyntaxUtils (dropAnn)
+import Language.Preprocessor.Cpphs (parseOptions)
 import LoadModule (loadModule)
 import ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
 import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
@@ -118,7 +119,9 @@ simple4 = TestLabel "simple4" $ TestCase $ do
 simple5 :: Test
 simple5 = TestLabel "simple5" $ TestCase $ do
             let input = "tests/input/simple5"
-            testDirectory "tests/expected/simple5" input (runMoveUnsafe input opts0 spec)
+                Right cpp = parseOptions ["-DMIN_VERSION_base(major1,major2,minor)=((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=2)"]
+                opts = set cppOptions cpp opts0
+            testDirectory "tests/expected/simple5" input (runMoveUnsafe input opts spec)
     where
       spec :: MoveSpec
       spec = foldl1' (<>) [moveDeclsByName "s2" "M1" "M2"]
