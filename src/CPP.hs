@@ -10,6 +10,7 @@ module CPP
   , defaultCpphsOptions
   , turnOffLocations
   , GHCOpts(GHCOpts), hc, cppOptions, enabled, hashDefines, hsSourceDirs, ghcOptions
+  , infilesL, outfilesL, definesL, includesL, preIncludeL, booloptsL
   , applyHashDefine
   , applyHashDefine'
   , ghcProcessArgs
@@ -47,12 +48,12 @@ deriving instance Show ParseMode
 deriving instance Eq BoolOptions
 deriving instance Eq CpphsOptions
 
-$(makeLensesFor [ {-("infiles", "infilesL")
+$(makeLensesFor [ ("infiles", "infilesL")
                 , ("outfiles", "outfilesL")
                 , ("defines", "definesL")
                 , ("includes", "includesL")
                 , ("preInclude", "preIncludeL")
-                , -} ("boolopts", "booloptsL") ] ''CpphsOptions)
+                , ("boolopts", "booloptsL") ] ''CpphsOptions)
 $(makeLensesFor [ ("macros", "macrosL")
                 {- , ("locations", "locationsL")
                 , ("hashline", "hashlineL")
@@ -221,10 +222,12 @@ ghcOptsOptions' =
 cabalMacro :: String -> Version -> HashDefine
 cabalMacro name (Version branch _tags) =
     SymbolReplacement
-      ("MIN_VERSION_" ++ name ++ "(major1,major2,minor)")
+      ("MIN_VERSION_" ++ fmap dashToUnderscore name ++ "(major1,major2,minor)")
       ("((major1)<" ++ show major1 ++ "||(major1)==" ++ show major1 ++ "&&(major2)<" ++ show major2 ++ "||(major1)==" ++ show major1 ++ "&&(major2)==" ++ show major2 ++ "&&(minor)<="++ show minor ++ ")")
       0
     where (major1 : major2 : minor : _) = branch ++ repeat 0
+          dashToUnderscore '-' = '_'
+          dashToUnderscore c = c
 
 cabalMacro' :: String -> Maybe HashDefine
 cabalMacro' s = fmap (\PackageIdentifier{..} -> cabalMacro (unPackageName pkgName) pkgVersion) (parsePackageIdentifier s)

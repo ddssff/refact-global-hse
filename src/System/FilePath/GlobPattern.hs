@@ -145,7 +145,7 @@ matchTerms (MatchClass k c:ts) cs = matchClass cs >>= matchTerms ts
     where matchClass (b:bs) | (inClass && k) || not (inClass || k) = return bs
                             where inClass = b `inSRange` c
           matchClass _ = fail "no match"
-matchTerms (MatchGroup g:ts) cs = msum (map matchGroup g)
+matchTerms (MatchGroup g0:ts) cs = msum (map matchGroup g0)
     where matchGroup g = matchTerms (MatchLiteral g : ts) cs
 matchTerms [MatchAny] _ = return ()
 matchTerms (MatchAny:ts) cs = matchAny cs >>= matchTerms ts

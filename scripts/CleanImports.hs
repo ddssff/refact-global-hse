@@ -5,14 +5,16 @@
 
 module CleanImports
     ( Params(..)
+    , ghcOpts, findDirs, toClean, unsafe
     , options
     , go
+    , finalParams
     ) where
 
 import Clean (cleanImports)
 import CPP (GHCOpts, ghcOptsOptions, hsSourceDirs)
 import Control.Lens (makeLenses, over, set, view)
-import Data.Default (def)
+import Data.Default (Default(def))
 import Data.Set as Set (fromList, Set, toList, union)
 import Language.Haskell.Names (Scoped(Scoped))
 import LoadModule (loadModules)
@@ -27,8 +29,16 @@ import Utils (withCleanRepo, withTempDirectory)
 data Params
     = Params { _ghcOpts :: GHCOpts
              , _findDirs :: [FilePath]
-             , _moduverse :: [(Maybe FilePath, FilePath)]
-             , _unsafe :: Bool } deriving (Show)
+             -- ^ Directories to search (non-recursively) for
+             -- moduverse modules.
+             , _toClean :: [(Maybe FilePath, FilePath)]
+             -- ^ The modules we want to clean.  The Maybe FilePath
+             -- is the hs-source-dirs path below which the module is
+             -- located.
+             , _unsafe :: Bool
+             -- ^ If True operations can proceed even if there are
+             -- uncommitted edits in the git repository.
+             } deriving (Show)
 
 $(makeLenses ''Params)
 
@@ -46,7 +56,10 @@ options =
       u = switch (long "unsafe" <> help "Skip the safety check - allow uncommitted edits in repo where clean is performed")
 
 params0 :: Params
-params0 = Params {_ghcOpts = def, _findDirs = [], _moduverse = [], _unsafe = False}
+params0 = Params {_ghcOpts = def, _findDirs = [], _toClean = [], _unsafe = False}
+
+instance Default Params where
+    def = params0
 
 finalParams :: Params -> IO Params
 finalParams params' = do
@@ -62,7 +75,7 @@ finalParams params' = do
   -- one top, in that case we need to match up the module name with
   -- the relative path.
   relModules <- modulePairs reltops
-  pure (over moduverse (++ (Set.toList relModules)) params)
+  pure (over toClean (++ (Set.toList relModules)) params)
 
 -- | Return all the (top, module) pairs reachable from the list of
 -- tops.  Note that some of these pairs will be invalid (as shown in
@@ -82,7 +95,7 @@ modulePairs reltops = do
                xs -> pure (Set.fromList xs)) abspaths
 
 go params0 = do
-  params <- finalParams params0
+  params <- finalParams params0 >>= \x -> putStrLn ("Final parameters:\n  " ++ show x) >> return x
   (if (view unsafe params) then id else withCleanRepo) $ withTempDirectory True "." "scratch" $ \scratch -> do
-    modules <- loadModules def (view moduverse params)
+    modules <- loadModules def (view toClean params)
     cleanImports [set hsSourceDirs (view (ghcOpts . hsSourceDirs) params) def] (map (fmap (\(Scoped _ x) -> x)) modules)

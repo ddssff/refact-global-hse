@@ -4,12 +4,16 @@
 :set -DMIN_VERSION_optparse_applicative(major1,major2,minor)=((major1)<||(major1)==0&&(major2)<12||(major1)==0&&(major2)==12&&(minor)<=1)
 :set -DMIN_VERSION_base(major1,major2,minor)=((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=2)
 -- :load tests/Tests
+:load Decls LoadModule Utils CleanImports
+-- :m +System.FilePath.Find
 :m +Data.Monoid System.Process
 :m +Language.Haskell.Exts
 :m +Language.Haskell.Names
 :m +Options.Applicative
 :m +Test.HUnit
 :m +System.Environment
--- :m +System.FilePath.Find
-:load Decls LoadModule Utils
+:m +CleanImports
+:m +Control.Lens
+:m +CPP
+:m +Data.Version
 :set prompt "λ "

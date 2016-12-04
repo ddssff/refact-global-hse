@@ -12,7 +12,7 @@ import CPP (applyHashDefine, applyHashDefine', cppOptions, defaultParseMode, ena
 import qualified CPP (defaultCpphsOptions)
 import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
-import Data.List (groupBy, intercalate)
+import Data.List (groupBy, intercalate, nub)
 import Debug.Trace (trace)
 import Language.Haskell.Exts.CPP (parseFileWithCommentsAndCPP)
 import Language.Haskell.Exts.Syntax (Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName))
@@ -39,7 +39,7 @@ instance EZPrint Annot where
 -- | Load a list of modules and compute their global scoping info.
 loadModules :: GHCOpts -> [(Maybe FilePath, FilePath)] -> IO [ModuleInfo Annot]
 loadModules opts pairs = do
-  t1 <$> addScoping <$> mapM (loadModule opts) pairs
+  t1 <$> addScoping <$> mapM (loadModule opts) (nub pairs)
     where
       t1 :: [ModuleInfo l] -> [ModuleInfo l]
       t1 modules = trace ("modules loaded: " ++ show (map ezPrint modules)) modules

@@ -29,8 +29,8 @@ import System.IO.Unsafe (unsafeInterleaveIO)
 -- makes things explicit.  Surprisingly, unsafePerformIO seems to see
 -- the correct getCurrentDirectory.
 unsafeInterleaveIO' :: IO a -> IO a
-unsafeInterleaveIO' action =
-    getCurrentDirectory >>= \here -> unsafeInterleaveIO (withCurrentDirectory here action)
+unsafeInterleaveIO' action0 =
+    getCurrentDirectory >>= \here -> unsafeInterleaveIO (withCurrentDirectory here action0)
     where
       withCurrentDirectory dir action =
           bracket getCurrentDirectory

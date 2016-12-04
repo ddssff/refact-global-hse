@@ -129,7 +129,7 @@ import System.FilePath ((</>), takeDirectory, takeExtension, takeFileName)
 import System.FilePath.Glob (unsafeInterleaveIO')
 import System.FilePath.GlobPattern (GlobPattern, (~~), (/~))
 import System.IO (hPutStrLn, stderr)
-import System.IO.Unsafe (unsafeInterleaveIO, unsafePerformIO)
+import System.IO.Unsafe (unsafePerformIO)
 import qualified System.PosixCompat.Files as F
 import qualified System.PosixCompat.Types as T
 
@@ -225,10 +225,10 @@ findWithHandler ::
 
 findWithHandler errHandler recurse filt path0 =
     handle (errHandler path0) $ F.getSymbolicLinkStatus path0 >>= visit path0 0
-  where visit path depth st =
-            if F.isDirectory st && evalFI recurse path depth st
-              then unsafeInterleaveIO' (traverse path (succ depth) st)
-              else filterPath path depth st []
+  where visit path depth0 st =
+            if F.isDirectory st && evalFI recurse path depth0 st
+              then unsafeInterleaveIO' (traverse path (succ depth0) st)
+              else filterPath path depth0 st []
         traverse dir depth dirSt = do
             names <- E.catch (getDirContents dir) (errHandler dir)
             filteredPaths <- forM names $ \name -> do
