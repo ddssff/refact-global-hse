@@ -23,15 +23,15 @@ module CPP
   ) where
 
 import Control.Lens (makeLenses, makeLensesFor, set, view)
-import Data.Char (isDigit)
+import Data.Char (isAlphaNum, isDigit)
 import Data.Default (Default(def))
-import Data.List (intercalate)
+import Data.List (groupBy, intercalate)
 import Data.Maybe (catMaybes)
 import Data.Version(Version(Version))
 import Distribution.Compat.ReadP (readP_to_S)
 import Distribution.Package (PackageIdentifier(..), PackageName(..))
 import Distribution.Text (Text(parse))
-import HashDefine (HashDefine(..), parseHashDefine)
+import HashDefine -- (HashDefine(..), parseHashDefine)
 import Language.Haskell.Exts (KnownExtension, ParseMode(..))
 import Language.Haskell.Exts.CPP (parseFileContentsWithCommentsAndCPP)
 import Language.Haskell.Exts.Extension (Extension(..), KnownExtension(..))
@@ -221,10 +221,14 @@ ghcOptsOptions' =
 -- | Return a HashDefine such as those in dist/build/autogen/cabal_macros.h
 cabalMacro :: String -> Version -> HashDefine
 cabalMacro name (Version branch _tags) =
-    SymbolReplacement
-      ("MIN_VERSION_" ++ fmap dashToUnderscore name ++ "(major1,major2,minor)")
-      ("((major1)<" ++ show major1 ++ "||(major1)==" ++ show major1 ++ "&&(major2)<" ++ show major2 ++ "||(major1)==" ++ show major1 ++ "&&(major2)==" ++ show major2 ++ "&&(minor)<="++ show minor ++ ")")
-      0
+    MacroExpansion
+    { name = "MIN_VERSION_" ++ fmap dashToUnderscore name,
+      arguments = ["major1","major2","minor"]
+    , expansion = [(Text,"(("),
+                   (Arg,"major1"),(Text,")<"  ++ show major1 ++ "||("),
+                   (Arg,"major1"),(Text,")==" ++ show major1 ++ "&&("), (Arg,"major2"),(Text,")<"  ++ show major2 ++  "||("),
+                   (Arg,"major1"),(Text,")==" ++ show major1 ++ "&&("), (Arg,"major2"),(Text,")==" ++ show major2 ++ "&&("), (Arg,"minor"),(Text,")<=" ++ show minor ++ ")")]
+    , linebreaks = 0 }
     where (major1 : major2 : minor : _) = branch ++ repeat 0
           dashToUnderscore '-' = '_'
           dashToUnderscore c = c
@@ -239,7 +243,7 @@ parsePackageIdentifier s =
       _ -> Nothing
 
 tests :: Test
-tests = TestList [test1, test2, test3, test4, test5, test6a, test6b, test6c, test7]
+tests = TestList [test1, test2, test3, test4, test5, test6a, test6b, test6c, test7, test9]
 
 test1 :: Test
 test1 = TestCase (assertEqual "test1" expected actual)
@@ -276,7 +280,7 @@ test3 = TestCase (assertEqual "test3" expected actual)
                          , _cppOptions =
                              CpphsOptions { infiles = []
                                           , outfiles = []
-                                          , defines = [("MIN_VERSION_base(major1,major2,minor)","((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=0)")]
+                                          , defines = []
                                           , includes = []
                                           , preInclude = []
                                           , boolopts =
@@ -293,10 +297,12 @@ test3 = TestCase (assertEqual "test3" expected actual)
                                                           , warnings = True } }
                          , _enabled = [CPP]
                          , _hashDefines =
-                             [SymbolReplacement
-                              {name = "MIN_VERSION_base(major1,major2,minor)",
-                               replacement = "((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=0)",
-                               linebreaks = 0}]
+                             [MacroExpansion {name = "MIN_VERSION_base",
+                                              arguments = ["major1","major2","minor"],
+                                              expansion = [(Text,"(("),(Arg,"major1"),(Text,")<4||("),(Arg,"major1"),(Text,")==4&&("),
+                                                           (Arg,"major2"),(Text,")<8||("),(Arg,"major1"),(Text,")==4&&("),
+                                                           (Arg,"major2"),(Text,")==8&&("),(Arg,"minor"),(Text,")<=0)")],
+                                              linebreaks = 0}]
                          , _ghcOptions = [] }
       actual = applyHashDefine hd def
       Just hd = cabalMacro' "base-4.8"
@@ -451,3 +457,20 @@ test7 = TestCase $ do
             ParseFailed l e -> error (show l ++ ": " ++ show e)
           -- processedSrc <- cpp (_cppOptions opts) cppMode rawStr
 -}
+
+testHashDefine :: HashDefine
+testHashDefine =
+    MacroExpansion {name = "MIN_VERSION_base",
+                    arguments = ["major1","major2","minor"],
+                    expansion = [(Text,"(("),(Arg,"major1"),(Text,")<4||("),(Arg,"major1"),(Text,")==4&&("),
+                                 (Arg,"major2"),(Text,")<9||("),(Arg,"major1"),(Text,")==4&&("),
+                                 (Arg,"major2"),(Text,")==9&&("),(Arg,"minor"),(Text,")<=0)")],
+                    linebreaks = 0}
+test9 :: Test
+test9 = TestCase $
+        assertEqual "test9"
+          "((4)<4||(4)==4&&(8)<9||(4)==4&&(8)==9&&(0)<=0)"
+          (expandMacro installed minVersion True)
+    where
+      installed = cabalMacro "base" (Version [4,9,0] [])
+      minVersion = ["4","8","0"]
