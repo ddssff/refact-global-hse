@@ -15,7 +15,7 @@ import Data.Default (Default(def))
 import Data.Foldable (foldl')
 import Data.Function (on)
 import Data.Generics (everywhere, mkT)
-import Data.List (groupBy, nub, partition, sortBy)
+import Data.List (groupBy, nubBy, partition, sortBy)
 import Data.Map.Strict as Map (adjust, elems, foldlWithKey', insertWith, Map)
 import Data.Maybe (catMaybes, isNothing, maybeToList)
 import Data.Monoid ((<>))
@@ -91,7 +91,7 @@ partitionMaybes xs = let (ns, js) = partition isNothing xs in (length ns, catMay
 --
 -- data Namespace l = NoNamespace l | TypeNamespace l | PatternNamespace l
 
-mergeDecls :: forall l. Eq l => [ImportDecl l] -> [ImportDecl l]
+mergeDecls :: forall l. (Eq l, Show l) => [ImportDecl l] -> [ImportDecl l]
 mergeDecls = map mergeDecls' . setify importMergable
     where
       -- Merge a group of decls that differ only in the spec list
@@ -127,20 +127,17 @@ mergeDecls = map mergeDecls' . setify importMergable
             b' = prettyPrint' b
 
       -- Merge several import specs of the same symbol into one
-      mergeSpecs :: ImportSpec l -> ImportSpec l -> ImportSpec l
+      mergeSpecs :: Show l => ImportSpec l -> ImportSpec l -> ImportSpec l
       -- mergeSpecs x@(IAbs _ s n) _ = x
       -- mergeSpecs _ y@(IAbs _ s n) = y
       mergeSpecs x@(IThingAll _ _) _ = x
       mergeSpecs _ y@(IThingAll _ _) = y
-      mergeSpecs (IThingWith l n ns) (IThingWith _ _ ms) = IThingWith l n (nub (ns ++ ms))
+      mergeSpecs (IThingWith l n ns) (IThingWith _ _ ms) =
+          -- Merge the names that match ignoring location info
+          IThingWith l n (nubBy ((==) `on` fmap (const ())) (ns ++ ms))
       -- mergeSpecs x@(IThingWith l n ns) (IAbs _ s _) = error "mergeSpecs: IThingWith + IAbs"
       mergeSpecs x@(IThingWith _l _n _ns) _ = x
       mergeSpecs x _ = x
-
-      specSym (IVar _ n) = n
-      specSym (IAbs _ _ n) = n -- Is this right?
-      specSym (IThingAll _ n) = n
-      specSym (IThingWith _ n _) = n
 
 -- | Compare the two import declarations ignoring the things that are
 -- actually being imported.  Equality here indicates that the two

@@ -15,8 +15,9 @@ import Control.Monad (foldM, void, when)
 import Control.Monad.RWS (modify, MonadWriter(tell))
 import Control.Monad.State (execState, MonadState)
 import Data.Default (def)
+import Data.Function (on)
 import Data.Generics (Data)
-import Data.List ((\\), foldl', intercalate, nub, stripPrefix)
+import Data.List ((\\), foldl', intercalate, nubBy, stripPrefix)
 import Data.Map.Strict as Map (insertWith, Map, mapWithKey, toList)
 import Data.Maybe (catMaybes, listToMaybe, mapMaybe, maybeToList)
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, toList)
@@ -192,7 +193,7 @@ newExports (Rd mods _ _) mv thisKey =
     map prettyPrint names
     where
       -- (This should be inferred from the text of thisKey.)
-      names = nub $ concatMap newExportsFromModule (filter (\x -> _moduleKey x /= thisKey) mods)
+      names = nubBy ((==) `on` fmap (const ())) $ concatMap newExportsFromModule (filter (\x -> _moduleKey x /= thisKey) mods)
       -- Scan a module other than thisKey for declarations moving to thisKey.  If
       -- found, transfer the export from there to here.
       newExportsFromModule :: ModuleInfo l -> [ExportSpec ()]

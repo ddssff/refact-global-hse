@@ -10,7 +10,7 @@ import Test.HUnit
 import Utils (prettyPrint')
 
 importTests :: Test
-importTests = TestList [import1]
+importTests = TestList [import1, import2]
 
 instance Default (ImportDecl ()) where
     def = ImportDecl { importAnn = ()

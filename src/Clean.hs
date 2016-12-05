@@ -82,9 +82,9 @@ newModuleText mi@(ModuleInfo {_module = m}) pairs =
     Just $ scanModule (do keep {-(startOfImports mi)-} (endOfHeader m)
                           let (common, pairs') = fixNewImports True mi pairs
                           tell "\n\n"
-                          let lines :: [String]
-                              lines = map prettyPrint' common ++ concatMap (uncurry doOptImports) pairs'
-                          tell (intercalate "\n" lines)
+                          let ls :: [String]
+                              ls = map prettyPrint' common ++ concatMap (uncurry doOptImports) pairs'
+                          tell (intercalate "\n" ls)
                           -- Skip just past end of last original import
                           skip (endOfImports m)
                           -- Keep the comments between last import and first decl
@@ -93,7 +93,7 @@ newModuleText mi@(ModuleInfo {_module = m}) pairs =
     where
       -- oi = getImports m
       doOptImports :: GHCOpts -> [ImportDecl ()] -> [String]
-      doOptImports opts [] = []
+      doOptImports _opts [] = []
       doOptImports opts ni =
           -- let ni'' = fixNewImports' True mi ni in
           -- if dropAnn oi == map dropAnn ni' then keep ... else
