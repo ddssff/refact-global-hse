@@ -31,11 +31,8 @@
 ## Run from ghci
 
     $ ghci
-    λ finalParams (set (ghcOpts . hsSourceDirs) ["src"] (set CleanImports.toClean [(Just "src", "CPP.hs")] def)) >>= CleanImports.go
-    λ finalParams (over (ghcOpts . hashDefines) (++ [cabalMacro "base" (Version [4,9,0] [])]) $
-                   set (ghcOpts . hsSourceDirs) ["src"] $
-                   set toClean [(Just "src", "CPP.hs")] $
-                   set unsafe True def) >>= CleanImports.go
+    λ finalParams "dist/build/autogen/cabal_macros.hs" (set (ghcOpts . hsSourceDirs) ["src"] $ set toClean [(Just "src", "CPP.hs")] $ set unsafe True def) >>= CleanImports.go
+
 
 ## Run command line tool
 

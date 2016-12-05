@@ -12,11 +12,12 @@ module CleanImports
     ) where
 
 import Clean (cleanImports)
-import CPP (GHCOpts, ghcOptsOptions, hsSourceDirs)
-import Control.Lens (makeLenses, over, set, view)
+import CPP (GHCOpts, ghcOptsOptions, cppOptions, definesL, hsSourceDirs)
+import Control.Lens (_2, makeLenses, over, set, view)
 import Data.Default (Default(def))
 import Data.Set as Set (fromList, Set, toList, union)
 import Language.Haskell.Names (Scoped(Scoped))
+import Language.Preprocessor.Cpphs (runCpphsReturningSymTab)
 import LoadModule (loadModules)
 import Options.Applicative (help, many, metavar, Parser, strOption, switch, long, (<>))
 -- import System.Console.GetOpt (ArgDescr(NoArg, ReqArg), ArgOrder(Permute), getOpt', OptDescr(..), usageInfo)
@@ -61,21 +62,26 @@ params0 = Params {_ghcOpts = def, _findDirs = [], _toClean = [], _unsafe = False
 instance Default Params where
     def = params0
 
-finalParams :: Params -> IO Params
-finalParams params' = do
+finalParams :: String -> Params -> IO Params
+finalParams hfile params0 = do
   -- Canonicalize the search path
-  params <- mapM canonicalizePath (view findDirs params') >>= \topDirs' -> return $ set findDirs topDirs' params'
+  params' <- mapM canonicalizePath (view findDirs params0) >>= \topDirs' -> return $ set findDirs topDirs' params0
+  defs <- (fmap (over _2 (filter (/= '\n'))) . snd) <$> runCpphsReturningSymTab (view (ghcOpts . cppOptions) params') "cabal_macros.h" hfile
+  let params = over (ghcOpts . cppOptions . definesL) (++ defs) params'
+
   -- Find all the haskell source files in all the search paths
   findModules <- concat <$> mapM (\dir -> find always {-(depth ==? 0)-} (extension ==? ".hs" &&? fileType ==? RegularFile) dir) (view findDirs params)
   abspaths <- mapM canonicalizePath findModules
-  let reltops = view (ghcOpts . hsSourceDirs) params
-  abstops <- mapM canonicalizePath reltops
+  -- The absolute pathnames of the elements of the haskell source path
+  abstops <- mapM canonicalizePath (view (ghcOpts . hsSourceDirs) params)
   -- Match up each module with the top relative to which its module
   -- name matches its path.  Some modules will appear below more than
   -- one top, in that case we need to match up the module name with
   -- the relative path.
-  relModules <- modulePairs reltops
-  pure (over toClean (++ (Set.toList relModules)) params)
+  relModules <- modulePairs (view (ghcOpts . hsSourceDirs) params)
+  -- Add all the modules we found to the list of modules to be cleaned (why???)
+  --pure (over modules (++ (Set.toList relModules)) params)
+  return params
 
 -- | Return all the (top, module) pairs reachable from the list of
 -- tops.  Note that some of these pairs will be invalid (as shown in
@@ -94,8 +100,11 @@ modulePairs reltops = do
                [] -> error $ "Module not found: " ++ show abspath
                xs -> pure (Set.fromList xs)) abspaths
 
+go :: Params -> IO ()
 go params0 = do
-  params <- finalParams params0 >>= \x -> putStrLn ("Final parameters:\n  " ++ show x) >> return x
+  params <- do
+    macros <- readFile "dist/build/autogen/cabal_macros.h"
+    finalParams macros params0
   (if (view unsafe params) then id else withCleanRepo) $ withTempDirectory True "." "scratch" $ \scratch -> do
     modules <- loadModules def (view toClean params)
-    cleanImports [set hsSourceDirs (view (ghcOpts . hsSourceDirs) params) def] (map (fmap (\(Scoped _ x) -> x)) modules)
+    cleanImports [{-set hsSourceDirs (view (ghcOpts . hsSourceDirs) params)-} (view ghcOpts params)] (map (fmap (\(Scoped _ x) -> x)) modules)

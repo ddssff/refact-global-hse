@@ -58,7 +58,7 @@ loadModule opts pair = do
   let path = pairPath pair
       mode = defaultParseMode opts path
   moduleText <- liftIO $ readFile path
-  let opts' = foldr applyHashDefine opts (view hashDefines opts)
+  let opts' = opts -- foldr applyHashDefine opts (view hashDefines opts)
       opts'' = over cppOptions turnOffLocations opts'
   hPutStrLn stderr ("loadModule " ++ show pair)
   (parsed', comments {-, _processed-}) <- Exts.fromParseResult <$> parseFileWithCommentsAndCPP (view cppOptions opts'') mode path

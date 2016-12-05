@@ -1,3 +1,6 @@
+-- | Copy of HashDefine module from cpphs, only change is module name
+-- and this comment.
+
 -----------------------------------------------------------------------------
 -- |
 -- Module      :  HashDefine
@@ -120,9 +123,9 @@ parseHashDefine ansi def = (command . skip) def
 simplifyHashDefines :: [HashDefine] -> [(String,String)]
 simplifyHashDefines = concatMap simp
   where
-    simp LineDrop{}    = []
-    simp Pragma{}      = []
-    simp AntiDefined{} = []
+    simp hd@LineDrop{}    = []
+    simp hd@Pragma{}      = []
+    simp hd@AntiDefined{} = []
     simp hd@SymbolReplacement{} = [(name hd, replacement hd)]
     simp hd@MacroExpansion{}    = [(name hd++"("++intercalate "," (arguments hd)
                                            ++")"

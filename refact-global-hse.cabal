@@ -13,13 +13,16 @@ flag filemanip0364
   Description: forthcoming(?) filemanip-0.3.6.4 has a required bug fix
   Default: False
 
+flag local-cpphs
+  Default: False
+  Manual: True
+
 Library
   Hs-Source-Dirs: src
   Build-Depends:
     base,
     Cabal,
     containers,
-    cpphs,
     data-default,
     directory,
     filemanip-extra,
@@ -58,6 +61,23 @@ Library
   else
     Build-Depends: unix-compat
     Exposed-Modules: System.FilePath.Find, System.FilePath.Glob, System.FilePath.GlobPattern
+  if flag(local-cpphs)
+    Exposed-Modules:
+      Language.Preprocessor.Cpphs.Options
+      Language.Preprocessor.Cpphs.Tokenise
+      Language.Preprocessor.Cpphs.RunCpphs
+      Language.Preprocessor.Cpphs.ReadFirst
+      Language.Preprocessor.Cpphs.SymTab
+      Language.Preprocessor.Cpphs.MacroPass
+      Language.Preprocessor.Cpphs.Position
+      Language.Preprocessor.Cpphs.HashDefine
+      Language.Preprocessor.Cpphs.CppIfdef
+      Language.Preprocessor.Unlit
+      Language.Preprocessor.Cpphs
+    Build-Depends: old-time, old-locale, polyparse>=1.9
+    Hs-Source-Dirs: ../cpphs-1.20.2
+  else
+    Build-Depends: cpphs
 
 executable refactor
   Hs-Source-Dirs: scripts
@@ -65,6 +85,7 @@ executable refactor
   Build-Depends:
     base,
     containers,
+    cpphs,
     data-default,
     directory,
     filepath,
@@ -88,8 +109,8 @@ Test-Suite refactor-tests
   Main-Is: Tests.hs
   Build-Depends:
     base,
+    Cabal,
     containers,
-    cpphs,
     data-default,
     filepath,
     haskell-names,
@@ -105,3 +126,5 @@ Test-Suite refactor-tests
     Build-Depends: filemanip > 0.3.6.3
   else
     Build-Depends: unix-compat
+  if !flag (local-cpphs)
+    Build-Depends: cpphs

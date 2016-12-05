@@ -14,7 +14,7 @@ module DeclTests where
 import Clean (cleanImports)
 import Control.Lens (set, over)
 import Control.Monad (when)
-import CPP (cabalMacro, cppOptions, defaultCpphsOptions, enabled, GHCOpts, ghcOptions, hashDefines, hc, hsSourceDirs)
+import CPP (cabalMacro, cppOptions, defaultCpphsOptions, definesL, enabled, GHCOpts, HashDef(..), hashUndefs, ghcOptions, hashDefines, hc, hsSourceDirs)
 import Data.Data (Data)
 import Data.Default (def)
 import Data.List hiding (find)
@@ -22,7 +22,7 @@ import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Data.Version (Version(Version))
 import Decls (runMoveUnsafe)
-import HashDefine (parseHashDefine)
+import Distribution.Package (PackageIdentifier(..), PackageName(..))
 import Language.Haskell.Exts (Decl(FunBind, TypeSig), Match(InfixMatch, Match),
    ModuleName(ModuleName), Name(Ident), Exp(App),
    KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules), Module(Module), SrcInfo)
@@ -215,10 +215,10 @@ clean8 = TestLabel "load8" $ TestCase $
                        set cppOptions defaultCpphsOptions $
                        set enabled [CPP, OverloadedStrings, ExtendedDefaultRules] $
                        opts0
-            let optSets = [ set hc "ghc" (set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["define", "SERVE_DYNAMIC"]]) opts)
-                          , set hc "ghcjs" (set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "1"], ["define", "SERVER", "0"], ["define", "NO_TH"], ["define", "SERVE_DYNAMIC"]]) opts)
-                          , set hc "ghc" (set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["undef", "SERVE_DYNAMIC"]]) opts)
-                          , set hc "ghcjs" (set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "1"], ["define", "SERVER", "0"], ["define", "NO_TH"], ["undef", "SERVE_DYNAMIC"]]) opts) ]
+            let optSets = [ (set hc "ghc" $ set (cppOptions . definesL) [("CLIENT", "0"), ("SERVER", "1"), ("SERVE_DYNAMIC", "")] $ set hashUndefs ["NO_TH"] opts)
+                          , (set hc "ghcjs" $ set (cppOptions . definesL) [("CLIENT", "1"), ("SERVER", "0"), ("NO_TH", ""), ("SERVE_DYNAMIC", "")] opts)
+                          , (set hc "ghc" $ set (cppOptions . definesL) [("CLIENT", "0"), ("SERVER", "1")] $ set hashUndefs ["NO_TH", "SERVE_DYNAMIC"] opts)
+                          , (set hc "ghcjs" $ set (cppOptions . definesL) [("CLIENT", "1"), ("SERVER", "0"), ("NO_TH", "")] $ set hashUndefs ["SERVE_DYNAMIC"] opts) ]
             m <- loadModule opts (Just "client", "Examples/MVExample.hs")
             cleanImports optSets [m]
             (code, diff, err) <- readProcessWithExitCode "diff" ["-ruN", expected, actual] ""
@@ -241,7 +241,8 @@ clean9 = TestLabel "load9" $ TestCase $
                        set hsSourceDirs ["client", "../happstack-ghcjs-webmodule"] $
                        set cppOptions defaultCpphsOptions $
                        set enabled [CPP, OverloadedStrings, ExtendedDefaultRules] $
-                       set hashDefines (map (fromJust . parseHashDefine False) [["define", "CLIENT", "0"], ["define", "SERVER", "1"], ["undef", "NO_TH"], ["define", "SERVE_DYNAMIC"]]) $
+                       set (cppOptions . definesL) [("CLIENT", "0"), ("SERVER", "1"), ("SERVE_DYNAMIC", "")] $
+                       set hashUndefs ["NO_TH"] $
                        opts0
             m <- loadModule opts (Just "client", "Examples/MVExample.hs")
             cleanImports [opts] [m]
@@ -297,7 +298,7 @@ simple3 =
 
 opts0 :: GHCOpts
 opts0 =
-    over hashDefines (++ [cabalMacro "base" (Version [4,8] [])]) o
+    over (cppOptions . definesL) (++ [cabalMacro (PackageIdentifier (PackageName "base") (Version [4,8] []))]) o
     where o = set hsSourceDirs ["."] def
 
 -- Perform the same move with these CPP flag combinations:

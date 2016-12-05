@@ -20,7 +20,7 @@ module ScanM
 import Control.Lens ((.=), (%=), makeLenses, makeLensesFor, use, view)
 import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS)
 import Data.Char (isSpace)
-import Debug.Trace (trace)
+-- import Debug.Trace (trace)
 import Language.Haskell.Exts.Syntax -- (Annotated(ann), Module(..))
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))

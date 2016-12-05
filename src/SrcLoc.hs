@@ -44,7 +44,7 @@ import Data.Monoid ((<>))
 import Language.Haskell.Exts.Syntax -- (Annotated(ann), Module(..))
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcInfo(..), SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
-import Language.Haskell.Names hiding (PatSyn)
+import Language.Haskell.Names
 import ModuleInfo
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)
 import Utils (EZPrint(ezPrint), lines')
