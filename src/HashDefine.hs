@@ -2,7 +2,6 @@
 -- and this comment.
 
 -----------------------------------------------------------------------------
--- |
 -- Module      :  HashDefine
 -- Copyright   :  2004 Malcolm Wallace
 -- Licence     :  LGPL

@@ -417,7 +417,7 @@ newModuleOfImportSpec (Rd mods _env _gr) mv oldModname spec =
                      Just d -> moduleName (applyMoveSpec mv info d)
                      -- Everything else we can leave alone - even if we can't
                      -- find a declaration, they might be re-exported.
-                     Nothing {- | isReexport info spec -} -> Just oldModname
+                     Nothing {- cond isReexport info spec -} -> Just oldModname
                      -- Nothing -> trace ("Unable to find decl of " ++ prettyPrint' spec ++ " in " ++ show oldModname) Nothing
       -- If we don't know about the module leave the import spec alone
       Nothing -> Just oldModname
