@@ -17,4 +17,4 @@
 :m +CPP
 :m +Data.Version
 :m +Data.Maybe
-:set prompt "λ "
+:set prompt "λ> "
