@@ -94,11 +94,19 @@ instance Default GHCOpts where
           , _hashUndefs = []
           , _ghcOptions = [] }
 
+-- | Our defaultParseMode differs from the one provided by
+-- haskell-src-exts.  We enable almost all the LANGUAGE pragmas.  I'm
+-- not sure why fixities is turned off here.
 defaultParseMode :: GHCOpts -> String -> ParseMode
 defaultParseMode opts path =
-    Exts.defaultParseMode {Exts.extensions = map EnableExtension (view enabled opts ++ extensionsForHSEParser),
-                           Exts.parseFilename = path,
-                           Exts.fixities = Nothing }
+    Exts.defaultParseMode { Exts.extensions = map EnableExtension (view enabled opts ++ extensionsForHSEParser)
+                          , Exts.parseFilename = path
+                          , Exts.ignoreLinePragmas = True
+                          -- ^ Because we are modifying the original
+                          -- source file, we can't use information in
+                          -- LINE pragmas.
+                          -- , Exts.fixities = Nothing
+                          }
 
 -- | Turn of the locations flag.  This means simple #if macros will not
 -- affect the line numbers of the output text, so we can use the
