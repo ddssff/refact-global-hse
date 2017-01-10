@@ -17,12 +17,7 @@ import Debug.Trace
 import Language.Haskell.Exts
 import Language.Haskell.Exts.SrcLoc
 import Options.Applicative
-import Refactor.CPP (GHCOpts, ghcOptsOptions)
-import Refactor.Utils (withCurrentDirectory)
-import Refactor.LoadModule (loadModule)
-import Refactor.ModuleInfo
-import Refactor.ScanM (ScanM, scanModule, comments, keep)
-import Refactor.SrcLoc
+import Refactor (GHCOpts, ghcOptsOptions, withCurrentDirectory, loadModule, ModuleInfo(..), ScanM, scanModule, endLoc, srcLoc, useComments, keep)
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.Exit (ExitCode(..), exitWith)
@@ -57,19 +52,19 @@ go params = do
   mapM_ (\m -> putStrLn (scanModule (f m) m)) ms
     where
       f :: ModuleInfo SrcSpanInfo -> ScanM ()
-      f (ModuleInfo {_module = Module l mh ps is ds}) = do
+      f (ModuleInfo {_module = Module _l mh ps is ds}) = do
          mapM_ (decorate "p" . ann) ps
          maybe (pure ()) (decorate "h" . ann) mh
          mapM_ (decorate "i" . ann) is
          mapM_ (decorate "d" . ann) ds
       decorate s x = do
-         cs <- use comments
+         cs <- useComments
          mapM_ (\(Comment _ sp _) -> tell "[w|" >> keep (srcLoc sp) >> tell "|]" >>
                                      tell "[c|" >> keep (endLoc sp) >> tell "|]")
                (takeWhile (\(Comment _ sp _) -> srcLoc sp < srcLoc x) cs)
          tell "[w|" >> keep (srcLoc x) >> tell "|]"
          tell ("[" ++ s ++ "|")
-         cs <- use comments
+         cs <- useComments
          mapM_ (\(Comment _ sp _) -> keep (srcLoc sp) >>
                                      tell "[c|" >> keep (endLoc sp) >> tell "|]")
                (takeWhile (\(Comment _ sp _) -> srcLoc sp < endLoc x) cs)

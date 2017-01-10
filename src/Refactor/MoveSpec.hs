@@ -52,6 +52,7 @@ instance Monoid MoveSpec where
 applyMoveSpec :: Data l => MoveSpec -> ModuleInfo l -> Decl l -> ModuleKey
 applyMoveSpec (MoveSpec f) i d = f (dropAnn i) (dropAnn d)
 
+-- | Print a description of the move spec on the console.
 traceMoveSpec :: MoveSpec -> MoveSpec
 traceMoveSpec (MoveSpec f) = MoveSpec $ \i d ->
   let k' = f i d in
@@ -59,7 +60,7 @@ traceMoveSpec (MoveSpec f) = MoveSpec $ \i d ->
   then (trace ("moveSpec " ++ show (_moduleKey i) ++ " d -> " ++ show k') k')
   else k'
 
--- A simple MoveSpec builder.
+-- | A MoveSpec builder that selects declarations by symbol name.
 moveDeclsByName :: String -> String -> String -> MoveSpec
 moveDeclsByName symname departMod arriveMod = MoveSpec $
     \i decl ->
@@ -70,6 +71,7 @@ moveDeclsByName symname departMod arriveMod = MoveSpec $
                   (_moduleKey i) {_moduleName = ModuleName l arriveMod}
           _ -> _moduleKey i
 
+-- | A MoveSpec builder for instances (which have no name).
 moveInstDecls :: (ModuleInfo () -> QName () -> [Type ()] -> ModuleKey) -> MoveSpec
 moveInstDecls instpred =
     MoveSpec f
@@ -86,6 +88,16 @@ moveInstDecls instpred =
       h types (IHCon _ name) = (name, types)
       h types (IHInfix _ typ name) = (name, typ : types)
 
+-- | Build a predicate to pass to 'moveInstDecls'
+instClassPred :: forall l. Data l => String -> String -> String ->
+                 ModuleInfo l -> QName l -> [Type l] -> ModuleKey
+instClassPred classname depart arrive (ModuleInfo {_moduleKey = key@ModuleKey {_moduleName = mname}}) qname _ts
+    | dropAnn mname == ModuleName () depart &&
+      (gFind (dropAnn qname) :: [Name ()]) == [Ident () classname] =
+        key {_moduleName = ModuleName () arrive}
+instClassPred _ _ _ i _ _ = _moduleKey i
+
+-- | A MoveSpec builder that selects template haskell splice declarations by predicate.
 moveSpliceDecls :: (ModuleInfo () -> Exp () -> ModuleKey) -> MoveSpec
 moveSpliceDecls exppred =
     MoveSpec f
@@ -100,16 +112,7 @@ moveSpliceDecls exppred =
       h i (IdSplice _ _) = _moduleKey i
       h i (ParenSplice _ exp') = exppred i exp'
 
--- | Build the argument to moveInstDecls
-instClassPred :: forall l. Data l => String -> String -> String ->
-                 ModuleInfo l -> QName l -> [Type l] -> ModuleKey
-instClassPred classname depart arrive (ModuleInfo {_moduleKey = key@ModuleKey {_moduleName = mname}}) qname _ts
-    | dropAnn mname == ModuleName () depart &&
-      (gFind (dropAnn qname) :: [Name ()]) == [Ident () classname] =
-        key {_moduleName = ModuleName () arrive}
-instClassPred _ _ _ i _ _ = _moduleKey i
-
--- | Build the argument to moveInstDecls
+-- | Build the argument to 'moveSpliceDecls'
 splicePred :: forall l. Data l => String -> String -> String ->
                  ModuleInfo l -> Exp l -> ModuleKey
 splicePred name depart arrive (ModuleInfo {_moduleKey = key@ModuleKey {_moduleName = mname}}) exp'

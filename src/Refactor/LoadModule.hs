@@ -3,7 +3,6 @@
 module Refactor.LoadModule
     ( loadModule
     , loadModules
-    , Annot
     ) where
 
 import Control.Lens (over, view)
@@ -31,13 +30,13 @@ import System.Directory (canonicalizePath)
 import System.FilePath ((</>), joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
 import System.IO (hPutStrLn, stderr)
 
-type Annot = Scoped SrcSpanInfo
-
-instance EZPrint Annot where
+instance EZPrint (Scoped SrcSpanInfo) where
     ezPrint (Scoped _ x) = ezPrint x
 
--- | Load a list of modules and compute their global scoping info.
-loadModules :: GHCOpts -> [(Maybe FilePath, FilePath)] -> IO [ModuleInfo Annot]
+-- | Load a list of modules and compute their global scoping info.  As
+-- of right now the scoping information is not actually used, but
+-- surely there will be some use for it down the road.
+loadModules :: GHCOpts -> [(Maybe FilePath, FilePath)] -> IO [ModuleInfo (Scoped SrcSpanInfo)]
 loadModules opts pairs = do
   t1 <$> addScoping <$> mapM (loadModule opts) (nub pairs)
     where
@@ -53,6 +52,7 @@ addScoping mods =
 pairPath :: (Maybe FilePath, FilePath) -> FilePath
 pairPath (mtop, path) = maybe path (\top -> top </> path) mtop
 
+-- | Load a single module.
 loadModule :: GHCOpts -> (Maybe FilePath, FilePath) -> IO (ModuleInfo SrcSpanInfo)
 loadModule opts pair = do
   let path = pairPath pair

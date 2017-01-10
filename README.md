@@ -31,7 +31,7 @@
 ## Run from ghci
 
     $ ghci
-    λ finalParams "dist/build/autogen/cabal_macros.hs" (set (ghcOpts . hsSourceDirs) ["src"] $ set toClean [(Just "src", "CPP.hs")] $ set unsafe True def) >>= CleanImports.go
+    λ> finalParams "dist/build/autogen/cabal_macros.hs" (set (ghcOpts . hsSourceDirs) ["src"] $ set toClean [(Just "src", "Refactor/CPP.hs")] $ set unsafe True def) >>= CleanImports.go
 
 
 ## Run command line tool

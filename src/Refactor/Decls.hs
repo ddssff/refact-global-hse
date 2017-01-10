@@ -28,12 +28,12 @@ import Language.Haskell.Exts.Syntax (Annotated(ann), Decl(TypeSig), EWildcard(..
 -- import Language.Haskell.Exts.Annotated.Simplify (sExportSpec, sModuleName, sModulePragma, sName)
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcInfo, SrcLoc(..), SrcSpanInfo(..))
-import Language.Haskell.Names (resolve, Symbol(symbolName))
+import Language.Haskell.Names (resolve, Scoped, Symbol(symbolName))
 import Language.Haskell.Names.SyntaxUtils (dropAnn, getImports, getModuleDecls)
 import Refactor.Clean (cleanImports)
 import Refactor.CPP (GHCOpts, hsSourceDirs)
 import Refactor.Graph (findModuleByKey, findModuleByKeyUnsafe, makeImportGraph, moveType, MoveType(Down, Up), Rd(Rd))
-import Refactor.LoadModule (Annot, loadModule, loadModules)
+import Refactor.LoadModule (loadModule, loadModules)
 import Refactor.ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
 import Refactor.ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
 import Refactor.MoveSpec (applyMoveSpec, MoveSpec)
@@ -65,7 +65,11 @@ runMoveUnsafe root opts mv =
                           (view hsSourceDirs opts)
       loadModules def pairs >>= moveDeclsAndClean mv opts
 
-moveDeclsAndClean :: MoveSpec -> GHCOpts -> [ModuleInfo Annot] -> IO ()
+-- | Execute the moves described by the 'MoveSpec' on a set of
+-- modules.  This will move declarations from one module to another
+-- and adjust exports on both, and update and clean imports on any
+-- module that imports or exports the affected symbols.
+moveDeclsAndClean :: MoveSpec -> GHCOpts -> [ModuleInfo (Scoped SrcSpanInfo)] -> IO ()
 moveDeclsAndClean mv opts mods = do
   -- Move the declarations and rewrite the updated modules
   let env = resolve (map _module mods) mempty

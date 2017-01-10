@@ -1,5 +1,6 @@
 -- | RWS monad for scanning haskell modules parsed by haskell-src-exts.
 
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE TemplateHaskell #-}
 module Refactor.ScanM
     ( -- RWS monad to scan a text file
@@ -7,6 +8,7 @@ module Refactor.ScanM
     , locFilename
     , point
     , comments
+    , useComments
     , remaining
     , scanModule
     , keep
@@ -18,7 +20,7 @@ module Refactor.ScanM
     ) where
 
 import Control.Lens ((.=), (%=), makeLenses, makeLensesFor, use, view)
-import Control.Monad.RWS (evalRWS, MonadWriter(tell), RWS)
+import Control.Monad.RWS (evalRWS, MonadState, MonadWriter(tell), RWS)
 import Data.Char (isSpace)
 -- import Debug.Trace (trace)
 import Language.Haskell.Exts.Syntax -- (Annotated(ann), Module(..))
@@ -28,6 +30,8 @@ import Refactor.ModuleInfo
 import Refactor.SrcLoc
 import Refactor.Utils (lines')
 
+-- | A monad that scans a parsed module and has a writer monad to
+-- collect the text of an updated version of the module.
 type ScanM = RWS () String St
 
 data St = St { _point :: SrcLoc -- The current position in the full text
@@ -48,6 +52,12 @@ $(makeLensesFor [{-("srcSpanFilename", "spanFilename"),
 $(makeLensesFor [{-("srcInfoSpan", "infoSpan"),
                  ("srcInfoPoints", "infoPoints")-}] ''SrcSpanInfo)
 
+-- | Retrieve the module comments
+useComments :: MonadState St m => m [Comment]
+useComments = use comments
+
+-- | Run the ScanM monad on a module return the text collected by the
+-- writer monad.
 scanModule :: ScanM () -> ModuleInfo l -> String
 scanModule action m@(ModuleInfo {_module = Module _ _ _ _ _}) =
     snd $ evalRWS action () (St { _point = SrcLoc (_modulePath m) 1 1
@@ -55,7 +65,8 @@ scanModule action m@(ModuleInfo {_module = Module _ _ _ _ _}) =
                                 , _comments = _moduleComments m })
 scanModule _ _ = error "scanModule"
 
--- | Keep everything from the point to loc
+-- | Add everything between the point and some location to the writer
+-- monad without modification.
 keep :: SrcLoc -> ScanM ()
 keep loc = do
   t' <- use remaining

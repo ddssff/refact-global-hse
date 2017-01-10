@@ -31,7 +31,8 @@ import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcess)
 
--- | Replace the original imports with cleaned imports produced by ghc
+-- | Replace the original imports of a module with cleaned imports as
+-- produced by ghc with the @-ddump-minimal-imports@ flag.
 cleanImports :: [GHCOpts] -> [ModuleInfo SrcSpanInfo] -> IO ()
 cleanImports _ [] = trace ("cleanImports - no modules") (pure ())
 cleanImports optSets mods = do

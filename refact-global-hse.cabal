@@ -41,6 +41,8 @@ Library
     syb,
     temporary
   Exposed-Modules:
+    Refactor
+  Other-Modules:
     Refactor.Clean
     Refactor.CPP
     Refactor.Decls
