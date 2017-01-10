@@ -6,8 +6,8 @@
 {-# LANGUAGE RecordWildCards #-}
 {-# LANGUAGE StandaloneDeriving #-}
 {-# LANGUAGE TemplateHaskell #-}
-module CPP
-  ( CPP.defaultParseMode
+module Refactor.CPP
+  ( Refactor.CPP.defaultParseMode
   , defaultCpphsOptions
   , turnOffLocations
   , GHCOpts(GHCOpts), hc, cppOptions, enabled, hashUndefs, hsSourceDirs, ghcOptions
@@ -44,8 +44,8 @@ import Language.Haskell.Exts.SrcLoc (SrcSpan(SrcSpan), SrcSpanInfo(SrcSpanInfo, 
 import Language.Haskell.Exts.Syntax (Decl(PatBind, TypeSig), Exp(InfixApp, Lit, Var), ExportSpec(EVar), ExportSpecList(ExportSpecList), Literal(Int), Module(Module), ModuleHead(ModuleHead), ModuleName(ModuleName), Name(Ident, Symbol), Pat(PVar), QName(UnQual), QOp(QVarOp), Rhs(UnGuardedRhs), Type(TyCon))
 import Language.Preprocessor.Cpphs (BoolOptions(..), CpphsOptions(..), defaultCpphsOptions, parseOptions, runCpphs, runCpphsReturningSymTab)
 import Options.Applicative ((<>), Alternative(many), help, long, metavar, Parser, short, strOption)
+import Refactor.Utils (EZPrint(ezPrint))
 import Test.HUnit (assertEqual, Test(TestCase, TestList))
-import Utils (EZPrint(ezPrint))
 
 deriving instance Show ParseMode
 deriving instance Eq BoolOptions
@@ -102,7 +102,7 @@ defaultParseMode opts path =
     Exts.defaultParseMode { Exts.extensions = map EnableExtension (view enabled opts ++ extensionsForHSEParser)
                           , Exts.parseFilename = path
                           , Exts.ignoreLinePragmas = True
-                          -- ^ Because we are modifying the original
+                          -- Because we are modifying the original
                           -- source file, we can't use information in
                           -- LINE pragmas.
                           -- , Exts.fixities = Nothing
@@ -381,7 +381,7 @@ test6c = TestCase $ do
 test7 :: Test
 test7 = TestCase $ do
           let ghcopts = def
-              pmode = CPP.defaultParseMode ghcopts "<input>"
+              pmode = Refactor.CPP.defaultParseMode ghcopts "<input>"
               cppopts :: CpphsOptions
               Right cppopts = parseOptions ["-DFOO", "-DMIN_VERSION_base(major1,major2,minor)=((major1)<4||(major1)==4&&(major2)<8||(major1)==4&&(major2)==8&&(minor)<=2)", "--nomacro", "--noline"]
               cppopts' = set (booloptsL . macrosL) False cppopts

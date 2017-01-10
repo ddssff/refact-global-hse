@@ -7,7 +7,7 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
-module Graph
+module Refactor.Graph
     ( Rd(Rd, _modules, _environment)
     , MoveType(Down, Up)
     , makeImportGraph
@@ -23,8 +23,8 @@ import Data.Maybe (mapMaybe)
 import Language.Haskell.Exts.Syntax (ImportDecl(importModule), Module(Module), ModuleName)
 import Language.Haskell.Names (Environment)
 import Language.Haskell.Names.SyntaxUtils (dropAnn)
-import ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
-import ModuleKey (ModuleKey(..))
+import Refactor.ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
+import Refactor.ModuleKey (ModuleKey(..))
 
 
 data Rd l

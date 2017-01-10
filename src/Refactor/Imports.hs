@@ -6,7 +6,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 
-module Imports
+module Refactor.Imports
     ( mergeDecls
     ) where
 
@@ -21,7 +21,7 @@ import Data.Maybe (catMaybes, isNothing, maybeToList)
 import Data.Monoid ((<>))
 import Language.Haskell.Exts.Syntax (ImportDecl(ImportDecl, importModule, importSpecs), ImportSpec(..), ImportSpecList(..))
 import Language.Haskell.Names.SyntaxUtils (dropAnn)
-import Utils (prettyPrint', SetLike(union, difference))
+import Refactor.Utils (prettyPrint', SetLike(union, difference))
 
 type ImportKey = (ImportDecl (), Bool)
 

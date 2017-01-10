@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable, DeriveFunctor, FlexibleInstances, ScopedTypeVariables, TemplateHaskell #-}
 {-# LANGUAGE PackageImports #-}
 
-module ModuleInfo
+module Refactor.ModuleInfo
     ( ModuleInfo(..)
     , fullPathOfModuleInfo
     , getTopDeclSymbols'
@@ -17,8 +17,8 @@ import Language.Haskell.Names.GetBound (getBound)
 import Language.Haskell.Names.GlobalSymbolTable as Global (Table)
 import Language.Haskell.Names.ModuleSymbols ( getTopDeclSymbols)
 import Language.Haskell.Names.SyntaxUtils (dropAnn)
-import ModuleKey (moduleFullPath, ModuleKey, moduleName')
-import Utils (con, EZPrint(ezPrint), gFind)
+import Refactor.ModuleKey (moduleFullPath, ModuleKey, moduleName')
+import Refactor.Utils (con, EZPrint(ezPrint), gFind)
 
 data ModuleInfo l =
     ModuleInfo { _moduleKey :: ModuleKey

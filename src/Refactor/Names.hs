@@ -1,5 +1,5 @@
 {-#LANGUAGE CPP, PackageImports, RecordWildCards #-}
-module Names
+module Refactor.Names
     ( topDeclExportSpec
     ) where
 
@@ -7,7 +7,7 @@ import Data.List (partition)
 import Language.Haskell.Exts.Syntax (Decl)
 import Language.Haskell.Exts.Syntax (CName(..), EWildcard(..), ExportSpec(..), QName(..))
 import Language.Haskell.Names (Symbol(..))
-import ModuleInfo (getTopDeclSymbols', ModuleInfo)
+import Refactor.ModuleInfo (getTopDeclSymbols', ModuleInfo)
 
 -- | Build an export spec for the symbols created by a Decl.  The
 -- getBound function returns the names, and we can get the module

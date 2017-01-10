@@ -5,7 +5,7 @@
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
 {-# LANGUAGE FlexibleContexts, FlexibleInstances, RankNTypes, ScopedTypeVariables #-}
-module Utils where
+module Refactor.Utils where
 
 import Control.Exception (SomeException, throw)
 import Control.Exception.Lifted as IO (bracket, catch)

@@ -1,15 +1,12 @@
 {-# LANGUAGE FlexibleInstances, PackageImports, ScopedTypeVariables, TemplateHaskell, TypeSynonymInstances #-}
 
-module LoadModule
+module Refactor.LoadModule
     ( loadModule
     , loadModules
     , Annot
     ) where
 
 import Control.Lens (over, view)
-import CPP (applyHashDefine, applyHashDefine', cppOptions, defaultParseMode, enabled, extensionsForHSEParser,
-            GHCOpts, hashDefines, turnOffLocations)
-import qualified CPP (defaultCpphsOptions)
 import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Generics (everywhere, mkT)
 import Data.List (groupBy, intercalate, nub)
@@ -23,13 +20,16 @@ import Language.Haskell.Names (annotate, resolve, Scoped(..))
 import Language.Haskell.Names.Imports (importTable)
 import Language.Haskell.Names.ModuleSymbols (moduleTable)
 import Language.Preprocessor.Cpphs (BoolOptions(locations), CpphsOptions(..))
-import ModuleInfo (ModuleInfo(..))
-import ModuleKey (ModuleKey(..))
-import SrcLoc (fixEnds, fixSpan, mapTopAnnotations, spanOfText)
+import Refactor.CPP (applyHashDefine, applyHashDefine', cppOptions, defaultParseMode, enabled, extensionsForHSEParser,
+                     GHCOpts, hashDefines, turnOffLocations)
+import qualified Refactor.CPP (defaultCpphsOptions)
+import Refactor.ModuleInfo (ModuleInfo(..))
+import Refactor.ModuleKey (ModuleKey(..))
+import Refactor.SrcLoc (fixEnds, fixSpan, mapTopAnnotations, spanOfText)
+import Refactor.Utils (EZPrint(ezPrint))
 import System.Directory (canonicalizePath)
 import System.FilePath ((</>), joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
 import System.IO (hPutStrLn, stderr)
-import Utils (EZPrint(ezPrint))
 
 type Annot = Scoped SrcSpanInfo
 

@@ -2,7 +2,7 @@
 
 {-# LANGUAGE BangPatterns, CPP, FlexibleInstances, PackageImports, ScopedTypeVariables, TemplateHaskell, UndecidableInstances #-}
 {-# OPTIONS_GHC -Wall -fno-warn-orphans #-}
-module SrcLoc
+module Refactor.SrcLoc
     ( -- * SpanInfo queries
       srcLoc
     , EndLoc(endLoc)
@@ -45,9 +45,9 @@ import Language.Haskell.Exts.Syntax -- (Annotated(ann), Module(..))
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (mkSrcSpan, SrcInfo(..), SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
 import Language.Haskell.Names
-import ModuleInfo
+import Refactor.ModuleInfo
+import Refactor.Utils (EZPrint(ezPrint), lines')
 import Text.PrettyPrint.HughesPJClass (Pretty(pPrint), prettyShow, text)
-import Utils (EZPrint(ezPrint), lines')
 
 class SpanInfo a where
     srcSpan :: a -> SrcSpan

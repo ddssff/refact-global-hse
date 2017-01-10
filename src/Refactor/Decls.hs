@@ -1,5 +1,5 @@
 {-# LANGUAGE CPP, FlexibleContexts, PackageImports, RankNTypes, RecordWildCards, ScopedTypeVariables, TemplateHaskell, TupleSections, TypeFamilies #-}
-module Decls
+module Refactor.Decls
     ( environment, importGraph
     , runSimpleMove
     , runSimpleMoveUnsafe
@@ -8,8 +8,6 @@ module Decls
     , moveDecls
     ) where
 
-import Clean (cleanImports)
-import CPP (GHCOpts, hsSourceDirs)
 import Control.Lens (makeLenses, set, view)
 import Control.Monad (foldM, void, when)
 import Control.Monad.RWS (modify, MonadWriter(tell))
@@ -22,7 +20,6 @@ import Data.Map.Strict as Map (insertWith, Map, mapWithKey, toList)
 import Data.Maybe (catMaybes, listToMaybe, mapMaybe, maybeToList)
 import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, toList)
 import Debug.Trace (trace)
-import Graph (findModuleByKey, findModuleByKeyUnsafe, makeImportGraph, moveType, MoveType(Down, Up), Rd(Rd))
 import Language.Haskell.Exts.Syntax (Annotated(ann), Decl(TypeSig), EWildcard(..), ExportSpec, ExportSpecList(ExportSpecList),
                                                              ImportDecl(..), ImportSpec, ImportSpecList(ImportSpecList), Module(Module),
                                                              ModuleHead(ModuleHead), ModuleName(..), ModulePragma, Name, ExportSpec(..),
@@ -33,16 +30,19 @@ import Language.Haskell.Exts.Pretty (prettyPrint)
 import Language.Haskell.Exts.SrcLoc (SrcInfo, SrcLoc(..), SrcSpanInfo(..))
 import Language.Haskell.Names (resolve, Symbol(symbolName))
 import Language.Haskell.Names.SyntaxUtils (dropAnn, getImports, getModuleDecls)
-import LoadModule (Annot, loadModule, loadModules)
-import ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
-import ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
-import MoveSpec (applyMoveSpec, MoveSpec)
-import Names (topDeclExportSpec)
-import ScanM (keep, keepAll, ScanM, scanModule, skip, withTrailingWhitespace)
-import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, endOfImportSpecs, endOfModule,
+import Refactor.Clean (cleanImports)
+import Refactor.CPP (GHCOpts, hsSourceDirs)
+import Refactor.Graph (findModuleByKey, findModuleByKeyUnsafe, makeImportGraph, moveType, MoveType(Down, Up), Rd(Rd))
+import Refactor.LoadModule (Annot, loadModule, loadModules)
+import Refactor.ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
+import Refactor.ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
+import Refactor.MoveSpec (applyMoveSpec, MoveSpec)
+import Refactor.Names (topDeclExportSpec)
+import Refactor.ScanM (keep, keepAll, ScanM, scanModule, skip, withTrailingWhitespace)
+import Refactor.SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, endOfImportSpecs, endOfModule,
                srcLoc, startOfDecls, startOfImports)
+import Refactor.Utils (EZPrint(ezPrint), gFind, prettyPrint', replaceFile, withCleanRepo, withCurrentDirectory)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
-import Utils (EZPrint(ezPrint), gFind, prettyPrint', replaceFile, withCleanRepo, withCurrentDirectory)
 
 $(makeLenses ''Rd)
 

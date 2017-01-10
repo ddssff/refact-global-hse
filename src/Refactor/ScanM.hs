@@ -1,7 +1,7 @@
 -- | RWS monad for scanning haskell modules parsed by haskell-src-exts.
 
 {-# LANGUAGE TemplateHaskell #-}
-module ScanM
+module Refactor.ScanM
     ( -- RWS monad to scan a text file
       ScanM
     , locFilename
@@ -24,9 +24,9 @@ import Data.Char (isSpace)
 import Language.Haskell.Exts.Syntax -- (Annotated(ann), Module(..))
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.SrcLoc (SrcLoc(..), SrcSpan(..), SrcSpanInfo(..))
-import ModuleInfo
-import Utils (lines')
-import SrcLoc
+import Refactor.ModuleInfo
+import Refactor.SrcLoc
+import Refactor.Utils (lines')
 
 type ScanM = RWS () String St
 

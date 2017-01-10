@@ -7,7 +7,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
-module MoveSpec(MoveSpec(MoveSpec)
+module Refactor.MoveSpec
+    ( MoveSpec(MoveSpec)
     , applyMoveSpec
     , traceMoveSpec
     , moveDeclsByName
@@ -23,9 +24,9 @@ import Debug.Trace (trace)
 import Language.Haskell.Exts.Syntax (Decl(InstDecl, SpliceDecl), Exp(SpliceExp), InstHead(..), InstRule(..), ModuleName(ModuleName), Name(Ident, Symbol), QName, Splice(..), Type)
 import Language.Haskell.Names (Symbol(symbolName))
 import Language.Haskell.Names.SyntaxUtils (dropAnn)
-import ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
-import ModuleKey (ModuleKey(ModuleKey, _moduleName))
-import Utils (gFind)
+import Refactor.ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
+import Refactor.ModuleKey (ModuleKey(ModuleKey, _moduleName))
+import Refactor.Utils (gFind)
 
 -- | Specifies where to move each declaration of each module.  Given a
 -- departure module key and a declaration, return an arrival module key.

@@ -5,31 +5,31 @@
 {-# LANGUAGE TupleSections #-}
 {-# OPTIONS -Wall #-}
 
-module Clean (cleanImports) where
+module Refactor.Clean (cleanImports) where
 
 import Control.Lens (over, view)
-import CPP (cppEndif, cppIf, enabled, extensionsForHSEParser, GHCOpts, ghcProcessArgs, hc)
 import Control.Monad (void)
 import Control.Monad.RWS (MonadWriter(tell))
 import Data.List (find, foldl1', intercalate, transpose)
 import Data.Monoid ((<>))
 import Data.Set as Set (empty, member, Set, singleton, unions)
 import Debug.Trace (trace)
-import Imports (mergeDecls)
 import Language.Haskell.Exts.Syntax (Decl(DerivDecl), ImportDecl(ImportDecl, importAs, importModule, importQualified, importSpecs),
   ImportSpec(IAbs, IThingAll, IThingWith, IVar), ImportSpecList(ImportSpecList), InstHead(..), InstRule(..),
   Module(Module), ModuleHead(ModuleHead), ModuleName(..), Name, QName(Qual, UnQual), Type(..))
 import Language.Haskell.Exts.SrcLoc (SrcInfo, SrcSpanInfo)
 import Language.Haskell.Names.SyntaxUtils (dropAnn, getImports, getModuleDecls)
-import LoadModule (loadModule)
-import ModuleInfo (ModuleInfo(..))
-import ModuleKey (moduleFullPath)
-import ScanM (keep, keepAll, scanModule, skip, withTrailingWhitespace)
-import SrcLoc (EndLoc, endOfHeader, endOfImports, startOfDecls)
+import Refactor.CPP (cppEndif, cppIf, enabled, extensionsForHSEParser, GHCOpts, ghcProcessArgs, hc)
+import Refactor.Imports (mergeDecls)
+import Refactor.LoadModule (loadModule)
+import Refactor.ModuleInfo (ModuleInfo(..))
+import Refactor.ModuleKey (moduleFullPath)
+import Refactor.ScanM (keep, keepAll, scanModule, skip, withTrailingWhitespace)
+import Refactor.SrcLoc (EndLoc, endOfHeader, endOfImports, startOfDecls)
+import Refactor.Utils (ezPrint, prettyPrint', replaceFile, SetLike(intersection, difference, union), withTempDirectory)
 import System.FilePath ((</>))
 import System.IO (hPutStrLn, stderr)
 import System.Process (readProcess)
-import Utils (ezPrint, prettyPrint', replaceFile, SetLike(intersection, difference, union), withTempDirectory)
 
 -- | Replace the original imports with cleaned imports produced by ghc
 cleanImports :: [GHCOpts] -> [ModuleInfo SrcSpanInfo] -> IO ()

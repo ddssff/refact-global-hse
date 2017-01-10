@@ -11,21 +11,21 @@ module CleanImports
     , finalParams
     ) where
 
-import Clean (cleanImports)
-import CPP (GHCOpts, ghcOptsOptions, cppOptions, definesL, hsSourceDirs)
 import Control.Lens (_2, makeLenses, over, set, view)
 import Data.Default (Default(def))
 import Data.Set as Set (fromList, Set, toList, union)
 import Language.Haskell.Names (Scoped(Scoped))
 import Language.Preprocessor.Cpphs (runCpphsReturningSymTab)
-import LoadModule (loadModules)
 import Options.Applicative (help, many, metavar, Parser, strOption, switch, long, (<>))
 -- import System.Console.GetOpt (ArgDescr(NoArg, ReqArg), ArgOrder(Permute), getOpt', OptDescr(..), usageInfo)
+import Refactor.Clean (cleanImports)
+import Refactor.CPP (GHCOpts, ghcOptsOptions, cppOptions, definesL, hsSourceDirs)
+import Refactor.LoadModule (loadModules)
+import Refactor.Utils (withCleanRepo, withTempDirectory)
 import System.Directory (canonicalizePath)
 import System.Environment (getArgs)
 import System.FilePath (makeRelative)
 import System.FilePath.Find ((&&?), (==?), always, depth, extension, fileType, FileType(RegularFile), find)
-import Utils (withCleanRepo, withTempDirectory)
 
 data Params
     = Params { _ghcOpts :: GHCOpts

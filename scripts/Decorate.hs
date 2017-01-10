@@ -10,27 +10,25 @@ import Control.Exception
 import Control.Lens (makeLenses, use, view)
 import Control.Monad.State
 import Control.Monad.Writer
-import CPP (GHCOpts, ghcOptsOptions)
 import Data.Default
 import Data.Generics
 import Data.Set as Set (insert)
 import Debug.Trace
-import Utils (withCurrentDirectory)
 import Language.Haskell.Exts
 import Language.Haskell.Exts.SrcLoc
-import LoadModule (loadModule)
-import ModuleInfo
 import Options.Applicative
-import ScanM (ScanM, scanModule, comments, keep)
-import SrcLoc
+import Refactor.CPP (GHCOpts, ghcOptsOptions)
+import Refactor.Utils (withCurrentDirectory)
+import Refactor.LoadModule (loadModule)
+import Refactor.ModuleInfo
+import Refactor.ScanM (ScanM, scanModule, comments, keep)
+import Refactor.SrcLoc
 import System.Console.GetOpt
 import System.Environment (getArgs)
 import System.Exit (ExitCode(..), exitWith)
 import System.FilePath (dropExtension)
 import System.IO (hPutStrLn, stderr)
 import Test.HUnit (errors, failures, runTestTT, Test(TestList))
-
-import SrcLoc
 
 data Params
     = Params { _topDir :: FilePath

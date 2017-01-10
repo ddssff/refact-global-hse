@@ -1,7 +1,7 @@
 {-# LANGUAGE DeriveDataTypeable, TemplateHaskell #-}
 {-# LANGUAGE PackageImports #-}
 
-module ModuleKey
+module Refactor.ModuleKey
     ( ModuleKey(ModuleKey, _moduleTop, _moduleName, _moduleExt, ModuleFullPath, _moduleFullPath)
     , moduleFullPath
     , moduleName
@@ -16,7 +16,7 @@ import Language.Haskell.Exts.Syntax (ModuleName(..))
 import Language.Haskell.Exts.Pretty (prettyPrint)
 import System.FilePath ((<.>), (</>))
 import Text.PrettyPrint.HughesPJClass as PP (Pretty(pPrint), text)
-import Utils (EZPrint(ezPrint))
+import Refactor.Utils (EZPrint(ezPrint))
 
 -- A unique identifier of a module.  This can be done in two ways.  If
 -- the module has an explict name its full path must be (top </> name

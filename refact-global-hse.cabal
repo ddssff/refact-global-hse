@@ -41,20 +41,20 @@ Library
     syb,
     temporary
   Exposed-Modules:
-    Clean
-    CPP
-    Decls
-    Graph
-    HashDefine
-    Imports
-    LoadModule
-    ModuleKey
-    ModuleInfo
-    MoveSpec
-    Names
-    ScanM
-    SrcLoc
-    Utils
+    Refactor.Clean
+    Refactor.CPP
+    Refactor.Decls
+    Refactor.Graph
+    Refactor.HashDefine
+    Refactor.Imports
+    Refactor.LoadModule
+    Refactor.ModuleKey
+    Refactor.ModuleInfo
+    Refactor.MoveSpec
+    Refactor.Names
+    Refactor.ScanM
+    Refactor.SrcLoc
+    Refactor.Utils
   GHC-options: -Wall -O2
   if flag(filemanip0364)
     Build-Depends: filemanip > 0.3.6.3

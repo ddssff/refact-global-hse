@@ -13,7 +13,7 @@
 -- What structures are declared in a \#define.
 -----------------------------------------------------------------------------
  
-module HashDefine
+module Refactor.HashDefine
   ( HashDefine(..)
   , ArgOrText(..)
   , expandMacro
