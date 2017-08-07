@@ -4,10 +4,10 @@ module ImportTests where
 
 import Data.Default (Default(def))
 import Data.List (intercalate)
-import Imports (mergeDecls)
 import Language.Haskell.Exts
+import Refactor.Imports (mergeDecls)
+import Refactor.Utils (prettyPrint')
 import Test.HUnit
-import Utils (prettyPrint')
 
 importTests :: Test
 importTests = TestList [import1, import2]

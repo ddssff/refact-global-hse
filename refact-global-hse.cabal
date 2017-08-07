@@ -42,7 +42,6 @@ Library
     temporary
   Exposed-Modules:
     Refactor
-  Other-Modules:
     Refactor.Clean
     Refactor.CPP
     Refactor.Decls
@@ -93,6 +92,7 @@ executable refactor
     filepath,
     haskell-names,
     haskell-src-exts,
+    hse-cpp,
     HUnit,
     lens,
     optparse-applicative,
@@ -117,6 +117,7 @@ Test-Suite refactor-tests
     filepath,
     haskell-names,
     haskell-src-exts,
+    hse-cpp,
     HUnit,
     lens,
     mtl,

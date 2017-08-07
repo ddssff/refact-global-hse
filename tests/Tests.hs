@@ -4,7 +4,6 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TypeOperators #-}
 
-import CPP (cppOptions, defaultParseMode, tests, turnOffLocations)
 import Control.Lens
 import Control.Monad.Trans (liftIO)
 import Data.Default (def)
@@ -15,18 +14,19 @@ import DeclTests
 import ImportTests
 import Language.Haskell.Exts -- (parseModule, ParseResult(ParseOk))
 import Language.Haskell.Exts.CPP (parseFileWithCommentsAndCPP)
-import Language.Haskell.Exts.Syntax
+--import Language.Haskell.Exts.Syntax
 import Language.Haskell.Names
 import Language.Haskell.Names.ModuleSymbols (moduleTable)
 import Language.Haskell.Names.Imports (importTable)
-import LoadModule (loadModule)
-import ModuleInfo
-import ModuleKey (ModuleKey(..))
-import ScanM (debugRender)
-import SrcLoc
+import Refactor.CPP (cppOptions, defaultParseMode, tests, turnOffLocations)
+import Refactor.LoadModule (loadModule)
+import Refactor.ModuleInfo
+import Refactor.ModuleKey (ModuleKey(..))
+import Refactor.ScanM (debugRender)
+import Refactor.SrcLoc
+import Refactor.Utils
 import System.Exit (ExitCode(..), exitWith)
 import Test.HUnit (assertEqual, errors, failures, runTestTT, Test(TestCase, TestList))
-import Utils
 
 -- Note that running one of these tests by itself will leave the input
 -- subdirectory in a modified state.  This allows you to look at what
@@ -34,7 +34,7 @@ import Utils
 -- changes are reset before the next test begins.
 
 main :: IO ()
-main = runTestTT (TestList [CPP.tests, importTests, declTests, cpp1]) >>= doCounts
+main = runTestTT (TestList [Refactor.CPP.tests, importTests, declTests, cpp1]) >>= doCounts
     where
       doCounts counts' = exitWith (if errors counts' /= 0 || failures counts' /= 0 then ExitFailure 1 else ExitSuccess)
 
@@ -73,16 +73,18 @@ cpp2 =
         let path = "tests/input/If.hs"
             opts' = def -- foldr applyHashDefine opts (view hashDefines opts)
             opts'' = over cppOptions turnOffLocations opts'
-            mode = CPP.defaultParseMode opts'' path
+            mode = Refactor.CPP.defaultParseMode opts'' path
         moduleText <- liftIO $ readFile path
         ParseOk (parsed', comments) <- parseFileWithCommentsAndCPP (view cppOptions opts'') mode path
         let parsed = mapTopAnnotations (fixEnds comments moduleText) $ everywhere (mkT fixSpan) parsed'
         assertEqual "cpp3"
-           (_module m, [], _module m)
+           (_module mi, [], _module mi)
            (parsed', comments, parsed)
     ]
 
-m = ModuleInfo
+mi :: ModuleInfo SrcSpanInfo
+mi =
+    ModuleInfo
     {_moduleKey = ModuleKey {_moduleTop = "/home/dsf/git/refact-global-hse/tests/input", _moduleName = ModuleName () "If", _moduleExt = ".hs"},
      _module = Module (SrcSpanInfo {srcInfoSpan = SrcSpan "tests/input/If.hs" 7 1 29 1, srcInfoPoints = [SrcSpan "tests/input/If.hs" 7 1 7 1,SrcSpan "tests/input/If.hs" 9 1 9 1,SrcSpan "tests/input/If.hs" 9 1 9 1,SrcSpan "tests/input/If.hs" 12 1 12 1,SrcSpan "tests/input/If.hs" 13 1 13 1,SrcSpan "tests/input/If.hs" 18 1 18 1,SrcSpan "tests/input/If.hs" 24 1 24 1,SrcSpan "tests/input/If.hs" 29 1 29 1,SrcSpan "tests/input/If.hs" 29 1 29 1]})
                 (Just (ModuleHead (SrcSpanInfo {srcInfoSpan = SrcSpan "tests/input/If.hs" 9 1 9 16, srcInfoPoints = [SrcSpan "tests/input/If.hs" 9 1 9 7,SrcSpan "tests/input/If.hs" 9 11 9 16]})

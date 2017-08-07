@@ -11,31 +11,31 @@
 
 module DeclTests where
 
-import Clean (cleanImports)
 import Control.Lens (set, over)
 import Control.Monad (when)
-import CPP (cabalMacro, cppOptions, defaultCpphsOptions, definesL, enabled, GHCOpts, HashDef(..), hashUndefs, ghcOptions, hashDefines, hc, hsSourceDirs)
 import Data.Data (Data)
 import Data.Default (def)
 import Data.List hiding (find)
 import Data.Maybe (fromJust)
 import Data.Monoid ((<>))
 import Data.Version (Version(Version))
-import Decls (runMoveUnsafe)
 import Distribution.Package (PackageIdentifier(..), PackageName(..))
 import Language.Haskell.Exts (Decl(FunBind, TypeSig), Match(InfixMatch, Match),
    ModuleName(ModuleName), Name(Ident), Exp(App),
    KnownExtension(CPP, OverloadedStrings, ExtendedDefaultRules), Module(Module), SrcInfo)
 import Language.Haskell.Names.SyntaxUtils (dropAnn)
 import Language.Preprocessor.Cpphs (parseOptions)
-import LoadModule (loadModule)
-import ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
-import ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
-import MoveSpec (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec), moveSpliceDecls)
+import Refactor.Clean (cleanImports)
+import Refactor.CPP (cabalMacro, cppOptions, defaultCpphsOptions, definesL, enabled, GHCOpts, HashDef(..), hashUndefs, ghcOptions, hashDefines, hc, hsSourceDirs)
+import Refactor.Decls (runMoveUnsafe)
+import Refactor.LoadModule (loadModule)
+import Refactor.ModuleInfo (ModuleInfo(ModuleInfo, _module, _moduleKey))
+import Refactor.ModuleKey (ModuleKey(ModuleKey, _moduleName), moduleName)
+import Refactor.MoveSpec (applyMoveSpec, moveDeclsByName, moveInstDecls, MoveSpec(MoveSpec), moveSpliceDecls)
+import Refactor.Utils (EZPrint(ezPrint), gFind, gitResetSubdir, withCleanRepo, withCurrentDirectory)
 import System.Exit (ExitCode(ExitSuccess, ExitFailure))
 import System.Process (readProcessWithExitCode)
 import Test.HUnit (assertString, Test(..))
-import Utils (EZPrint(ezPrint), gFind, gitResetSubdir, withCleanRepo, withCurrentDirectory)
 
 declTests :: Test
 declTests = TestList [decl1, decl2, decl3, simple4, simple5, decl6, {-decl7,-} decl8, {-decl9,-}

@@ -30,6 +30,12 @@
 
 ## Run from ghci
 
+Here we set some values in the Params record from
+scripts/CleanImports.hs, finalize the parameters, and then run the go
+function to perform the import cleaning.  Setting the unsafe flag
+means we will run even if there are uncommitted changes in the
+repository.
+
     $ ghci
     λ> finalParams "dist/build/autogen/cabal_macros.hs" (set (ghcOpts . hsSourceDirs) ["src"] $ set toClean [(Just "src", "Refactor/CPP.hs")] $ set unsafe True def) >>= CleanImports.go
 
@@ -72,7 +78,8 @@ The tool will find it for you the next time it runs.
      this still true?  Why?)
 
   2. Two different symbols with the same name may be pulled together by
-     a move, and this will (as of right now) cause a compiler error.
+     a move, and this will cause a compiler error.  I think its fair to
+     say that you should not do this.
 
   3. EMPTY IMPORT LISTS - when an import list becomes empty it is not
      necessarily safe to remove it - it may be importing necessary
