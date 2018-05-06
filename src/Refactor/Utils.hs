@@ -84,7 +84,8 @@ gitUnclean = do
     ExitSuccess | all unmodified (lines out) -> pure Nothing
     ExitSuccess -> pure $ Just out
     where
-      unmodified (a : b : _) = elem a "?! " && elem b "?! "
+      unmodified :: String -> Bool
+      unmodified (a : b : _) = elem a ("?! " :: [Char]) && elem b ("?! " :: [Char])
       unmodified _ = False
 
 gitIsClean :: IO Bool

@@ -6,7 +6,7 @@
 -- (3b) Import of a symbol that moves into a module, but is
 --      no longer used by its old module
 
-{-# LANGUAGE ScopedTypeVariables #-}
+{-# LANGUAGE CPP, ScopedTypeVariables #-}
 {-# LANGUAGE TypeFamilies #-}
 
 module DeclTests where
@@ -298,7 +298,11 @@ simple3 =
 
 opts0 :: GHCOpts
 opts0 =
-    over (cppOptions . definesL) (++ [cabalMacro (PackageIdentifier (PackageName "base") (Version [4,8] []))]) o
+    over (cppOptions . definesL) (++ [
+#if __GLASGOW_HASKELL__ < 800
+                                     cabalMacro (PackageIdentifier (PackageName "base") (Version [4,8] []))
+#endif
+                                     ]) o
     where o = set hsSourceDirs ["."] def
 
 -- Perform the same move with these CPP flag combinations:

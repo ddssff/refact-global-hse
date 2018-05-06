@@ -163,7 +163,7 @@ class DerivDeclTypes a where
     derivDeclTypes :: a -> Set (Maybe (ModuleName ()), Name ())
 
 instance DerivDeclTypes (Decl l) where
-    derivDeclTypes (DerivDecl _ _ x) = derivDeclTypes x
+    derivDeclTypes (DerivDecl _ _ _ x) = derivDeclTypes x
     derivDeclTypes _ = empty
 
 instance DerivDeclTypes (InstRule l) where
