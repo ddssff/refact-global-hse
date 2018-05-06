@@ -1,3 +1,4 @@
+import Data.Monoid
 import Options.Applicative
 import CleanImports
 import MoveDecls

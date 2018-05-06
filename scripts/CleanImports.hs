@@ -13,10 +13,11 @@ module CleanImports
 
 import Control.Lens (_2, makeLenses, over, set, view)
 import Data.Default (Default(def))
+import Data.Monoid ((<>))
 import Data.Set as Set (fromList, Set, toList, union)
 import Language.Haskell.Names (Scoped(Scoped))
 import Language.Preprocessor.Cpphs (runCpphsReturningSymTab)
-import Options.Applicative (help, many, metavar, Parser, strOption, switch, long, (<>))
+import Options.Applicative (help, many, metavar, Parser, strOption, switch, long)
 -- import System.Console.GetOpt (ArgDescr(NoArg, ReqArg), ArgOrder(Permute), getOpt', OptDescr(..), usageInfo)
 import Refactor (cleanImports, GHCOpts, ghcOptsOptions, cppOptions, definesL, hsSourceDirs, loadModules, withCleanRepo, withTempDirectory)
 import System.Directory (canonicalizePath)
