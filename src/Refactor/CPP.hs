@@ -143,7 +143,7 @@ applyHashDefine' d x = x {defines = applyHashDefine'' d (defines x)}
 applyHashDefine'' :: HashDef -> [(String, String)] -> [(String, String)]
 applyHashDefine'' (HashUndef n) xs = filter ((/= n) . fst) xs
 applyHashDefine'' (HashDef n r) xs = (n, r) : applyHashDefine'' (HashUndef n) xs
-applyHashDefine'' _ xs = xs
+-- applyHashDefine'' _ xs = xs
 
 instance EZPrint GHCOpts where
     ezPrint x = unwords (view hc x : map asArgument (hashDefines x))
@@ -155,7 +155,7 @@ asArgument :: HashDef -> String
 asArgument (HashUndef name) = "-U" <> name
 asArgument (HashDef name replacement) =
     "-D" <> name <> if replacement == "" then "" else ("=" <> replacement)
-asArgument _ = error $ "Unexpected HashDefine value"
+-- asArgument _ = error $ "Unexpected HashDefine value"
 
 -- | Build the argument list for GHC from the options in GHCOpts.
 ghcProcessArgs :: GHCOpts -> [String]

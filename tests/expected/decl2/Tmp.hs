@@ -8,7 +8,8 @@
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE TupleSections #-}
 {-# LANGUAGE TypeFamilies #-}
-module Tmp(withCurrentDirectory
+module Tmp
+    ( withCurrentDirectory
     ) where
 
 import Control.Exception (SomeException, throw)
@@ -20,7 +21,11 @@ import System.Directory (getCurrentDirectory, setCurrentDirectory)
 withCurrentDirectory :: forall m a. (MonadIO m, MonadBaseControl IO m) => FilePath -> m a -> m a
 withCurrentDirectory path action =
     liftIO (putStrLn ("cd " ++ path)) >>
-    IO.bracket (liftIO getCurrentDirectory >>= \save -> liftIO (setCurrentDirectory path) >> return save)
-               (liftIO . setCurrentDirectory)
-               (const (action `IO.catch` (\(e :: SomeException) -> liftIO (putStrLn ("in " ++ path)) >> throw e)) :: String -> m a)
-               -- (const action `catch` (\e -> liftIO (putStrLn ("in " ++ path) >> throw e)))
+    IO.bracket acquire release action'
+    where
+      acquire :: m FilePath
+      acquire = liftIO getCurrentDirectory >>= \save -> liftIO (setCurrentDirectory path) >> return save
+      release :: FilePath -> m ()
+      release = liftIO . setCurrentDirectory
+      action' :: FilePath -> m a
+      action' _ = action `IO.catch` (\(e :: SomeException) -> liftIO (putStrLn ("in " ++ path)) >> throw e)

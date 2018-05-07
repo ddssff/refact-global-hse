@@ -4,17 +4,18 @@ module Refactor.Names
     ) where
 
 import Data.List (partition)
+import Data.Set as Set (toList)
 import Language.Haskell.Exts.Syntax (Decl)
 import Language.Haskell.Exts.Syntax (CName(..), EWildcard(..), ExportSpec(..), QName(..))
 import Language.Haskell.Names (Symbol(..))
-import Refactor.ModuleInfo (getTopDeclSymbols', ModuleInfo)
+import Refactor.ModuleInfo (getTopSymbols, ModuleInfo)
 
 -- | Build an export spec for the symbols created by a Decl.  The
 -- getBound function returns the names, and we can get the module
 -- name from the decl
 topDeclExportSpec :: ModuleInfo () -> Decl () -> Maybe (ExportSpec ())
 topDeclExportSpec m d =
-    case partition isThing (getTopDeclSymbols' m d) of
+    case partition isThing (Set.toList (getTopSymbols m d)) of
       ([], [x]) -> (Just . EVar () . UnQual () . symbolName) x
       ([], []) -> Nothing
       ([x], xs) -> Just (EThingWith () (NoWildcard ()) (UnQual () (symbolName x)) (map symbolCName xs))

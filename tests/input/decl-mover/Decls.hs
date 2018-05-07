@@ -41,7 +41,8 @@ import ScanM (keep, keepAll, ScanM, scanModule, skip, withTrailingWhitespace)
 import SrcLoc (EndLoc(endLoc), endOfHeader, endOfImports, endOfImportSpecs, endOfModule,
                srcLoc, startOfDecls, startOfImports)
 import System.FilePath.Find as FilePath ((&&?), (==?), always, extension, fileType, FileType(RegularFile), find)
-import Utils (EZPrint(ezPrint), gFind, prettyPrint', replaceFile, withCleanRepo, withCurrentDirectory)
+import Utils (EZPrint(ezPrint), gFind, prettyPrint', replaceFile, withCleanRepo, )
+import Tmp (withCurrentDirectory)
 
 $(makeLenses ''Rd)
 

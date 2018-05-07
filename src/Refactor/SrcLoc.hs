@@ -328,6 +328,7 @@ mapTopAnnotations fn (Module loc mh ps is ds) =
       fixDecl (RulePragmaDecl l a) = (RulePragmaDecl (fn l) a)
       fixDecl (DeprPragmaDecl l a) = (DeprPragmaDecl (fn l) a)
       fixDecl (WarnPragmaDecl l a) = (WarnPragmaDecl (fn l) a)
+      fixDecl (CompletePragma l a b) = CompletePragma (fn l) a b
       fixDecl (InlineSig l a b c) = (InlineSig (fn l) a b c)
       fixDecl (InlineConlikeSig l a b) = (InlineConlikeSig (fn l) a b)
       fixDecl (SpecSig l a b c) = (SpecSig (fn l) a b c)

@@ -90,6 +90,7 @@ moveSpec1 k d = error $ "Unexpected decl: " ++ take 120 (show d) ++ ".."
 -- Test updating import of decl that moved from A to B in module C
 decl2 :: Test
 decl2 = TestLabel "decl2" $ TestCase $ do
+          input <- loadAllModulesIn "tests/input/decl-mover"
           let input = "tests/input/decl-mover"
           testDirectory "tests/expected/decl2" input
             (runMoveUnsafe input opts0 (moveDeclsByName "withCurrentDirectory" "Utils" "Tmp" :: MoveSpec))

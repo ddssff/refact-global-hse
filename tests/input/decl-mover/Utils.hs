@@ -27,6 +27,7 @@ import System.IO (hPutStrLn, stderr)
 import System.IO.Error (isDoesNotExistError)
 import qualified System.IO.Temp as Temp (createTempDirectory)
 import System.Process (readProcess, readProcessWithExitCode)
+import Tmp (withCurrentDirectory)
 
 -- | dropWhile where predicate operates on two list elements.
 dropWhile2 :: (a -> Maybe a -> Bool) -> [a] -> [a]
@@ -133,12 +134,6 @@ maybeStripPrefix :: Eq a => [a] -> [a] -> [a]
 maybeStripPrefix pre lst = maybe lst id (stripPrefix pre lst)
 
 withCurrentDirectory :: forall m a. (MonadIO m, MonadBaseControl IO m) => FilePath -> m a -> m a
-withCurrentDirectory path action =
-    liftIO (putStrLn ("cd " ++ path)) >>
-    IO.bracket (liftIO getCurrentDirectory >>= \save -> liftIO (setCurrentDirectory path) >> return save)
-               (liftIO . setCurrentDirectory)
-               (const (action `IO.catch` (\(e :: SomeException) -> liftIO (putStrLn ("in " ++ path)) >> throw e)) :: String -> m a)
-               -- (const action `catch` (\e -> liftIO (putStrLn ("in " ++ path) >> throw e)))
 
 withTempDirectory :: (MonadIO m, MonadBaseControl IO m) =>
                      Bool

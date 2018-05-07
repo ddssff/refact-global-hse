@@ -19,12 +19,12 @@ module Refactor.MoveSpec
     ) where
 
 import Data.Generics (Data)
-import Data.Set as Set (fromList, member)
+import Data.Set as Set (map, member)
 import Debug.Trace (trace)
 import Language.Haskell.Exts.Syntax (Decl(InstDecl, SpliceDecl), Exp(SpliceExp), InstHead(..), InstRule(..), ModuleName(ModuleName), Name(Ident, Symbol), QName, Splice(..), Type)
 import Language.Haskell.Names (Symbol(symbolName))
 import Language.Haskell.Names.SyntaxUtils (dropAnn)
-import Refactor.ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
+import Refactor.ModuleInfo (getTopSymbols, ModuleInfo(..))
 import Refactor.ModuleKey (ModuleKey(ModuleKey, _moduleName))
 import Refactor.Utils (gFind)
 
@@ -64,7 +64,7 @@ traceMoveSpec (MoveSpec f) = MoveSpec $ \i d ->
 moveDeclsByName :: String -> String -> String -> MoveSpec
 moveDeclsByName symname departMod arriveMod = MoveSpec $
     \i decl ->
-        let syms = (Set.fromList . map symbolName) (getTopDeclSymbols' i decl) in
+        let syms = Set.map symbolName (getTopSymbols i decl) in
         case _moduleKey i of
           ModuleKey {_moduleName = ModuleName l name}
               | name == departMod && (Set.member (Ident () symname) syms || Set.member (Symbol () symname) syms) ->

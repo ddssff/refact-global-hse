@@ -18,7 +18,7 @@ import Data.Generics (Data)
 import Data.List ((\\), foldl', intercalate, nubBy, stripPrefix)
 import Data.Map.Strict as Map (insertWith, Map, mapWithKey, toList)
 import Data.Maybe (catMaybes, listToMaybe, mapMaybe, maybeToList)
-import Data.Set as Set (fromList, insert, isSubsetOf, member, Set, toList)
+import Data.Set as Set (fromList, insert, isSubsetOf, map, member, Set, toList)
 import Debug.Trace (trace)
 import Language.Haskell.Exts.Syntax (Annotated(ann), Decl(TypeSig), EWildcard(..), ExportSpec, ExportSpecList(ExportSpecList),
                                                              ImportDecl(..), ImportSpec, ImportSpecList(ImportSpecList), Module(Module),
@@ -34,7 +34,7 @@ import Refactor.Clean (cleanImports)
 import Refactor.CPP (GHCOpts, hsSourceDirs)
 import Refactor.Graph (findModuleByKey, findModuleByKeyUnsafe, makeImportGraph, moveType, MoveType(Down, Up), Rd(Rd))
 import Refactor.LoadModule (loadModule, loadModules)
-import Refactor.ModuleInfo (getTopDeclSymbols', ModuleInfo(..))
+import Refactor.ModuleInfo (getTopSymbols, ModuleInfo(..))
 import Refactor.ModuleKey (moduleFullPath, ModuleKey(..), moduleName)
 import Refactor.MoveSpec (applyMoveSpec, MoveSpec)
 import Refactor.Names (topDeclExportSpec)
@@ -54,13 +54,21 @@ runSimpleMove top spec = withCleanRepo $ runSimpleMoveUnsafe top spec
 runSimpleMoveUnsafe :: FilePath -> MoveSpec -> IO ()
 runSimpleMoveUnsafe top mv = runMoveUnsafe top (set hsSourceDirs ["."] def) mv
 
+-- | Find all the haskell files in top and load.
+loadAllModulesIn :: FilePath -> IO [ModuleInfo ()]
+loadAllModulesIn top = do
+  withCurrentDirectory root $ do
+    hsFiles <- FilePath.find always (extension ==? ".hs" &&? fileType ==? RegularFile) top
+    -- Assume hs-source-dirs=.
+    loadModule def (fmap (Nothing,) hsFiles)
+
 -- | Run a move declaration action without doing a git reset first.
 runMoveUnsafe :: FilePath -> GHCOpts -> MoveSpec -> IO ()
 runMoveUnsafe root opts mv =
     withCurrentDirectory root $ do
       -- Find all the haskell files in directories of the hs-source-dirs list
       pairs <- concat
-                 <$> mapM (\top -> (map (Just top,) . catMaybes . map (stripPrefix (top ++ "/")))
+                 <$> mapM (\top -> (fmap (Just top,) . catMaybes . fmap (stripPrefix (top ++ "/")))
                                      <$> FilePath.find always (extension ==? ".hs" &&? fileType ==? RegularFile) top)
                           (view hsSourceDirs opts)
       loadModules def pairs >>= moveDeclsAndClean mv opts
@@ -72,7 +80,7 @@ runMoveUnsafe root opts mv =
 moveDeclsAndClean :: MoveSpec -> GHCOpts -> [ModuleInfo (Scoped SrcSpanInfo)] -> IO ()
 moveDeclsAndClean mv opts mods = do
   -- Move the declarations and rewrite the updated modules
-  let env = resolve (map _module mods) mempty
+  let env = resolve (fmap _module mods) mempty
       -- ann = map (annotate env) (map _module mods)
       gr = makeImportGraph mods
       rd = (Rd mods env gr)
@@ -97,7 +105,7 @@ moveDeclsAndClean mv opts mods = do
 -- MoveSpec function, adjusting imports and exports as necessary.
 moveDecls :: (SrcInfo l, Data l, EndLoc l, Eq l, EZPrint l) => Show l => Rd l -> MoveSpec -> [String]
 moveDecls rd mv =
-    map (\info -> moveDeclsOfModule rd mv info) (view modules rd)
+    fmap (\info -> moveDeclsOfModule rd mv info) (view modules rd)
 
 -- | Update one module and return its text
 moveDeclsOfModule :: (SrcInfo l, Show l, Data l, EndLoc l, Eq l, EZPrint l) => Rd l -> MoveSpec -> ModuleInfo l -> String
@@ -140,7 +148,7 @@ newModuleMap rd@(Rd mods _env _gr) mv =
             doDecl i mp d = let k' = applyMoveSpec mv i d in
                             if Set.member k' oldKeys then mp else Map.insertWith (++) k' [(_moduleKey i, d)] mp
       oldKeys :: Set ModuleKey
-      oldKeys = Set.fromList (map _moduleKey mods)
+      oldKeys = Set.fromList (fmap _moduleKey mods)
 
 -- If a declaration is arriving in this module we need to add all the LANGUAGE
 -- pragmas from that module to this one.
@@ -153,12 +161,12 @@ newPragmas (Rd mods _env _gr) mv thisKey thesePragmas =
                                   (mapM_ (\d -> when
                                                   (applyMoveSpec mv someMod d == thisKey)
                                                   (mapM_ addPragma (pragmaDiff somePragmas thesePragmas))) someDecls)) mods) mempty in
-  unlines (map prettyPrint' (Set.toList arriving))
+  unlines (fmap prettyPrint' (Set.toList arriving))
     where
       addPragma :: MonadState (Set (ModulePragma ())) m => Name () -> m ()
       addPragma name = modify (Set.insert (LanguagePragma () [name]))
       pragmaDiff :: [ModulePragma l] -> [ModulePragma l] -> [Name ()]
-      pragmaDiff ps qs = concatMap pragmaLanguageNames (map dropAnn ps) \\ concatMap pragmaLanguageNames (map dropAnn qs)
+      pragmaDiff ps qs = concatMap pragmaLanguageNames (fmap dropAnn ps) \\ concatMap pragmaLanguageNames (fmap dropAnn qs)
       pragmaLanguageNames :: ModulePragma () -> [Name ()]
       pragmaLanguageNames (LanguagePragma _l names) = names
       pragmaLanguageNames _ = []
@@ -194,7 +202,7 @@ updateHeader _ _ _ = pure ()
 -- | Text of exports added due to arriving declarations
 newExports :: forall l. (SrcInfo l, Data l, Eq l, Show l) => Rd l -> MoveSpec -> ModuleKey -> [String]
 newExports (Rd mods _ _) mv thisKey =
-    map prettyPrint names
+    fmap prettyPrint names
     where
       -- (This should be inferred from the text of thisKey.)
       names = nubBy ((==) `on` fmap (const ())) $ concatMap newExportsFromModule (filter (\x -> _moduleKey x /= thisKey) mods)
@@ -204,7 +212,7 @@ newExports (Rd mods _ _) mv thisKey =
       newExportsFromModule i'@(ModuleInfo {_moduleKey = ModuleKey {}, _module = m}) =
           let i = dropAnn i' in
           mapMaybe (\(d :: Decl ()) -> if (applyMoveSpec mv i (d :: Decl ()) == thisKey) then topDeclExportSpec i d else Nothing)
-                   (map dropAnn (getModuleDecls m))
+                   (fmap dropAnn (getModuleDecls m))
       -- We can't import from a module without an explicit name in its header
       newExportsFromModule (ModuleInfo {_moduleKey = ModuleFullPath {}}) = []
 
@@ -215,7 +223,7 @@ findNewKeyOfExportSpec mv mi espec = fmap (applyMoveSpec mv mi) (findDeclOfExpor
 -- ExportSpec to come into existance.
 findDeclOfExportSpec :: forall l. (SrcInfo l, Data l, Show l) => ModuleInfo l -> ExportSpec l -> Maybe (Decl l)
 findDeclOfExportSpec mi spec =
-    findDeclOfSymbols mi (Set.fromList (map dropAnn (gFind spec :: [Name l])))
+    findDeclOfSymbols mi (Set.fromList (fmap dropAnn (gFind spec :: [Name l])))
     where
       findDeclOfSymbols :: ModuleInfo l -> Set (Name ()) -> Maybe (Decl l)
       findDeclOfSymbols _ syms | null syms = Nothing
@@ -223,15 +231,15 @@ findDeclOfExportSpec mi spec =
           case filter (isSubsetOf syms . symset) (filter notSig (getModuleDecls m)) of
             [d] -> Just d
             [] -> Nothing
-            ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (map (srcLoc . ann) ds)
-      symset = Set.fromList . map symbolName . getTopDeclSymbols' mi
+            ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (fmap (srcLoc . ann) ds)
+      symset = Set.map symbolName . getTopSymbols mi
 
 -- Find the declaration of the symbols of an import spec.  If that
 -- declaration moved, update the module name.
 updateImports :: forall l. (SrcInfo l, EndLoc l, Data l, Eq l, Show l) => Rd l -> MoveSpec -> ModuleInfo l -> ScanM ()
 updateImports rd@(Rd mods _env _gr) mv mi@(ModuleInfo {_moduleKey = thisKey, _module = Module _ _ _ thisModuleImports _}) = do
   -- Update the existing imports
-  mapM_ (uncurry doImportDecl) (zip thisModuleImports (tail (map (srcLoc . ann) thisModuleImports ++ [startOfDecls mi])))
+  mapM_ (uncurry doImportDecl) (zip thisModuleImports (tail (fmap (srcLoc . ann) thisModuleImports ++ [startOfDecls mi])))
   mapM_ doNewImports (filter (\m' -> _moduleKey m' /= thisKey) mods)
   tell $ importsForDepartingDecls rd mv (findModuleByKey mods thisKey)
     where
@@ -246,7 +254,7 @@ updateImports rd@(Rd mods _env _gr) mv mi@(ModuleInfo {_moduleKey = thisKey, _mo
             keep (endLoc (ann x))
             withTrailingWhitespace keep next
           Just (ImportSpecList l hiding specs) -> do
-            let dests = map (newModuleOfImportSpec rd mv iname) specs
+            let dests = fmap (newModuleOfImportSpec rd mv iname) specs
             case not (null specs) && all (/= (Just iname)) dests of
               -- Discard the import if it becomes empty, but not if
               -- it was empty to begin with.
@@ -256,7 +264,7 @@ updateImports rd@(Rd mods _env _gr) mv mi@(ModuleInfo {_moduleKey = thisKey, _mo
                 keep $ case specs of
                          (spec : _) -> srcLoc (ann spec)
                          [] -> srcLoc l
-                mapM_ (uncurry (doImportSpec iname hiding)) (zip specs (tail (map (srcLoc . ann) specs) ++ [endOfImportSpecs x]))
+                mapM_ (uncurry (doImportSpec iname hiding)) (zip specs (tail (fmap (srcLoc . ann) specs) ++ [endOfImportSpecs x]))
                 keep (endLoc l)
                 withTrailingWhitespace keep next
             -- If declarations move from "here" to "there", import
@@ -372,7 +380,7 @@ importDeclFromExportSpecs rd moveSpec
       -- Build ImportSpecs of m corresponding to some export specs.
       importSpecsFromExportSpecs :: ImportSpecList ()
       importSpecsFromExportSpecs =
-          ImportSpecList () False (map exportToImport' (filter (\e -> findNewKeyOfExportSpec moveSpec someInfo e == Just (_moduleKey someInfo)) especs))
+          ImportSpecList () False (fmap exportToImport' (filter (\e -> findNewKeyOfExportSpec moveSpec someInfo e == Just (_moduleKey someInfo)) especs))
           where
 importDeclFromExportSpecs _ _ _ _ = Nothing
 
@@ -400,7 +408,7 @@ exportToImport x@(EModuleContents () _) = error $ "exportToImport: " ++ prettyPr
 -- | Build an ImportDecl that imports the symbols of d from m.
 importSpecFromDecl :: forall l. (SrcInfo l, Eq l, Data l, Show l) => ModuleInfo l -> ModuleName () -> Decl l -> Maybe (ImportDecl ())
 importSpecFromDecl thisMod newModName d =
-    case map exportToImport (maybeToList (topDeclExportSpec (dropAnn thisMod) (dropAnn d))) of
+    case fmap exportToImport (maybeToList (topDeclExportSpec (dropAnn thisMod) (dropAnn d))) of
       [] -> Nothing
       imports -> Just (ImportDecl { importAnn = ()
                                   , importModule = dropAnn newModName
@@ -443,7 +451,7 @@ findModuleByName mods oldModname =
 -- | Find the declaration in a module that causes all the symbols in
 -- the ImportSpec to come into existance.
 findDeclOfImportSpec :: forall l. (SrcInfo l, Data l, Show l) => ModuleInfo l -> ImportSpec l -> Maybe (Decl l)
-findDeclOfImportSpec info spec = findDeclOfSymbols info (Set.fromList (map dropAnn (gFind spec :: [Name l])))
+findDeclOfImportSpec info spec = findDeclOfSymbols info (Set.fromList (fmap dropAnn (gFind spec :: [Name l])))
     where
       findDeclOfSymbols :: ModuleInfo l -> Set (Name ()) -> Maybe (Decl l)
       findDeclOfSymbols _ syms | null syms = Nothing
@@ -451,8 +459,8 @@ findDeclOfImportSpec info spec = findDeclOfSymbols info (Set.fromList (map dropA
           case filter (isSubsetOf syms . symset) (filter notSig (getModuleDecls m)) of
             [d] -> Just d
             [] -> Nothing
-            ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (map (srcLoc . ann) ds)
-      symset = Set.fromList . map symbolName . getTopDeclSymbols' info
+            ds -> error $ "Multiple declarations of " ++ show syms ++ " found: " ++ show (fmap (srcLoc . ann) ds)
+      symset = Set.map symbolName . getTopSymbols info
 
 notSig :: Decl t -> Bool
 notSig (TypeSig {}) = False
@@ -492,7 +500,7 @@ updateDecls :: (Data l, SrcInfo l, EndLoc l, Show l, EZPrint l) => Rd l -> MoveS
 updateDecls (Rd mods _env _gr) mv thisMod@(ModuleInfo {_module = m, _moduleKey = thisKey}) = do
   -- keep (endOfImports m)
   -- Declarations that were already here and are to remain
-  mapM_ (uncurry doDecl) (zip decls (tail (map (srcLoc . ann) decls ++ [endOfModule thisMod])))
+  mapM_ (uncurry doDecl) (zip decls (tail (fmap (srcLoc . ann) decls ++ [endOfModule thisMod])))
   keepAll
   tell $ newDecls mv mods thisKey
     where
@@ -517,7 +525,7 @@ newDecls mv mods thisKey =
                                     _moduleKey = someKey})
           | someKey /= thisKey =
               scanModule (do skip (endOfImports (_module someMod))
-                             mapM_ (uncurry (doDecl someMod)) (zip decls (tail (map (srcLoc . ann) decls ++ [endOfModule someMod]))))
+                             mapM_ (uncurry (doDecl someMod)) (zip decls (tail (fmap (srcLoc . ann) decls ++ [endOfModule someMod]))))
                          someMod
       doModule _ = ""
 
