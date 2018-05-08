@@ -23,7 +23,7 @@ import Control.Monad (foldM, when)
 import Control.Monad.RWS (execRWS, get, put, RWS, tell)
 import Control.Monad.State (State)
 import Data.Generics (Data, everywhere, mkT, Typeable)
-import Data.Graph.Inductive (Gr, NodeMap, components)
+import Data.Graph.Inductive (Gr, NodeMap)
 import Data.Maybe (mapMaybe)
 import Data.Set as Set (empty, fromList, insert, intersection, map, member, notMember, null, Set, singleton, union, unions)
 import Debug.Trace
@@ -139,7 +139,7 @@ withDecomposedModule f i@(ModuleInfo {_module = Module _l _h _ps _is _ds, _modul
                                 (fmap (flip Set.member) selectedComments))
     where
       selectedDecls :: [Set (Decl (Scoped SrcSpanInfo))]
-      selectedDecls = partitionDecls i
+      selectedDecls = partitionDeclsBy i components
       selectedExports:: [Set (ExportSpec (Scoped SrcSpanInfo))]
       selectedExports = fmap (exportsToKeep i) selectedDecls
       selectedImports :: [Set (ImportSpecWithDecl (Scoped SrcSpanInfo))]
@@ -381,25 +381,26 @@ removeComment (Comment b l s) m@(Module l' h ps is ds) =
 
 -- | Partition a module's declarations according to the graph of connected components
 -- in the "declares - uses" graph.
-partitionDecls ::
+partitionDeclsBy ::
     forall l. (Data l, Eq l, Ord l, Show l)
     => ModuleInfo (Scoped l)
+    -> (Gr (Decs (Scoped l)) (Set Symbol) -> State (NodeMap (Decs (Scoped l))) [[Decs (Scoped l)]])
     -> [Set (Decl (Scoped l))]
-partitionDecls i = do
-    (fst . runGraph) $ do
-      g <- makeUsesGraph i
-      (tmp :: [[Decs (Scoped l)]]) <- sequence (fmap (mapM (labNode g)) (Data.Graph.Inductive.components g))
-      return $ fmap (Set.fromList . concat . fmap unDecs) tmp
+partitionDeclsBy i components = do
+  fst $ withUsesGraph i $ \g -> do
+    (tmp :: [[Decs (Scoped l)]]) <- components g
+    return $ fmap (Set.fromList . concat . fmap unDecs) tmp
 
 -- | Build a graph whose nodes are declaration groups and whose edges
 -- are the "declares, uses" relation.  Each edge is labeled with a set
 -- of symbols.
-makeUsesGraph ::
-    forall l. (Data l, Ord l, Show l)
+withUsesGraph ::
+    forall l r. (Data l, Ord l, Show l)
     => ModuleInfo (Scoped l)
-    -> State (NodeMap (Decs (Scoped l))) (Gr (Decs (Scoped l)) (Set Symbol))
-makeUsesGraph i =
-    mkGraphM declGroups (concatMap (\a -> mapMaybe (edge a) declGroups) declGroups)
+    -> (Gr (Decs (Scoped l)) (Set Symbol) -> State (NodeMap (Decs (Scoped l))) r)
+    -> (r, NodeMap (Decs (Scoped l)))
+withUsesGraph i f =
+    runGraph (mkGraphM declGroups (concatMap (\a -> mapMaybe (edge a) declGroups) declGroups) >>= f)
     where
       declGroups :: [Decs (Scoped l)]
       declGroups = groupDecs i (getModuleDecls (_module i))
