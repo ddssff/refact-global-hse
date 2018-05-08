@@ -388,7 +388,7 @@ partitionDecls ::
 partitionDecls i = do
     (fst . runGraph) $ do
       g <- makeUsesGraph i
-      (tmp :: [[Decs (Scoped l)]]) <- sequence (fmap (mapM (labNode g)) (components g))
+      (tmp :: [[Decs (Scoped l)]]) <- sequence (fmap (mapM (labNode g)) (Data.Graph.Inductive.components g))
       return $ fmap (Set.fromList . concat . fmap unDecs) tmp
 
 -- | Build a graph whose nodes are declaration groups and whose edges

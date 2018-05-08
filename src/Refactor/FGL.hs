@@ -21,6 +21,7 @@ module Refactor.FGL
     , context
     , efilter
     , reachable
+    , components
     -- * return pairs
     , labNode', labNodes', labEdges'
     -- * Tests
@@ -197,6 +198,10 @@ efilter p gr0 = do
 
 reachable :: (MonadState (G.NodeMap a) m, G.DynGraph gr, Ord a) => gr a b -> a -> m (Set a)
 reachable gr n = mkNode n >>= \n' -> Set.fromList <$> mapM (labNode gr) (G.reachable n' gr)
+
+components :: forall gr a b m. (MonadState (G.NodeMap a) m, G.DynGraph gr, Ord a) => gr a b -> m [[a]]
+components gr =
+    (sequence . fmap (sequence . fmap (labNode gr)) $ G.components gr)
 
 #if 0
 instance Arbitrary Type where
