@@ -15,21 +15,22 @@ import Control.Monad.Trans (MonadIO(liftIO))
 import Data.Default (def)
 import Data.Generics (everywhere, mkT)
 import Data.List (groupBy, intercalate, nub)
-import Data.Set as Set (member)
+import Data.Set as Set (fromList, member, singleton)
 import Debug.Trace (trace)
-import Language.Haskell.Exts (Name(Ident))
+import Language.Haskell.Exts (Decl, Name(Ident))
 import Language.Haskell.Exts.CPP (parseFileWithCommentsAndCPP)
 import Language.Haskell.Exts.Syntax (Module(..), ModuleHead(ModuleHead), ModuleName(ModuleName))
 import Language.Haskell.Exts.Extension (Extension(EnableExtension))
 import Language.Haskell.Exts.Parser as Exts (fromParseResult, ParseMode(extensions, parseFilename, fixities))
 import Language.Haskell.Exts.SrcLoc (SrcSpanInfo(..))
-import Language.Haskell.Names (annotate, resolve, Scoped(..), Symbol(..))
+import Language.Haskell.Names (annotate, ppSymbol, resolve, Scoped(..), Symbol(..))
 import Language.Haskell.Names.Imports (importTable)
 import Language.Haskell.Names.ModuleSymbols (moduleTable)
 import Language.Preprocessor.Cpphs (BoolOptions(locations), CpphsOptions(..))
 import Refactor.CPP (applyHashDefine, applyHashDefine', cppOptions, defaultParseMode, enabled, extensionsForHSEParser,
                      GHCOpts, hashDefines, turnOffLocations)
 import qualified Refactor.CPP (defaultCpphsOptions)
+import Refactor.FGL (components)
 import Refactor.ModuleInfo -- (ModuleInfo(..))
 import Refactor.ModuleKey (ModuleKey(..))
 import Refactor.SrcSpan (fixEnds, fixSpan, mapTopAnnotations, spanOfText)
@@ -144,5 +145,13 @@ test2 = do
 
 test3 = do
   [i] <- loadModules def [ModuleFilePath (Just "src") "Refactor/FGL.hs"]
-  mapM_ (\(s, n) -> writeFile ("Tmp" ++ show n ++ ".hs") s) (zip (withDecomposedModule scanModule i) [1..])
+  mapM_ (\(s, n) -> writeFile ("Tmp" ++ show n ++ ".hs") s) (zip (withDecomposedModule components scanModule i) [1..])
   -- writeFile "tmp.hs" (scanModule (fmap (srcInfoSpan . unScope) i) (const True) (const True))
+
+test4 = do
+  [i] <- loadModules def [ModuleFilePath (Just "src") "Refactor/FGL.hs"]
+  mapM_ (\(s, n) -> writeFile ("Tmp" ++ show n ++ ".hs") s) (zip (withDecomposedModule (reachable' (p i)) scanModule i) [1..])
+  where p i d = any (testSymbolString (== "Refactor.FGL.context")) (declares i (Set.fromList (unDecs d)))
+  -- writeFile "tmp.hs" (scanModule (fmap (srcInfoSpan . unScope) i) (const True) (const True))
+
+testSymbolString p s = trace ("p " ++ show s ++ " -> " ++ show (p (ppSymbol s))) (p (ppSymbol s))

@@ -17,6 +17,9 @@ module Refactor.ModuleInfo
     , adjustSpan
     , adjustSpanTests
     , scanModule
+    , reachable'
+    , declares
+    , Decs(..)
     ) where
 
 import Control.Monad (foldM, when)
@@ -25,7 +28,8 @@ import Control.Monad.State (State)
 import Data.Generics (Data, everywhere, mkT, Typeable)
 import Data.Graph.Inductive (Gr, NodeMap)
 import Data.Maybe (mapMaybe)
-import Data.Set as Set (empty, fromList, insert, intersection, map, member, notMember, null, Set, singleton, union, unions)
+import Data.Set as Set (empty, fromList, insert, intersection, map, member, notMember, null, Set, singleton, toList, union, unions)
+import qualified Data.Set as Set
 import Debug.Trace
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.ExactPrint (exactPrint)
@@ -120,26 +124,27 @@ putNewModules ms =
 --     λ> let s = Value {symbolModule = ModuleName () "Refactor.Graph", symbolName = Language.Haskell.Exts.Ident () "findModuleByKeyUnsafe"}
 --     λ> putNewModules (fmap unScope i) (fmap (fmap unScope) (decomposeModule (\d -> member s (getTopDeclSymbols' i d)) i))
 decomposeModule :: ModuleInfo (Scoped SrcSpanInfo) -> [ModuleInfo (Scoped SrcSpanInfo)]
-decomposeModule i = withDecomposedModule putModuleDecls i
+decomposeModule i = withDecomposedModule components putModuleDecls i
 
 type ImportSpecWithDecl l = (ImportDecl l, ImportSpec l)
 
 withDecomposedModule ::
-    forall r.
-       (ModuleInfo (Scoped SrcSpanInfo)
+    forall r l. (l ~ SrcSpanInfo)
+    => (Gr (Decs (Scoped l)) (Set Symbol) -> State (NodeMap (Decs (Scoped l))) [[Decs (Scoped l)]])
+    -> (ModuleInfo (Scoped SrcSpanInfo)
         -> (Decl (Scoped SrcSpanInfo) -> Bool)
         -> (ExportSpec (Scoped SrcSpanInfo) -> Bool)
         -> (ImportSpecWithDecl (Scoped SrcSpanInfo) -> Bool)
         -> (Comment -> Bool) -> r)
     -> ModuleInfo (Scoped SrcSpanInfo) -> [r]
-withDecomposedModule f i@(ModuleInfo {_module = Module _l _h _ps _is _ds, _moduleComments = cs}) =
+withDecomposedModule components f i@(ModuleInfo {_module = Module _l _h _ps _is _ds, _moduleComments = cs}) =
     fmap (uncurry4 (f i)) (zip4 (fmap (flip Set.member) selectedDecls)
                                 (fmap (flip Set.member) selectedExports)
                                 (fmap (flip Set.member) selectedImports)
                                 (fmap (flip Set.member) selectedComments))
     where
       selectedDecls :: [Set (Decl (Scoped SrcSpanInfo))]
-      selectedDecls = partitionDeclsBy i components
+      selectedDecls = partitionDeclsBy components i
       selectedExports:: [Set (ExportSpec (Scoped SrcSpanInfo))]
       selectedExports = fmap (exportsToKeep i) selectedDecls
       selectedImports :: [Set (ImportSpecWithDecl (Scoped SrcSpanInfo))]
@@ -147,7 +152,8 @@ withDecomposedModule f i@(ModuleInfo {_module = Module _l _h _ps _is _ds, _modul
       selectedComments = fmap (uncurry (filterComments (fmap (srcInfoSpan . unScope) i)))
                            (zip (fmap (Set.map (fmap (srcInfoSpan . unScope))) selectedDecls)
                                 (fmap (Set.map (fmap (srcInfoSpan . unScope))) selectedExports))
-withDecomposedModule f i@(ModuleInfo {_module = m}) = [f i (const True) (const True) (const True)  (const True)]
+withDecomposedModule components f i@(ModuleInfo {_module = m}) =
+    [f i (const True) (const True) (const True)  (const True)]
 
 -- | We now have sets describing which declarations to keep and which
 -- export specs to keep.  This function partitions the comment list.
@@ -383,13 +389,29 @@ removeComment (Comment b l s) m@(Module l' h ps is ds) =
 -- in the "declares - uses" graph.
 partitionDeclsBy ::
     forall l. (Data l, Eq l, Ord l, Show l)
-    => ModuleInfo (Scoped l)
-    -> (Gr (Decs (Scoped l)) (Set Symbol) -> State (NodeMap (Decs (Scoped l))) [[Decs (Scoped l)]])
+    => (Gr (Decs (Scoped l)) (Set Symbol) -> State (NodeMap (Decs (Scoped l))) [[Decs (Scoped l)]])
+    -> ModuleInfo (Scoped l)
     -> [Set (Decl (Scoped l))]
-partitionDeclsBy i components = do
+partitionDeclsBy components i = do
   fst $ withUsesGraph i $ \g -> do
     (tmp :: [[Decs (Scoped l)]]) <- components g
     return $ fmap (Set.fromList . concat . fmap unDecs) tmp
+
+-- | A version of reachable with the same signature as components.
+-- This belongs in FGL, with a better signature.
+reachable' ::
+    (Ord a, Show a)
+    => (a -> Bool)
+    -> Gr a b
+    -> State (NodeMap a) [[a]]
+reachable' p g = do
+  theseNodes <- mapM (reachable g) (Set.toList pNodes)
+  let theseNodes' = Set.unions theseNodes
+  let thoseNodes = Set.difference allNodes theseNodes'
+  return [Set.toList theseNodes', Set.toList thoseNodes]
+    where
+      allNodes = Set.fromList (labNodes g)
+      pNodes = Set.filter p allNodes
 
 -- | Build a graph whose nodes are declaration groups and whose edges
 -- are the "declares, uses" relation.  Each edge is labeled with a set
@@ -536,7 +558,7 @@ reExports i@(ModuleInfo {_module = Module _ _ _ is _}) es =
 getTopDeclSymbols' :: (Data l, Eq l) => ModuleInfo l -> Decl l -> Set Symbol
 getTopDeclSymbols' i d = Set.fromList $ getTopDeclSymbols (_moduleGlobals i) (getModuleName (_module i)) d
 
--- | Symbols declared by a declaration.
+-- | Symbols declared by a declaration.  (Should take a single element, not a set.)
 declares :: forall l. (Data l, Ord l, Show l) => ModuleInfo (Scoped l) -> Set (Decl (Scoped l)) -> Set Symbol
 declares i ds = flatten (Set.map (getTopDeclSymbols' i) ds)
 
