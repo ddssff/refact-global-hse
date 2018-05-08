@@ -6,7 +6,7 @@ module Refactor.LoadModule
     , loadModules
     , addScope
     , unScope
-    , test
+    , test1, test2
     ) where
 
 import Control.Lens (over, view)
@@ -32,7 +32,7 @@ import Refactor.CPP (applyHashDefine, applyHashDefine', cppOptions, defaultParse
 import qualified Refactor.CPP (defaultCpphsOptions)
 import Refactor.ModuleInfo -- (ModuleInfo(..))
 import Refactor.ModuleKey (ModuleKey(..))
-import Refactor.SrcLoc (fixEnds, fixSpan, mapTopAnnotations, spanOfText)
+import Refactor.SrcSpan (fixEnds, fixSpan, mapTopAnnotations, spanOfText)
 import Refactor.Utils (EZPrint(ezPrint))
 import System.Directory (canonicalizePath)
 import System.FilePath ((</>), (<.>), joinPath, makeRelative, splitDirectories, splitExtension, takeDirectory)
@@ -130,8 +130,19 @@ moduleKey path (Module _ (Just (ModuleHead _ (ModuleName _ name) _ _)) _ _ _) = 
             True -> ModuleKey {_moduleTop = joinPath dirs', _moduleName = ModuleName () (intercalate "." name''), _moduleExt = ext}
       splitModuleName = filter (/= ".") . groupBy (\a b -> (a /= '.') && (b /= '.'))
 
-test = do
+test1 = do
   [i] <- loadModules def [ModuleFilePath (Just "src") "Refactor/Graph.hs"]
   -- trace (show i) (return ())
   let s = Value {symbolModule = ModuleName () "Refactor.Graph", symbolName = Language.Haskell.Exts.Ident () "findModuleByKeyUnsafe"}
-  putNewModules (fmap unScope i) (fmap (fmap unScope) (decomposeModule i))
+  putNewModules (fmap (fmap unScope) (decomposeModule i))
+
+test2 = do
+  [i] <- loadModules def [ModuleFilePath (Just "src") "Refactor/SrcLoc.hs"]
+  -- trace (show i) (return ())
+  let s = Value {symbolModule = ModuleName () "Refactor.Graph", symbolName = Language.Haskell.Exts.Ident () "findModuleByKeyUnsafe"}
+  putNewModules (fmap (fmap unScope) (decomposeModule i))
+
+test3 = do
+  [i] <- loadModules def [ModuleFilePath (Just "src") "Refactor/FGL.hs"]
+  mapM_ (\(s, n) -> writeFile ("Tmp" ++ show n ++ ".hs") s) (zip (withDecomposedModule scanModule i) [1..])
+  -- writeFile "tmp.hs" (scanModule (fmap (srcInfoSpan . unScope) i) (const True) (const True))
