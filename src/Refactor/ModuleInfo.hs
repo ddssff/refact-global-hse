@@ -25,7 +25,7 @@ import Control.Monad.State (State)
 import Data.Generics (Data, everywhere, mkT, Typeable)
 import Data.Graph.Inductive (Gr, NodeMap, components)
 import Data.Maybe (mapMaybe)
-import Data.Set as Set (empty, fromList, insert, intersection, map, member, notMember, null, Set, union)
+import Data.Set as Set (empty, fromList, insert, intersection, map, member, notMember, null, Set, singleton, union, unions)
 import Debug.Trace
 import Language.Haskell.Exts.Comments (Comment(..))
 import Language.Haskell.Exts.ExactPrint (exactPrint)
@@ -43,9 +43,6 @@ import Refactor.ModuleKey (moduleFullPath, ModuleKey{-, moduleName'-})
 import Refactor.SrcSpan (SpanInfo(srcSpan), textOfSpan, HasSrcSpanInfo(srcSpanInfo))
 import Refactor.Utils (con, EZPrint(ezPrint), gFind)
 import Test.HUnit (Test(TestList, TestCase), assertEqual, runTestTT)
-
-uncurry3 :: (a -> b -> c -> r) -> (a, b, c) -> r
-uncurry3 f (a, b, c) = f a b c
 
 deriving instance Ord Comment
 
@@ -90,9 +87,6 @@ getTopSymbols i@(ModuleInfo {_module = Module _ _ _ _ ds}) =
     Set.fromList $ mconcat $ fmap (\d -> getTopDeclSymbols (_moduleGlobals i) (getModuleName (_module i)) d) ds
 getTopSymbols _ = Set.empty
 
-getTopDeclSymbols' :: (Data l, Eq l) => ModuleInfo l -> Decl l -> Set Symbol
-getTopDeclSymbols' i d = Set.fromList $ getTopDeclSymbols (_moduleGlobals i) (getModuleName (_module i)) d
-
 instance (SrcInfo l, Typeable l, Data l, Eq l) => EZPrint (ModuleInfo l, Decl l) where
     ezPrint (_, InstDecl _ _ r _) = ezPrint r
     ezPrint (_, SpliceDecl _ e) = ezPrint e
@@ -128,24 +122,32 @@ putNewModules ms =
 decomposeModule :: ModuleInfo (Scoped SrcSpanInfo) -> [ModuleInfo (Scoped SrcSpanInfo)]
 decomposeModule i = withDecomposedModule putModuleDecls i
 
+type ImportSpecWithDecl l = (ImportDecl l, ImportSpec l)
+
 withDecomposedModule ::
     forall r.
        (ModuleInfo (Scoped SrcSpanInfo)
         -> (Decl (Scoped SrcSpanInfo) -> Bool)
         -> (ExportSpec (Scoped SrcSpanInfo) -> Bool)
+        -> (ImportSpecWithDecl (Scoped SrcSpanInfo) -> Bool)
         -> (Comment -> Bool) -> r)
     -> ModuleInfo (Scoped SrcSpanInfo) -> [r]
 withDecomposedModule f i@(ModuleInfo {_module = Module _l _h _ps _is _ds, _moduleComments = cs}) =
-    fmap (uncurry3 (f i)) (zip3 (fmap (flip Set.member) selectedDecls) (fmap (flip Set.member) selectedExports) (fmap (flip Set.member) selectedComments))
+    fmap (uncurry4 (f i)) (zip4 (fmap (flip Set.member) selectedDecls)
+                                (fmap (flip Set.member) selectedExports)
+                                (fmap (flip Set.member) selectedImports)
+                                (fmap (flip Set.member) selectedComments))
     where
       selectedDecls :: [Set (Decl (Scoped SrcSpanInfo))]
       selectedDecls = partitionDecls i
       selectedExports:: [Set (ExportSpec (Scoped SrcSpanInfo))]
       selectedExports = fmap (exportsToKeep i) selectedDecls
+      selectedImports :: [Set (ImportSpecWithDecl (Scoped SrcSpanInfo))]
+      selectedImports = fmap (uncurry (importsToKeep i)) (zip selectedDecls selectedExports)
       selectedComments = fmap (uncurry (filterComments (fmap (srcInfoSpan . unScope) i)))
                            (zip (fmap (Set.map (fmap (srcInfoSpan . unScope))) selectedDecls)
                                 (fmap (Set.map (fmap (srcInfoSpan . unScope))) selectedExports))
-withDecomposedModule f i@(ModuleInfo {_module = m}) = [f i (const True) (const True) (const True)]
+withDecomposedModule f i@(ModuleInfo {_module = m}) = [f i (const True) (const True) (const True)  (const True)]
 
 -- | We now have sets describing which declarations to keep and which
 -- export specs to keep.  This function partitions the comment list.
@@ -206,10 +208,11 @@ scanModule ::
   => ModuleInfo l
   -> (Decl l -> Bool)
   -> (ExportSpec l -> Bool)
+  -> (ImportSpecWithDecl l -> Bool)
   -> (Comment -> Bool)
   -> String
-scanModule i@(ModuleInfo {_module = Module l h ps is ds, _moduleComments = cs}) selectedDecls selectedExports selectedComments =
-  snd $ execRWS (pre >> scanPragmas >> scanHeader h >> scanImports >> scanDecls >> post) () (1, 1)
+scanModule i@(ModuleInfo {_module = Module l h ps is ds, _moduleComments = cs}) selectedDecls selectedExports selectedImports selectedComments =
+  snd $ execRWS (pre >> scanPragmas >> scanHeader h >> mapM_ scanImport is >> scanDecls >> post) () (1, 1)
   where
     (SrcSpanInfo (SrcSpan _ msl msc mel mec) _) = _moduleSpan i
     pre = keep (msl, msc)
@@ -242,7 +245,35 @@ scanModule i@(ModuleInfo {_module = Module l h ps is ds, _moduleComments = cs}) 
             skip {-"ex"-} (srcSpanEnd (srcSpan (ann e)))
             return False
 
-    scanImports = mapM_ (keepE . ann) is
+    scanImport :: ImportDecl l -> RWS () String (Int, Int) ()
+    scanImport idecl@(ImportDecl {importSpecs = Nothing}) = keepE (ann idecl)
+    scanImport idecl@(ImportDecl {importSpecs = Just (ImportSpecList _ True _)}) = keepE (ann idecl)
+#if 1
+    scanImport idecl@(ImportDecl {importSpecs = Just (ImportSpecList _ False ispecs)}) = keepE (ann idecl)
+#else
+    scanImport idecl@(ImportDecl {importSpecs = Just (ImportSpecList _ False ispecs)}) = do
+      _ <- foldM (scanImportSpec idecl) True ispecs
+      return ()
+    scanImportSpec :: ImportDecl l -> Bool -> ImportSpec l -> RWS () String (Int, Int) Bool
+    scanImportSpec idecl prev ispec =
+        case selectedImports (idecl, ispec) of
+          True -> do
+            (if prev then keep else {-skip-} keepV "-") (srcSpanStart (srcSpan (ann ispec)))
+            keepV "+" (srcSpanEnd (srcSpan (ann ispec)))
+            return True
+          False -> do
+            (if prev then keep else {-skip-} keepV "-") (srcSpanStart (srcSpan (ann ispec)))
+            keepV "-" {-skip-} (srcSpanEnd (srcSpan (ann ispec)))
+            return False
+#endif
+      -- keepS (ann i)
+      -- keepEV "(i)" (ann i)
+{-
+    scanImport i@(ImportDecl a m q src safe pkg as (Just specs)) =
+      mapM_ scanImportSpec specs >> keepE (ann i)
+    scanImportSpec spec = keepE spec
+      -- keep (ann a) >> keep (ann m) >> keep (ann q) >> fmap (keep . ann)
+-}
     scanDecls = foldM scanDecl True ds
 
     scanDecl :: Bool -> Decl l -> RWS () String (Int, Int) Bool
@@ -280,6 +311,12 @@ scanModule i@(ModuleInfo {_module = Module l h ps is ds, _moduleComments = cs}) 
 
     keepV :: String -> (Int, Int) -> RWS () String (Int, Int) ()
     keepV n s = tell ("[" ++ n) >> keep s >> tell "]"
+
+    keepSV :: SpanInfo l => String -> l -> RWS () String (Int, Int) ()
+    keepSV n s = tell ("[" ++ n) >> keepS s >> tell "]"
+
+    keepEV :: SpanInfo l => String -> l -> RWS () String (Int, Int) ()
+    keepEV n s = tell ("[" ++ n) >> keepE s >> tell "]"
 
     keepS :: forall l. SpanInfo l => l -> RWS () String (Int, Int) ()
     keepS s = keep (srcSpanStart (srcSpan s))
@@ -409,15 +446,16 @@ putModuleDecls ::
     => ModuleInfo (Scoped l)
     -> (Decl (Scoped l) -> Bool)
     -> (ExportSpec (Scoped l) -> Bool)
+    -> (ImportSpecWithDecl (Scoped l) -> Bool)
     -> (Comment -> Bool)
     -> ModuleInfo (Scoped l)
 putModuleDecls i@(ModuleInfo {_module = Module l h ps is ds, _moduleComments = cs})
-               selectedDecls selectedExports selectedComments =
+               selectedDecls selectedExports selectedImports selectedComments =
     i { _module = Module l (fmap doHead h) ps is (filter selectedDecls ds),
         _moduleComments = filter (selectedComments) cs}
     where doHead (ModuleHead l n w me) = ModuleHead l n w (fmap doSpecs me)
           doSpecs (ExportSpecList l' es) = ExportSpecList l' (filter selectedExports es)
-putModuleDecls i@(ModuleInfo {_module = m}) _ _ _ = i
+putModuleDecls i@(ModuleInfo {_module = m}) _ _ _ _ = i
 
 filterExports ::
     forall l. (Data l, Ord l, Show l)
@@ -440,20 +478,80 @@ exportsToKeep i@(ModuleInfo {_module = Module _ (Just (ModuleHead _ _ _(Just (Ex
   foldl go Set.empty es
   where
     syms = declares i ds
-    go r e@(EVar _l qname) =
-        if any (`member` syms) (lookupName qname (_moduleGlobals i)) then Set.insert e r else r
-    go r e@(EThingWith _l _w qname _cname) =
-       if any (`member` syms) (lookupName qname (_moduleGlobals i)) then Set.insert e r else r
-    go r e@(EAbs _l _ns _name) = Set.insert e r
-    go r e@(EModuleContents _ _) = Set.insert e r
+    go r e = if not (Set.null (Set.intersection syms (exports i e))) then Set.insert e r else r
 exportsToKeep _ _ = Set.empty
+
+-- | Result is a set of pairs, an ImportDecl and some ImportSpec that
+-- could be in its ImportSpecList.
+importsToKeep ::
+    forall l. (Data l, Ord l, Show l)
+    => ModuleInfo (Scoped l)
+    -> Set (Decl (Scoped l))
+    -> Set (ExportSpec (Scoped l))
+    -> Set (ImportSpecWithDecl (Scoped l))
+importsToKeep i@(ModuleInfo {_module = Module _ _ _ is _}) ds es =
+  foldl goDecl Set.empty is
+  where
+    -- We need to keep any import if it is either used or re-exported
+    syms = Set.union
+             (t1 (uses i ds))
+             (t2 (flatten (Set.map (exports i) es)))
+             -- (declares i ds) -- All the symbols declared in this module
+             -- (error "importsToKeep" :: Set Symbol)
+             -- (Set.unions (fmap (exports i) (es :: [ExportSpec (Scoped l)]) :: [Set Symbol]))  -- All the symbols exported by this module
+    t1 x = trace ("symbols used: " ++ show x) x
+    t2 x = trace ("symbols exported: " ++ show x) x
+    -- Keep any imports of symbols that are declared or exported
+    goDecl :: Set (ImportSpecWithDecl (Scoped l)) -> ImportDecl (Scoped l) -> Set (ImportSpecWithDecl (Scoped l))
+    goDecl r idecl@(ImportDecl {importSpecs = Just (ImportSpecList _ False isl)}) = foldl (goSpec idecl) r isl
+    goDecl r idecl@(ImportDecl {importSpecs = Just (ImportSpecList _ True isl)}) =
+        -- This is a hiding declaration, need to think about what to do
+        r
+    goDecl r idecl@(ImportDecl {importSpecs = Nothing}) = r
+    goSpec ::
+           ImportDecl (Scoped l)
+        -> Set (ImportSpecWithDecl (Scoped l))
+        -> ImportSpec (Scoped l)
+        -> Set (ImportSpecWithDecl (Scoped l))
+    goSpec idecl r ispec =
+        if not (Set.null (Set.intersection (t3 ispec (imports i ispec)) syms))
+        then Set.insert (idecl, ispec) r
+        else r
+    t3 ispec x = trace ("imports " ++ show (prettyPrint ispec) ++ ": " ++ show x) x
+
+-- | Which of the imports are required because of re-exported symbols?
+reExports ::
+    forall l. (Data l, Ord l, Show l)
+    => ModuleInfo (Scoped l)
+    -> Set (ExportSpec (Scoped l))
+    -> Set (ImportSpec (Scoped l))
+reExports i@(ModuleInfo {_module = Module _ _ _ is _}) es =
+  foldl go Set.empty es
+  where
+    esyms = flatten (Set.map (exports i) es)
+    isyms = error "reExports"
+    go = error "reExports go"
+
+getTopDeclSymbols' :: (Data l, Eq l) => ModuleInfo l -> Decl l -> Set Symbol
+getTopDeclSymbols' i d = Set.fromList $ getTopDeclSymbols (_moduleGlobals i) (getModuleName (_module i)) d
 
 -- | Symbols declared by a declaration.
 declares :: forall l. (Data l, Ord l, Show l) => ModuleInfo (Scoped l) -> Set (Decl (Scoped l)) -> Set Symbol
 declares i ds = flatten (Set.map (getTopDeclSymbols' i) ds)
 
-flatten :: Ord a => Set (Set a) -> Set a
-flatten = foldl Set.union mempty
+exports :: forall l. (Data l, Ord l, Show l) => ModuleInfo (Scoped l) -> ExportSpec (Scoped l) -> Set Symbol
+exports i (EVar _l qname) = Set.fromList (lookupName qname (_moduleGlobals i))
+exports i (EThingWith _l _w qname _cname) = Set.fromList (lookupName qname (_moduleGlobals i))
+exports i (EAbs _l _ns qname) = Set.fromList (lookupName qname (_moduleGlobals i))
+exports i (EModuleContents _ (ModuleName l string)) =
+    -- Re-exports all the symbols that were imported from a module
+    Set.empty
+
+imports :: forall l. (Data l, Ord l, Show l) => ModuleInfo (Scoped l) -> ImportSpec (Scoped l) -> Set Symbol
+imports i (IVar l name) = Set.fromList (lookupName (nameToQName name) (_moduleGlobals i))
+imports i (IAbs l space name) = Set.fromList (lookupName (nameToQName name) (_moduleGlobals i))
+imports i (IThingAll l name) = Set.fromList (lookupName (nameToQName name) (_moduleGlobals i))
+imports i (IThingWith l name cnames) = Set.fromList (lookupName (nameToQName name) (_moduleGlobals i))
 
 -- | Symbols used in a declaration - a superset of declares.
 uses :: forall l d. (Data d, Data l, Ord l, Show l) => ModuleInfo (Scoped l) -> d -> Set Symbol
@@ -461,3 +559,12 @@ uses i b = Set.fromList (concatMap (`lookupName` (_moduleGlobals i)) names)
     where
       names :: [QName (Scoped l)]
       names = fmap nameToQName (gFind b :: [Name (Scoped l)]) ++ gFind b :: [QName (Scoped l)]
+
+flatten :: Ord a => Set (Set a) -> Set a
+flatten = foldl Set.union mempty
+
+uncurry4 :: (a -> b -> c -> d -> r) -> (a, b, c, d) -> r
+uncurry4 f (a, b, c, d) = f a b c d
+
+zip4 :: [a] -> [b] -> [c] -> [d] -> [(a, b, c, d)]
+zip4 as bs cs ds = fmap (\((a, b, c), d) -> (a, b, c, d)) (zip (zip3 as bs cs) ds)
